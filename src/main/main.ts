@@ -202,7 +202,7 @@ async function documentsFolder(name: string): Promise<string> {
 const api: Api = {
   async openWorkspace(dir) {
     if (!dir) {
-      const r = await dialog.showOpenDialog(win!, { properties: ['openDirectory'], title: 'Open a folder' });
+      const r = await dialog.showOpenDialog(win!, { properties: ['openDirectory'], title: 'Open a folder', defaultPath: workspace?.root });
       if (r.canceled || !r.filePaths[0]) return null;
       dir = r.filePaths[0];
     }
@@ -212,6 +212,8 @@ const api: Api = {
     const r = await dialog.showOpenDialog(win!, {
       properties: ['openDirectory', 'createDirectory'],
       title: 'Choose or create an empty folder for the new workspace',
+      // Start next to the current workspace, where a new one usually goes.
+      defaultPath: workspace ? dirname(workspace.root) : undefined,
     });
     if (r.canceled || !r.filePaths[0]) return null;
     return openWorkspaceAt(r.filePaths[0]);
@@ -265,7 +267,7 @@ const api: Api = {
     return saveSettings(patch);
   },
   async pickExternalFiles() {
-    const r = await dialog.showOpenDialog(win!, { properties: ['openFile', 'multiSelections'] });
+    const r = await dialog.showOpenDialog(win!, { properties: ['openFile', 'multiSelections'], defaultPath: workspace?.root });
     return r.canceled ? [] : r.filePaths;
   },
   async readExternal(absPath) {

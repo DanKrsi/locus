@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "locus",
   "display_name": "Locus",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Write notes and tours whose links jump to exact code lines, PDF passages, spreadsheet ranges and past versions.",
   "long_description": "Lets Claude read a Locus workspace (code, PDFs, spreadsheets and their version history) and write markdown notes whose links open the exact spot in the Locus app. Use the \"Write a tour\" prompt to get a guided walkthrough of a folder or codebase.",
   "author": { "name": "Daniel Krsikapa" },

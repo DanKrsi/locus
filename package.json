@@ -19,7 +19,8 @@
     "build:mcp": "node scripts/build-mcp.mjs",
     "build:plugin": "node scripts/build-mcp.mjs plugin/server/server.mjs --minify",
     "test:mcp": "node scripts/build-mcp.mjs && node scripts/make-test-workspace.mjs && node scripts/test-mcp.mjs",
-    "build:extension": "node scripts/build-extension.mjs"
+    "build:extension": "node scripts/build-extension.mjs",
+    "test:isolated": "npm run build:plugin && npm run build:extension && node scripts/test-isolated.mjs"
   },
   "dependencies": {
     "@codemirror/commands": "^6.11.1",
@@ -31,6 +32,7 @@
     "@codemirror/view": "^6.43.15",
     "@lezer/highlight": "^1.2.5",
     "@modelcontextprotocol/sdk": "^1.32.1",
+    "@thednp/dommatrix": "^3.1.2",
     "dugite": "^3.3.0",
     "exceljs": "^4.4.0",
     "pdfjs-dist": "^5.7.284",

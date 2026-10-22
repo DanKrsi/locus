@@ -1,5 +1,6 @@
 // Turns workspace files into text Claude can read and cite: numbered code lines, PDF pages
 // with positioned text, and spreadsheet cells with their addresses.
+import './domPolyfill';
 import ExcelJS from 'exceljs';
 import { basename, colLetters, fileKind } from '../core/link';
 import type { TextRun } from '../core/quote';

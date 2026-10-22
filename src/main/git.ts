@@ -1,5 +1,5 @@
 // Version history through the git bundled with the app (dugite), so users never install git.
-import { exec } from 'dugite';
+import { exec } from './gitexec';
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import type { FileChange, Version } from '../shared/api';

@@ -29,6 +29,34 @@ Early development (milestone 1). Windows first. Working today:
   live code references following lines that moved
 - Simple / Git terminology setting, five themes, dark mode
 
+## Claude integration
+
+Claude can read a workspace and write notes and tours whose links use this format. Every link
+comes from the `make_reference` tool, which verifies the target, finds PDF passages and code
+lines from a quote, and records the version.
+
+| Tool | What it does |
+|---|---|
+| `workspace_overview` | Files and version history |
+| `read_file` | Code with line numbers, PDFs by page, spreadsheets by cell, at any version |
+| `search_workspace` | Find text across code, PDFs and spreadsheets |
+| `make_reference` | Verified link to lines, a PDF page or quoted passage, a cell range, a heading or a past version |
+| `validate_note` / `write_note` | Check every link in a note (moved, changed, broken) / save a note and check it |
+| `file_history`, `init_workspace` | Versions of a file; set up history for a plain folder |
+
+**Claude Code** (plugin with the MCP server and a skill that teaches how to write a good tour):
+
+```bash
+claude plugin marketplace add DanKrsi/smart-doc-link
+claude plugin install smart-doc-link@smart-doc-link
+```
+
+Then, in a workspace folder: "give me a tour of this codebase as a Smart Doc Link note".
+
+**Claude Desktop**: build the extension with `npm run build:extension` and double-click
+`release/smart-doc-link.mcpb`. It bundles its own git, so nothing else needs installing. Use the
+"Write a tour" prompt from the + menu.
+
 ## Development
 
 ```bash
@@ -37,6 +65,9 @@ npm start                 # build and launch the app
 npm test                  # unit tests for the link format
 npm run test-workspace    # create ../sdl-test-workspace with sample history
 npm run smoke             # drive the app against it and save screenshots to test-output/
+npm run test:mcp          # call every MCP tool against the test workspace
+npm run build:plugin      # rebuild plugin/server/server.mjs (commit it)
+npm run build:extension   # pack release/smart-doc-link.mcpb for Claude Desktop
 ```
 
 ## License

@@ -1,0 +1,43 @@
+{
+  "manifest_version": "0.3",
+  "name": "smart-doc-link",
+  "display_name": "Smart Doc Link",
+  "version": "0.1.0",
+  "description": "Write notes and tours whose links jump to exact code lines, PDF passages, spreadsheet ranges and past versions.",
+  "long_description": "Lets Claude read a Smart Doc Link workspace (code, PDFs, spreadsheets and their version history) and write markdown notes whose links open the exact spot in the Smart Doc Link app. Use the \"Write a tour\" prompt to get a guided walkthrough of a folder or codebase.",
+  "author": { "name": "Daniel Krsikapa" },
+  "repository": { "type": "git", "url": "https://github.com/DanKrsi/smart-doc-link" },
+  "license": "MIT",
+  "keywords": ["notes", "markdown", "citations", "tour", "pdf", "spreadsheet"],
+  "server": {
+    "type": "node",
+    "entry_point": "server/server.mjs",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/server/server.mjs"],
+      "env": { "SDL_WORKSPACE": "${user_config.workspace}" }
+    }
+  },
+  "user_config": {
+    "workspace": {
+      "type": "directory",
+      "title": "Default workspace",
+      "description": "The folder Claude works in when you don't name one. You can still point Claude at other folders in chat.",
+      "required": false
+    }
+  },
+  "tools": [
+    { "name": "workspace_overview", "description": "Files and version history of a workspace" },
+    { "name": "read_file", "description": "Read code, PDFs and spreadsheets as citable text, at any version" },
+    { "name": "search_workspace", "description": "Find text across code, PDFs and spreadsheets" },
+    { "name": "make_reference", "description": "Build a verified link to an exact place in a file or version" },
+    { "name": "validate_note", "description": "Check every link in a note" },
+    { "name": "file_history", "description": "Versions of a file" },
+    { "name": "write_note", "description": "Save a note into the workspace" },
+    { "name": "init_workspace", "description": "Set up version history for a folder" }
+  ],
+  "prompts": [
+    { "name": "write_tour", "description": "Write a guided tour as a Smart Doc Link note", "arguments": ["topic"], "text": "Write a tour of ${arguments.topic} as a Smart Doc Link note." }
+  ],
+  "compatibility": { "platforms": ["win32", "darwin"], "runtimes": { "node": ">=18.0.0" } }
+}

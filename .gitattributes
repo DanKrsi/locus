@@ -1,0 +1,2 @@
+# Built bundle committed so the Claude Code plugin installs without a build step.
+plugin/server/server.mjs linguist-generated=true -diff

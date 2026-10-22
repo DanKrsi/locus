@@ -26,6 +26,8 @@ interface Props {
   onCite(tab: DocTab): void;
   onChangeRev(tab: DocTab, rev: string | undefined): void;
   registerHandle(id: string, h: ViewerHandle | null): void;
+  /** Date of a version, from a full or short SHA. */
+  versionDate(sha: string): string | undefined;
 }
 
 export function DocsPane(p: Props) {
@@ -46,7 +48,7 @@ export function DocsPane(p: Props) {
           >
             <Icon name={kindIcon(t.kind)} size={14} />
             <span className="title">{basename(t.path)}</span>
-            {t.rev && <RevBadge rev={t.rev} terminology={p.terminology} />}
+            {t.rev && <span className="badge mark">{versionBadge(p.terminology, t.rev, p.versionDate(t.rev))}</span>}
             {t.external && <span className="badge muted">external</span>}
             <span className="close" onMouseDown={(e) => { e.stopPropagation(); p.onClose(t.id); }}><Icon name="x" size={12} /></span>
           </div>
@@ -68,11 +70,6 @@ export function DocsPane(p: Props) {
   );
 }
 
-const versionDates = new Map<string, string>();
-
-function RevBadge({ rev, terminology }: { rev: string; terminology: Terminology }) {
-  return <span className="badge mark">{versionBadge(terminology, rev, versionDates.get(rev))}</span>;
-}
 
 function DocView({ tab, visible, ...p }: Props & { tab: DocTab; visible: boolean }) {
   const [data, setData] = useState<Uint8Array | null>(null);
@@ -158,7 +155,6 @@ function VersionStrip({
   const [versions, setVersions] = useState<Version[]>([]);
   useEffect(() => {
     api.versions(tab.path).then((v) => {
-      for (const x of v) versionDates.set(x.sha, x.date);
       setVersions(v.slice().reverse());
     }, () => setVersions([]));
   }, [tab.path, versionsKey]);
@@ -174,7 +170,7 @@ function VersionStrip({
         {versions.map((v, i) => (
           <button
             key={v.sha}
-            className={'vdot' + (isCited(v.sha) ? ' cited' : '') + (tab.rev === v.sha ? ' current' : '')}
+            className={'vdot' + (isCited(v.sha) ? ' cited' : '') + (tab.rev && v.sha.startsWith(tab.rev) ? ' current' : '')}
             style={{ left: `${pos(i)}%` }}
             title={`${terminology === 'git' ? v.sha.slice(0, 7) + ' · ' : ''}${longDate(v.date)}\n${v.message}`}
             onClick={() => onPick(v.sha)}
@@ -187,4 +183,3 @@ function VersionStrip({
   );
 }
 
-export { versionDates };

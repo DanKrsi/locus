@@ -16,9 +16,11 @@ Decisions so far live in [decisions.md](decisions.md); the specs are in [spec/](
 
 ## Milestone 2: Claude
 
-- MCP server (find quote in PDF → page + area, make link, validate links, git history, open in app)
-- Skill teaching the link format and how to write a good tour
-- Claude Code plugin + Claude Desktop extension
+- [x] MCP server: overview, read (code/PDF/sheet, any version), search, make_reference (quote → PDF area / code lines), validate, history, write, init
+- [x] Skill teaching the link format and how to write a good tour; same guidance as a `write_tour` MCP prompt for Claude Desktop
+- [x] Claude Code plugin (this repo is its marketplace) + Claude Desktop extension (.mcpb with bundled git)
+- [ ] `open_in_app`: let Claude drive the running app during a tour (needs a local channel into the app)
+- [ ] Publish the .mcpb on GitHub Releases
 
 ## Milestone 3: versions in depth
 

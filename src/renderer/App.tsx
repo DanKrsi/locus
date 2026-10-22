@@ -515,6 +515,7 @@ export function App() {
                 if (sameRev(tab.rev, rev)) return;
                 setDocTabs((ts) => ts.map((t) => (t.id === tab.id ? { ...t, rev, reveal: undefined } : t)));
               }}
+              versionDate={versionDate}
               registerHandle={(id, h) => {
                 if (h) handles.current.set(id, h);
                 else handles.current.delete(id);

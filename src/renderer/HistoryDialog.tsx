@@ -48,7 +48,7 @@ export function HistoryDialog({
 
   return (
     <div className="backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="dialog history-dialog">
+      <div className="locus-dialog history-dialog">
         <div className="dialog-head">
           <h2>{term(terminology, 'history')}</h2>
           <span className="muted" style={{ fontSize: 12.5 }}>{versions.length} {git ? 'commits' : 'versions'}</span>

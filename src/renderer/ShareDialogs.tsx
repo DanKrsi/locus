@@ -37,7 +37,7 @@ function Dialog({ title, width = 560, onClose, children, foot }: { title: React.
   }, []);
   return (
     <div className="backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="dialog" style={{ width }}>
+      <div className="locus-dialog" style={{ width }}>
         <div className="dialog-head"><h2>{title}</h2></div>
         <div className="dialog-body share-body">{children}</div>
         {foot && <div className="dialog-foot">{foot}</div>}

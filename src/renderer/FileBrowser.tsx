@@ -210,7 +210,7 @@ export function FileBrowser(p: Props) {
 
   return (
     <div className="backdrop" onMouseDown={(e) => e.target === e.currentTarget && p.onClose()}>
-      <div className="dialog" onKeyDown={(e) => e.key === 'Escape' && p.onClose()}>
+      <div className="locus-dialog" onKeyDown={(e) => e.key === 'Escape' && p.onClose()}>
         <div className="dialog-head">
           <h2>{p.target === 'notes' ? 'Open note' : 'Open document'}</h2>
           <span className="muted" style={{ fontSize: 12.5 }}>{p.target === 'notes' ? 'opens on the left' : 'opens in the viewer on the right'}</span>

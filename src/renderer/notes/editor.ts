@@ -685,12 +685,12 @@ export const editorRedo = (view: EditorView) => redo(view);
 // ---------- Setup ----------
 
 const codeHighlight = HighlightStyle.define([
-  { tag: tags.keyword, color: '#7c3aed' },
-  { tag: [tags.string, tags.special(tags.string)], color: '#0f7b45' },
-  { tag: tags.comment, color: '#8a918c', fontStyle: 'italic' },
-  { tag: [tags.number, tags.bool, tags.null], color: '#b45309' },
-  { tag: [tags.function(tags.variableName), tags.function(tags.propertyName)], color: '#1d4f91' },
-  { tag: [tags.typeName, tags.className], color: '#9c4221' },
+  { tag: tags.keyword, color: 'var(--syn-keyword)' },
+  { tag: [tags.string, tags.special(tags.string)], color: 'var(--syn-string)' },
+  { tag: tags.comment, color: 'var(--syn-comment)', fontStyle: 'italic' },
+  { tag: [tags.number, tags.bool, tags.null], color: 'var(--syn-number)' },
+  { tag: [tags.function(tags.variableName), tags.function(tags.propertyName)], color: 'var(--syn-function)' },
+  { tag: [tags.typeName, tags.className], color: 'var(--syn-type)' },
   { tag: tags.monospace, fontFamily: "'Cascadia Code', Consolas, monospace" },
 ]);
 

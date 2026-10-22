@@ -55,7 +55,7 @@ await step('markdown tables render as tables', async () => {
 
 await step('Open note lists notes only and opens on the left', async () => {
   await win.getByRole('button', { name: 'Open note' }).first().click();
-  await win.locator('.dialog h2', { hasText: 'Open note' }).waitFor();
+  await win.locator('.locus-dialog h2', { hasText: 'Open note' }).waitFor();
   if (await win.locator('.tree-row', { hasText: '.pdf' }).count()) throw new Error('PDFs listed in Open note');
   await win.keyboard.press('Escape');
 });
@@ -213,7 +213,7 @@ await step('history: what changed, open a file as it was, browse a version', asy
   await win.keyboard.press('Escape');
   // Opening the browser again starts at the latest version.
   await win.keyboard.press('Control+P');
-  const shown = await win.locator('.dialog select').inputValue();
+  const shown = await win.locator('.locus-dialog select').inputValue();
   if (shown !== '') throw new Error('file browser should reset to the latest version');
   await win.keyboard.press('Escape');
 });
@@ -226,9 +226,15 @@ await step('git terminology', async () => {
 });
 
 await step('dark mode', async () => {
+  const mode = (m) => win.waitForFunction((m) => document.documentElement.dataset.mode === m, m, { timeout: 5000 });
+  await win.getByTitle('Switch to dark mode').click();
+  await mode('dark');
   await win.getByTitle('Settings').click();
-  await win.locator('select').last().selectOption('dark');
+  await win.getByRole('radio', { name: 'Light' }).click();
+  await mode('light');
+  await win.getByRole('radio', { name: 'Dark' }).click();
   await win.getByRole('button', { name: 'Done' }).click();
+  await mode('dark');
   await shot('dark');
 });
 

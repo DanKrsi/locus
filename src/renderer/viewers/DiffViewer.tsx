@@ -10,11 +10,11 @@ import { basename } from '../../core/link';
 import { decodeText } from '../files';
 
 const style = HighlightStyle.define([
-  { tag: tags.keyword, color: '#7c3aed' },
-  { tag: [tags.string, tags.special(tags.string)], color: '#0f7b45' },
-  { tag: tags.comment, color: '#8a918c', fontStyle: 'italic' },
-  { tag: [tags.number, tags.bool, tags.null], color: '#b45309' },
-  { tag: [tags.function(tags.variableName), tags.function(tags.propertyName)], color: '#1d4f91' },
+  { tag: tags.keyword, color: 'var(--syn-keyword)' },
+  { tag: [tags.string, tags.special(tags.string)], color: 'var(--syn-string)' },
+  { tag: tags.comment, color: 'var(--syn-comment)', fontStyle: 'italic' },
+  { tag: [tags.number, tags.bool, tags.null], color: 'var(--syn-number)' },
+  { tag: [tags.function(tags.variableName), tags.function(tags.propertyName)], color: 'var(--syn-function)' },
 ]);
 
 export function DiffViewer({ left, right, path }: { left: Uint8Array; right: Uint8Array; path: string }) {

@@ -69,6 +69,7 @@ export function App() {
   const [citedRevs, setCitedRevs] = useState(new Map<string, Set<string>>());
   const [dragging, setDragging] = useState(false);
   const [split, setSplit] = useState(0.5);
+  const [isDark, setIsDark] = useState(false);
   const [citations, setCitations] = useState<Citation[]>([]);
   const [tour, setTour] = useState<{ index: number; count: number; label: string } | null>(null);
   const [sharing, setSharing] = useState<SharingInfo | null>(null);
@@ -105,6 +106,7 @@ export function App() {
       const dark = settings.dark === 'dark' || (settings.dark === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
       root.dataset.theme = settings.theme;
       root.dataset.mode = dark ? 'dark' : 'light';
+      setIsDark(dark);
       const css = getComputedStyle(root);
       api.setTitleBarColors(css.getPropertyValue('--page').trim(), css.getPropertyValue('--text').trim()).catch(() => undefined);
     };
@@ -637,6 +639,12 @@ export function App() {
     return () => window.removeEventListener('keydown', onKey);
   }, [terminology]);
 
+  // Version dates arrive after notes may have drawn their badges; redraw them once known.
+  useEffect(() => {
+    statusCache.current.clear();
+    notes.current?.refresh();
+  }, [versions]);
+
   // Re-render badges when the terminology changes.
   useEffect(() => {
     statusCache.current.clear();
@@ -684,6 +692,13 @@ export function App() {
           </>
         )}
         {!ws && <div className="spacer" />}
+        <button
+          className="icon"
+          title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+          onClick={() => void updateSettings({ dark: isDark ? 'light' : 'dark' })}
+        >
+          <Icon name={isDark ? 'sun' : 'moon'} />
+        </button>
         <button className="icon" title="Settings" onClick={() => setShowSettings(true)}><Icon name="settings" /></button>
       </div>
 
@@ -1017,7 +1032,7 @@ function Welcome({
 function SettingsDialog({ settings, onChange, onClose }: { settings: Settings; onChange(p: Partial<Settings>): void; onClose(): void }) {
   return (
     <div className="backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="dialog" style={{ width: 520 }}>
+      <div className="locus-dialog" style={{ width: 520 }}>
         <div className="dialog-head"><h2>Settings</h2></div>
         <div className="dialog-body" style={{ display: 'grid', gap: 18 }}>
           <section>
@@ -1033,6 +1048,26 @@ function SettingsDialog({ settings, onChange, onClose }: { settings: Settings; o
           </section>
           <section>
             <div style={{ fontWeight: 600, marginBottom: 6 }}>Theme</div>
+            <div className="segmented" role="radiogroup" aria-label="Light or dark">
+              {(
+                [
+                  ['light', 'Light', 'sun'],
+                  ['dark', 'Dark', 'moon'],
+                  ['system', 'Match Windows', 'monitor'],
+                ] as const
+              ).map(([value, label, icon]) => (
+                <button
+                  key={value}
+                  role="radio"
+                  aria-checked={settings.dark === value}
+                  className={settings.dark === value ? 'on' : ''}
+                  onClick={() => onChange({ dark: value })}
+                >
+                  <Icon name={icon} /> {label}
+                </button>
+              ))}
+            </div>
+            <div className="muted" style={{ fontSize: 12.5, margin: '10px 0 6px' }}>Colours (each has a light and a dark version)</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
               {THEMES.map((t) => (
                 <button key={t.id} className={'outline' + (settings.theme === t.id ? ' active' : '')} style={settings.theme === t.id ? { borderColor: 'var(--accent)', background: 'var(--accent-soft)' } : undefined} onClick={() => onChange({ theme: t.id })}>
@@ -1042,14 +1077,6 @@ function SettingsDialog({ settings, onChange, onClose }: { settings: Settings; o
                   {t.name}
                 </button>
               ))}
-            </div>
-            <div style={{ display: 'flex', gap: 8, marginTop: 10, alignItems: 'center' }}>
-              <span className="muted">Appearance</span>
-              <select value={settings.dark} onChange={(e) => onChange({ dark: e.target.value as Settings['dark'] })}>
-                <option value="system">Match Windows</option>
-                <option value="light">Light</option>
-                <option value="dark">Dark</option>
-              </select>
             </div>
           </section>
           <section>

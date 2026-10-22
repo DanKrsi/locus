@@ -9,7 +9,7 @@ const repo = resolve(import.meta.dirname, '..');
 const out = join(repo, 'test-output', 'show');
 const userData = join(out, 'user-data');
 await mkdir(userData, { recursive: true });
-await writeFile(join(userData, 'settings.json'), JSON.stringify({ recentWorkspaces: [resolve(workspace)], dark: 'light' }));
+await writeFile(join(userData, 'settings.json'), JSON.stringify({ recentWorkspaces: [resolve(workspace)], dark: process.env.DARK ? 'dark' : 'light' }));
 const app = await electron.launch({ args: [repo], env: { ...process.env, LOCUS_USER_DATA: userData } });
 const win = await app.firstWindow();
 await win.setViewportSize({ width: 1500, height: 900 });
@@ -27,6 +27,11 @@ for (const label of labels) {
   await win.locator('.cm-ref:visible', { hasText: label }).first().click();
   await win.waitForTimeout(1800);
   await win.screenshot({ path: join(out, `${i++}-${label.replace(/\W+/g, '-')}.png`) });
+}
+if (process.env.SETTINGS) {
+  await win.getByTitle('Settings').click();
+  await win.waitForTimeout(500);
+  await win.screenshot({ path: join(out, 'settings.png') });
 }
 await app.close();
 console.log(`screenshots in ${out}`);

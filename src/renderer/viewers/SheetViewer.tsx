@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { basename, colLetters, formatA1Range, formatSheetRef, parseSheetRef, type CellBox } from '../../core/link';
 import { Icon } from '../icons';
-import { cellKey, loadWorkbook, nameForBox, resolveSheetRef, type SheetModel, type WorkbookModel } from './sheetModel';
+import { cellKey, loadWorkbook, nameForBox, resolveSheetRef, type CellModel, type SheetModel, type WorkbookModel } from './sheetModel';
 import type { ViewerProps } from './types';
 
 const HEAD_H = 22;
@@ -34,6 +34,28 @@ function locate(pre: number[], pos: number): number {
     else hi = mid;
   }
   return lo;
+}
+
+/** Relative luminance of a #rrggbb colour, 0 (black) to 1 (white). */
+function luminance(hex: string): number {
+  const n = parseInt(hex.slice(1), 16);
+  const ch = (v: number) => {
+    const c = v / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * ch((n >> 16) & 255) + 0.7152 * ch((n >> 8) & 255) + 0.0722 * ch(n & 255);
+}
+
+/**
+ * Font colour for a cell. Cells with their own fill keep dark text (fills are light);
+ * in dark mode a dark font on the dark grid falls back to the normal grid text.
+ */
+function cellColor(cell: CellModel | undefined): string | undefined {
+  if (!cell) return undefined;
+  if (cell.fill) return cell.color ?? '#1f2328';
+  const dark = document.documentElement.dataset.mode === 'dark';
+  if (cell.color && dark && luminance(cell.color) < 0.2) return undefined;
+  return cell.color;
 }
 
 const boxOf = (a: Pt, b: Pt): CellBox => ({
@@ -233,7 +255,7 @@ export function SheetViewer({ data, path, reveal, onCite, handle, children }: Vi
               fontWeight: cell?.bold ? 700 : undefined,
               fontStyle: cell?.italic ? 'italic' : undefined,
               background: cell?.fill,
-              color: cell?.color,
+              color: cellColor(cell),
               textAlign: cell?.align,
               zIndex: spill ? 1 : undefined,
             }}

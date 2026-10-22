@@ -1,8 +1,11 @@
 // GitHub sign-in (device flow, no client secret needed) and the few REST calls sharing uses.
 export const GITHUB_SCOPE = 'repo';
 
-/** The OAuth app's public client ID (Settings → Developer settings → OAuth Apps, Device Flow enabled). */
-export const GITHUB_CLIENT_ID = process.env.LOCUS_GITHUB_CLIENT_ID || '';
+/**
+ * The Locus OAuth app's client ID (owned by DanKrsi; Device Flow enabled). It's public by design:
+ * device-flow sign-in needs no client secret. Forks can point at their own app via the env var.
+ */
+export const GITHUB_CLIENT_ID = process.env.LOCUS_GITHUB_CLIENT_ID || 'Ov23liTjtHuAUQ3r4ZZH';
 
 export class GitHubError extends Error {
   constructor(message: string, readonly status?: number) {

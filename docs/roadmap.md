@@ -36,7 +36,7 @@ Decisions so far live in [decisions.md](decisions.md); the specs are in [spec/](
 
 - [x] Single-file `.locus` package (git bundle): Share → Send as a file; Welcome → Open a shared file
 - [x] Sync with an online copy: sync pill (Synced / Changes to share / Updates available), friendly conflicts (Keep mine / theirs / both)
-- [x] GitHub: device-flow sign-in, private repo creation, invites, download from GitHub, locus:// open links (code complete; needs an OAuth client ID to test against GitHub)
+- [x] GitHub: device-flow sign-in, private repo creation, invites, download from GitHub, locus:// open links. Tested live: sign-in, private repo, download, sync both ways (invites need a second account to test)
 - [ ] Auto-sync in the background
 - [ ] GitLab, GitHub Enterprise, Azure DevOps
 

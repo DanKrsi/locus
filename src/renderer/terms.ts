@@ -19,6 +19,14 @@ const TERMS = {
   newSince: ['new', 'untracked'],
   pinnedTo: ['Version from', 'Pinned to'],
   showFolderAs: ['Show the folder as it was', 'Browse tree at'],
+  share: ['Share', 'Share'],
+  sync: ['Sync', 'Pull + Push'],
+  synced: ['Synced', 'Up to date'],
+  changesToShare: ['to share', 'ahead'],
+  updatesAvailable: ['updates available', 'behind'],
+  shareAsFile: ['Send as a file', 'Export git bundle'],
+  openPackage: ['Open a shared file', 'Open git bundle'],
+  downloadGitHub: ['Download from GitHub', 'Clone from GitHub'],
   nothingToSave: ['Nothing has changed since the last version', 'Nothing to commit, working tree clean'],
 } as const;
 

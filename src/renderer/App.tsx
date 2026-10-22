@@ -9,7 +9,8 @@ import {
   type Reference,
 } from '../core/link';
 import { mapLines } from '../core/remap';
-import type { Citation, Settings, Version, WorkspaceInfo } from '../shared/api';
+import type { Citation, Settings, SharingInfo, SyncResult, Version, WorkspaceInfo } from '../shared/api';
+import { ConflictDialog, GitHubOpenDialog, ShareDialog } from './ShareDialogs';
 import { movedPath } from '../core/rewrite';
 import { api, shortSha } from './api';
 import { DocsPane } from './docs/DocsPane';
@@ -68,6 +69,13 @@ export function App() {
   const [split, setSplit] = useState(0.5);
   const [citations, setCitations] = useState<Citation[]>([]);
   const [tour, setTour] = useState<{ index: number; count: number; label: string } | null>(null);
+  const [sharing, setSharing] = useState<SharingInfo | null>(null);
+  const [unsharedEdits, setUnsharedEdits] = useState(0);
+  const [syncing, setSyncing] = useState(false);
+  const [lastSynced, setLastSynced] = useState<number | null>(null);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [conflicts, setConflicts] = useState<string[] | null>(null);
+  const [ghOpen, setGhOpen] = useState<{ repo?: string } | null>(null);
   const notes = useRef<NotesHandle>(null);
   const handles = useRef(new Map<string, ViewerHandle>());
   const statusCache = useRef(new Map<string, RefStatus>());
@@ -116,12 +124,79 @@ export function App() {
     notes.current?.refresh();
   }, []);
 
+  // ---------- Sharing ----------
+
+  const refreshSharing = useCallback(async (doFetch: boolean) => {
+    if (!live.current.ws) return;
+    const info = await api.sharingStatus(doFetch).catch(() => null);
+    setSharing(info);
+    setUnsharedEdits((await api.uncommitted().catch(() => [])).length);
+    if (info?.conflicts.length) setConflicts(info.conflicts);
+  }, []);
+
+  const afterSync = async (r: SyncResult) => {
+    setConflicts(null);
+    setLastSynced(Date.now());
+    invalidateLatest();
+    statusCache.current.clear();
+    await notes.current?.reloadFromDisk();
+    notes.current?.refresh();
+    void refreshVersions();
+    void loadCitations();
+    void refreshSharing(false);
+    const mode = live.current.settings?.terminology ?? 'simple';
+    if (r.pulled && r.pushed) showToast(mode === 'git' ? `Pulled ${r.pulled}, pushed ${r.pushed}` : 'Synced: brought in updates and shared your changes');
+    else if (r.pulled) showToast(mode === 'git' ? `Pulled ${r.pulled} commit${r.pulled === 1 ? '' : 's'}` : 'Synced: brought in updates');
+    else if (r.pushed) showToast(mode === 'git' ? `Pushed ${r.pushed} commit${r.pushed === 1 ? '' : 's'}` : 'Synced: your changes are shared');
+    else showToast('Already up to date');
+  };
+
+  const doSync = async () => {
+    if (syncing) return;
+    await notes.current?.saveAll();
+    setSyncing(true);
+    try {
+      const r = await api.sync();
+      if (r.conflicts.length) setConflicts(r.conflicts);
+      else await afterSync(r);
+    } catch (e) {
+      showToast(String((e as Error).message).replace(/^Error invoking remote method 'api': (Error: )?/, ''));
+      void refreshSharing(false);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  // Check the online copy every few minutes so "updates available" shows up on its own.
+  useEffect(() => {
+    if (!ws) return;
+    const t = setInterval(() => void refreshSharing(true), 3 * 60 * 1000);
+    return () => clearInterval(t);
+  }, [ws]);
+
+  // Double-clicked .locus files and locus://open?repo=owner/name links.
+  useEffect(() => {
+    const events = (window as unknown as { locusEvents?: { onOpenRequest(cb: (req: string) => void): void } }).locusEvents;
+    events?.onOpenRequest(async (req) => {
+      if (/^locus:/i.test(req)) {
+        const repo = new URL(req).searchParams.get('repo') ?? undefined;
+        setGhOpen({ repo });
+      } else {
+        const info = await api.importPackage(req).catch((e) => {
+          showToast(String((e as Error).message).replace(/^Error invoking remote method 'api': (Error: )?/, ''));
+          return null;
+        });
+        if (info) await openWorkspace(undefined, false, info);
+      }
+    });
+  }, []);
+
   const loadCitations = useCallback(async () => {
     setCitations(await api.citations().catch(() => [] as Citation[]));
   }, []);
 
-  async function openWorkspace(dir?: string, create = false) {
-    const info = create ? await api.createWorkspace() : await api.openWorkspace(dir);
+  async function openWorkspace(dir?: string, create = false, opened?: WorkspaceInfo) {
+    const info = opened ?? (create ? await api.createWorkspace() : await api.openWorkspace(dir));
     if (!info) return;
     await notes.current?.saveAll();
     let s: Session = { notes: [], activeNote: null, docs: [], activeDoc: 0 };
@@ -143,6 +218,9 @@ export function App() {
     const v = await api.versions().catch(() => [] as Version[]);
     setVersions(v);
     void loadCitations();
+    setSharing(null);
+    setLastSynced(null);
+    void refreshSharing(true);
   }
 
   const persistSession = (patch: Partial<Session>) => {
@@ -479,6 +557,7 @@ export function App() {
     const sha = await api.saveVersion(name);
     if (!sha) return showToast(term(terminology, 'nothingToSave'));
     await refreshVersions();
+    void refreshSharing(false);
     showToast(terminology === 'git' ? `Committed ${sha.slice(0, 7)}` : 'Version saved');
   };
 
@@ -569,6 +648,17 @@ export function App() {
               </button>
               {saveName !== null && <SaveVersionBox initial={saveName} terminology={terminology} onSave={doSaveVersion} onCancel={() => setSaveName(null)} />}
             </div>
+            <SyncPill
+              sharing={sharing}
+              unshared={unsharedEdits}
+              syncing={syncing}
+              lastSynced={lastSynced}
+              terminology={terminology}
+              onSync={() => (conflicts ? setConflicts([...conflicts]) : void doSync())}
+            />
+            <button className="outline" onClick={() => setShareOpen(true)}>
+              <Icon name="share" /> {term(terminology, 'share')}
+            </button>
             <div className="spacer" />
             <button className="quick-open" onClick={() => setBrowser(true)}>
               <span><Icon name="search" size={14} /> Go to file…</span>
@@ -610,7 +700,21 @@ export function App() {
       )}
 
       {!ws ? (
-        <Welcome recent={settings.recentWorkspaces} onOpen={(d) => void openWorkspace(d)} onCreate={() => void openWorkspace(undefined, true)} />
+        <Welcome
+          recent={settings.recentWorkspaces}
+          terminology={terminology}
+          onOpen={(d) => void openWorkspace(d)}
+          onCreate={() => void openWorkspace(undefined, true)}
+          onImport={async () => {
+            try {
+              const info = await api.importPackage();
+              if (info) await openWorkspace(undefined, false, info);
+            } catch (e) {
+              showToast(String((e as Error).message).replace(/^Error invoking remote method 'api': (Error: )?/, ''));
+            }
+          }}
+          onGitHub={() => setGhOpen({})}
+        />
       ) : (
         <div
           className="panes"
@@ -643,7 +747,10 @@ export function App() {
               toast={showToast}
               onTour={toggleTour}
               touring={!!tour}
-              onSaved={() => void loadCitations()}
+              onSaved={() => {
+                void loadCitations();
+                void refreshSharing(false);
+              }}
             />
           </div>
           <div
@@ -700,9 +807,93 @@ export function App() {
           onRename={renameFile}
         />
       )}
+      {shareOpen && ws && (
+        <ShareDialog
+          ws={ws}
+          terminology={terminology}
+          toast={showToast}
+          onShared={() => void refreshSharing(false)}
+          onClose={() => {
+            setShareOpen(false);
+            void refreshSharing(false);
+          }}
+        />
+      )}
+      {conflicts && conflicts.length > 0 && (
+        <ConflictDialog
+          files={conflicts}
+          terminology={terminology}
+          onResolved={(r) => void afterSync(r)}
+          onCancel={async () => {
+            await api.abortSync().catch(() => undefined);
+            setConflicts(null);
+            await notes.current?.reloadFromDisk();
+            void refreshSharing(false);
+          }}
+        />
+      )}
+      {ghOpen && (
+        <GitHubOpenDialog
+          initialRepo={ghOpen.repo}
+          onClose={() => setGhOpen(null)}
+          onOpened={(info) => {
+            setGhOpen(null);
+            void openWorkspace(undefined, false, info);
+          }}
+        />
+      )}
       {showSettings && <SettingsDialog settings={settings} onChange={updateSettings} onClose={() => setShowSettings(false)} />}
       {toast && <div key={toast.id} className="toast">{toast.text}</div>}
     </div>
+  );
+}
+
+function SyncPill({
+  sharing,
+  unshared,
+  syncing,
+  lastSynced,
+  terminology,
+  onSync,
+}: {
+  sharing: SharingInfo | null;
+  unshared: number;
+  syncing: boolean;
+  lastSynced: number | null;
+  terminology: Settings['terminology'];
+  onSync(): void;
+}) {
+  if (!sharing?.remote) return null;
+  const git = terminology === 'git';
+  const toShare = sharing.ahead + (unshared > 0 ? 1 : 0);
+  let cls = 'ok';
+  let label: string;
+  let icon: 'sync' | 'cloud' = 'cloud';
+  if (syncing) {
+    label = git ? 'Pulling and pushing…' : 'Syncing…';
+    cls = 'pending spinning';
+    icon = 'sync';
+  } else if (sharing.conflicts.length) {
+    label = 'Resolve conflicts';
+    cls = 'warn';
+  } else if (sharing.error) {
+    label = git ? 'Remote unreachable' : 'Offline';
+    cls = 'warn';
+  } else if (sharing.behind > 0 || toShare > 0) {
+    cls = 'pending';
+    icon = 'sync';
+    if (git) label = `↓${sharing.behind} ↑${sharing.ahead}${unshared ? ` · ${unshared} uncommitted` : ''}`;
+    else if (sharing.behind > 0 && toShare > 0) label = 'Updates available · changes to share';
+    else if (sharing.behind > 0) label = 'Updates available';
+    else label = 'Changes to share';
+  } else {
+    const ago = lastSynced ? Math.round((Date.now() - lastSynced) / 60000) : null;
+    label = git ? 'Up to date' : ago === null ? 'Synced' : ago < 1 ? 'Synced just now' : `Synced ${ago} min ago`;
+  }
+  return (
+    <button className={'sync-pill ' + cls} title={git ? 'Pull and push (Sync)' : 'Sync with the online copy'} onClick={onSync}>
+      <Icon name={icon} /> {label}
+    </button>
   );
 }
 
@@ -777,7 +968,21 @@ function SaveVersionBox({
   );
 }
 
-function Welcome({ recent, onOpen, onCreate }: { recent: string[]; onOpen(dir?: string): void; onCreate(): void }) {
+function Welcome({
+  recent,
+  terminology,
+  onOpen,
+  onCreate,
+  onImport,
+  onGitHub,
+}: {
+  recent: string[];
+  terminology: Settings['terminology'];
+  onOpen(dir?: string): void;
+  onCreate(): void;
+  onImport(): void;
+  onGitHub(): void;
+}) {
   return (
     <div className="welcome">
       <div className="welcome-card">
@@ -791,6 +996,14 @@ function Welcome({ recent, onOpen, onCreate }: { recent: string[]; onOpen(dir?: 
           <button className="choice" onClick={onCreate}>
             <span><Icon name="folderPlus" /> <b>Create a new workspace</b></span>
             <span className="sub">Start empty and drop files in</span>
+          </button>
+          <button className="choice" onClick={onImport}>
+            <span><Icon name="package" /> <b>{term(terminology, 'openPackage')}</b></span>
+            <span className="sub">A .locus file someone sent you</span>
+          </button>
+          <button className="choice" onClick={onGitHub}>
+            <span><Icon name="github" /> <b>{term(terminology, 'downloadGitHub')}</b></span>
+            <span className="sub">A workspace someone shared with you online</span>
           </button>
         </div>
         <div>

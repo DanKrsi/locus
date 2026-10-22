@@ -47,6 +47,14 @@ export async function ensureIdentity(dir: string): Promise<void> {
   if (email.exitCode !== 0 || !email.stdout.trim()) await git(dir, ['config', 'user.email', 'noreply@locus.local']);
 }
 
+/** Replaces the placeholder identity (set by ensureIdentity) with the signed-in person's. */
+export async function setIdentityIfPlaceholder(dir: string, name: string, email: string): Promise<void> {
+  const current = (await exec(['config', 'user.email'], dir)).stdout.trim();
+  if (current && !current.endsWith('@locus.local')) return;
+  await git(dir, ['config', 'user.name', name]);
+  await git(dir, ['config', 'user.email', email]);
+}
+
 export async function head(dir: string): Promise<string | null> {
   const r = await exec(['rev-parse', '--verify', '--quiet', 'HEAD'], dir);
   return r.exitCode === 0 ? r.stdout.trim() : null;

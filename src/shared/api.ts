@@ -37,6 +37,50 @@ export interface Citation {
   lines?: { start: number; end: number };
 }
 
+export interface GitHubAccount {
+  login: string;
+  name: string;
+}
+
+export interface SharingInfo {
+  /** The online copy's address, if this workspace has one. */
+  remote: string | null;
+  github: { owner: string; repo: string } | null;
+  /** Versions here that the online copy doesn't have yet ("changes to share"). */
+  ahead: number;
+  /** Versions online that aren't here yet ("updates available"). */
+  behind: number;
+  conflicts: string[];
+  error?: string;
+  account: GitHubAccount | null;
+  /** False when this build has no GitHub OAuth client ID. */
+  canSignIn: boolean;
+}
+
+export interface SyncResult {
+  conflicts: string[];
+  pulled: number;
+  pushed: number;
+}
+
+export interface Person {
+  login: string;
+  status: 'owner' | 'member' | 'invited';
+}
+
+export interface RepoSummary {
+  fullName: string;
+  private: boolean;
+  updated: string;
+  description: string;
+}
+
+export interface Invitation {
+  id: number;
+  fullName: string;
+  inviter: string;
+}
+
 export type Terminology = 'simple' | 'git';
 
 export interface Settings {
@@ -77,6 +121,29 @@ export interface Api {
   findMoved(path: string, at: string): Promise<string | null>;
   /** Every reference in every note of the workspace. */
   citations(): Promise<Citation[]>;
+
+  /** Saves the workspace with its history as one file. Asks where when `file` is omitted. */
+  exportPackage(file?: string): Promise<string | null>;
+  /** Unpacks a package into a new folder and opens it. Asks for missing paths. */
+  importPackage(file?: string, dest?: string): Promise<WorkspaceInfo | null>;
+  sharingStatus(fetch: boolean): Promise<SharingInfo>;
+  sync(): Promise<SyncResult>;
+  conflictSides(path: string): Promise<{ mine: Uint8Array | null; theirs: Uint8Array | null; theirsAuthor: string }>;
+  /** Returns the path of the extra copy when choosing "both". */
+  resolveConflict(path: string, choice: 'mine' | 'theirs' | 'both'): Promise<string | null>;
+  finishSync(): Promise<SyncResult>;
+  abortSync(): Promise<void>;
+  githubSignInStart(): Promise<{ userCode: string; verificationUri: string }>;
+  githubSignInWait(): Promise<GitHubAccount>;
+  githubSignOut(): Promise<void>;
+  githubShare(): Promise<{ owner: string; repo: string }>;
+  githubInvite(username: string): Promise<'invited' | 'member'>;
+  githubPeople(): Promise<Person[]>;
+  githubRepos(): Promise<{ repos: RepoSummary[]; invitations: Invitation[] }>;
+  githubAcceptInvitation(id: number): Promise<void>;
+  /** Downloads a workspace from GitHub into a new folder and opens it. */
+  githubClone(fullName: string, dest?: string): Promise<WorkspaceInfo | null>;
+  copyText(text: string): Promise<void>;
 }
 
 export const API_METHODS: (keyof Api)[] = [
@@ -84,4 +151,7 @@ export const API_METHODS: (keyof Api)[] = [
   'head', 'versions', 'changesSince', 'uncommitted', 'saveVersion', 'ensureVersion', 'diffHunks',
   'getSettings', 'setSettings', 'pickExternalFiles', 'readExternal', 'openExternally', 'setTitleBarColors',
   'renameFile', 'findMoved', 'citations',
+  'exportPackage', 'importPackage', 'sharingStatus', 'sync', 'conflictSides', 'resolveConflict', 'finishSync', 'abortSync',
+  'githubSignInStart', 'githubSignInWait', 'githubSignOut', 'githubShare', 'githubInvite', 'githubPeople', 'githubRepos',
+  'githubAcceptInvitation', 'githubClone', 'copyText',
 ];

@@ -34,9 +34,11 @@ Decisions so far live in [decisions.md](decisions.md); the specs are in [spec/](
 
 ## Milestone 4: sharing
 
-- Single-file `.locus` package (git bundle)
-- GitHub sign-in (device flow), Share / Invite / Sync, friendly conflicts
-- GitLab, GitHub Enterprise, Azure DevOps
+- [x] Single-file `.locus` package (git bundle): Share → Send as a file; Welcome → Open a shared file
+- [x] Sync with an online copy: sync pill (Synced / Changes to share / Updates available), friendly conflicts (Keep mine / theirs / both)
+- [x] GitHub: device-flow sign-in, private repo creation, invites, download from GitHub, locus:// open links (code complete; needs an OAuth client ID to test against GitHub)
+- [ ] Auto-sync in the background
+- [ ] GitLab, GitHub Enterprise, Azure DevOps
 
 ## Milestone 5: more formats and polish
 

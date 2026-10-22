@@ -536,3 +536,29 @@ svg.ico { width: 16px; height: 16px; flex: none; }
 
 .toolbar > span, .toolbar > button { white-space: nowrap; flex: none; }
 .toolbar { overflow: hidden; }
+
+/* Sharing */
+.share-body section { padding: 12px 0; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.share-body section:last-of-type { border-bottom: none; }
+.share-body h3 { margin: 0; font-size: 14px; display: flex; align-items: center; gap: 6px; }
+.share-body p { margin: 0; }
+.share-step { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.device-code { font-family: 'Cascadia Code', Consolas, monospace; font-size: 26px; letter-spacing: 4px; padding: 8px 18px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; }
+.error-text { color: var(--danger); font-size: 13px; padding-top: 6px; }
+.invite-row { display: flex; gap: 6px; width: 100%; }
+.invite-row input { flex: 1; }
+.people { width: 100%; }
+.person { display: flex; justify-content: space-between; padding: 5px 2px; border-bottom: 1px solid var(--border); font-size: 13px; }
+.shared-line { display: flex; align-items: center; gap: 6px; }
+.repo-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; width: 100%; padding: 8px 6px; border-bottom: 1px solid var(--border); }
+.repo-row.clickable { cursor: pointer; border-radius: 6px; }
+.repo-row.clickable:hover { background: var(--accent-soft); }
+.conflict-sides { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+.conflict-sides pre { margin: 0; max-height: 340px; overflow: auto; padding: 10px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px; font: 12.5px/1.5 'Cascadia Code', Consolas, monospace; white-space: pre-wrap; }
+.side-label { font-weight: 600; font-size: 12.5px; margin-bottom: 4px; }
+.sync-pill { border: 1px solid var(--border-strong); background: var(--panel); }
+.sync-pill.ok { color: var(--accent); }
+.sync-pill.pending { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.sync-pill.warn { border-color: var(--mark); background: var(--mark-soft); color: var(--mark-text); }
+.sync-pill.spinning svg { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }

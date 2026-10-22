@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, net, protocol, shell } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, net, protocol, safeStorage, shell } from 'electron';
 import { promises as fs } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -10,7 +10,9 @@ import { extractLinks } from '../core/mdlinks';
 import { movedPath, rewriteLinks } from '../core/rewrite';
 import { mapLines } from '../core/remap';
 import { fileKind } from '../core/link';
-import type { Citation } from '../shared/api';
+import type { Citation, GitHubAccount } from '../shared/api';
+import * as share from './share';
+import * as gh from './github';
 
 const RENDERER_DIR = join(__dirname, '..', 'renderer');
 const WORKSPACE_DIR = '.locus';
@@ -133,6 +135,66 @@ async function citationsIn(note: string): Promise<Citation[]> {
 
 async function workspaceNotes(): Promise<string[]> {
   return (await git.listWorking(ws().root)).filter((p) => /.md$/i.test(p) && !p.startsWith('/.locus/'));
+}
+
+// ---------- GitHub account ----------
+
+interface StoredAccount extends GitHubAccount {
+  email: string;
+  token: string;
+}
+
+const accountFile = () => join(app.getPath('userData'), 'github.json');
+let account: StoredAccount | null | undefined;
+let pendingDevice: gh.DeviceCode | null = null;
+
+async function loadAccount(): Promise<StoredAccount | null> {
+  if (account !== undefined) return account;
+  try {
+    const raw = JSON.parse(await fs.readFile(accountFile(), 'utf8'));
+    const token = safeStorage.isEncryptionAvailable() ? safeStorage.decryptString(Buffer.from(raw.token, 'base64')) : raw.token;
+    account = { ...raw, token };
+  } catch {
+    account = null;
+  }
+  return account ?? null;
+}
+
+async function saveAccount(a: StoredAccount | null): Promise<void> {
+  account = a;
+  if (!a) {
+    await fs.rm(accountFile(), { force: true });
+    return;
+  }
+  // The token is encrypted with Windows' per-user protection (DPAPI) before it touches disk.
+  const token = safeStorage.isEncryptionAvailable() ? safeStorage.encryptString(a.token).toString('base64') : a.token;
+  await fs.writeFile(accountFile(), JSON.stringify({ ...a, token }));
+}
+
+async function token(): Promise<string | undefined> {
+  return (await loadAccount())?.token;
+}
+
+function requireAccount(a: StoredAccount | null): StoredAccount {
+  if (!a) throw new Error('Sign in with GitHub first');
+  return a;
+}
+
+/** Commits made after signing in carry the person's GitHub name instead of the placeholder. */
+async function useAccountIdentity(root: string): Promise<void> {
+  const a = await loadAccount();
+  if (!a) return;
+  await git.setIdentityIfPlaceholder(root, a.name, a.email);
+}
+
+async function githubRepoOf(root: string) {
+  return gh.parseGitHubUrl(await share.remoteUrl(root));
+}
+
+async function documentsFolder(name: string): Promise<string> {
+  let dest = join(app.getPath('documents'), 'Locus', name.replace(/[<>:"/\\|?*]/g, '').trim() || 'Workspace');
+  for (let i = 2; await exists(dest); i++) dest = join(app.getPath('documents'), 'Locus', `${name} (${i})`);
+  return dest;
 }
 
 // ---------- API ----------
@@ -258,6 +320,118 @@ const api: Api = {
       }),
     );
   },
+  async exportPackage(file) {
+    const w = ws();
+    if (!file) {
+      const r = await dialog.showSaveDialog(win!, {
+        title: 'Share as a file',
+        defaultPath: join(app.getPath('documents'), `${w.name}.locus`),
+        filters: [{ name: 'Locus package', extensions: ['locus'] }],
+      });
+      if (r.canceled || !r.filePath) return null;
+      file = r.filePath;
+    }
+    await share.exportPackage(w.root, file, w.managed);
+    return file;
+  },
+  async importPackage(file, dest) {
+    if (!file) {
+      const r = await dialog.showOpenDialog(win!, {
+        title: 'Open a shared package',
+        filters: [{ name: 'Locus package', extensions: ['locus'] }],
+        properties: ['openFile'],
+      });
+      if (r.canceled || !r.filePaths[0]) return null;
+      file = r.filePaths[0];
+    }
+    dest ??= await documentsFolder(basename(file).replace(/\.locus$/i, ''));
+    await share.importPackage(file, dest);
+    return openWorkspaceAt(dest);
+  },
+  async sharingStatus(doFetch) {
+    const w = ws();
+    const a = await loadAccount();
+    const st = await share.status(w.root, a?.token, doFetch);
+    return {
+      ...st,
+      github: gh.parseGitHubUrl(st.remote),
+      account: a ? { login: a.login, name: a.name } : null,
+      canSignIn: !!gh.GITHUB_CLIENT_ID,
+    };
+  },
+  async sync() {
+    const w = ws();
+    await useAccountIdentity(w.root);
+    return share.sync(w.root, await token(), 'Synced changes', w.managed);
+  },
+  async conflictSides(path) {
+    return share.conflictSides(ws().root, path);
+  },
+  async resolveConflict(path, choice) {
+    return share.resolve(ws().root, path, choice);
+  },
+  async finishSync() {
+    return share.finishSync(ws().root, await token());
+  },
+  async abortSync() {
+    await share.abortSync(ws().root);
+  },
+  async githubSignInStart() {
+    pendingDevice = await gh.startDeviceFlow();
+    await shell.openExternal(pendingDevice.verificationUri);
+    return { userCode: pendingDevice.userCode, verificationUri: pendingDevice.verificationUri };
+  },
+  async githubSignInWait() {
+    if (!pendingDevice) throw new Error('Start sign-in first');
+    const t = await gh.pollDeviceFlow(pendingDevice);
+    pendingDevice = null;
+    const user = await gh.getUser(t);
+    await saveAccount({ ...user, token: t });
+    return { login: user.login, name: user.name };
+  },
+  async githubSignOut() {
+    await saveAccount(null);
+  },
+  async githubShare() {
+    const w = ws();
+    const a = requireAccount(await loadAccount());
+    const existing = await githubRepoOf(w.root);
+    if (existing) return existing;
+    await useAccountIdentity(w.root);
+    const repo = await gh.createRepo(a.token, w.name, `Locus workspace: ${w.name}`);
+    await share.setRemote(w.root, repo.cloneUrl);
+    await share.sync(w.root, a.token, 'Shared online', w.managed);
+    return { owner: repo.owner, repo: repo.repo };
+  },
+  async githubInvite(username) {
+    const a = requireAccount(await loadAccount());
+    const r = await githubRepoOf(ws().root);
+    if (!r) throw new Error('Share this workspace online first');
+    return gh.invite(a.token, r.owner, r.repo, username);
+  },
+  async githubPeople() {
+    const a = requireAccount(await loadAccount());
+    const r = await githubRepoOf(ws().root);
+    return r ? gh.people(a.token, r.owner, r.repo) : [];
+  },
+  async githubRepos() {
+    const a = requireAccount(await loadAccount());
+    const [repos, invitations] = await Promise.all([gh.listRepos(a.token), gh.listInvitations(a.token).catch(() => [])]);
+    return { repos, invitations };
+  },
+  async githubAcceptInvitation(id) {
+    await gh.acceptInvitation(requireAccount(await loadAccount()).token, id);
+  },
+  async githubClone(fullName, dest) {
+    const a = requireAccount(await loadAccount());
+    dest ??= await documentsFolder(fullName.split('/')[1]);
+    await share.cloneRemote(`https://github.com/${fullName}.git`, dest, a.token);
+    await git.setIdentityIfPlaceholder(dest, a.name, a.email);
+    return openWorkspaceAt(dest);
+  },
+  async copyText(text) {
+    clipboard.writeText(text);
+  },
   async setTitleBarColors(bg, fg) {
     win?.setTitleBarOverlay({ color: bg, symbolColor: fg, height: 40 });
   },
@@ -294,6 +468,41 @@ function createWindow() {
   });
   win.loadURL('app://renderer/index.html');
 }
+
+/** A .locus file, a folder, or a locus://open?repo=owner/name link passed on the command line. */
+function openRequestFrom(argv: string[]): string | null {
+  for (const a of argv.slice(1)) {
+    if (/^locus:\/\//i.test(a) || /\.locus$/i.test(a)) return a;
+  }
+  return null;
+}
+
+let pendingOpen = openRequestFrom(process.argv);
+
+function deliverOpen(req: string | null) {
+  if (!req) return;
+  if (win && !win.webContents.isLoading()) win.webContents.send('open-request', req);
+  else pendingOpen = req;
+}
+
+if (!process.env.LOCUS_USER_DATA && !app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on('second-instance', (_e, argv) => {
+    if (win?.isMinimized()) win.restore();
+    win?.focus();
+    deliverOpen(openRequestFrom(argv));
+  });
+}
+
+// Only installed builds register as the handler for locus:// links, never dev or test runs.
+if (app.isPackaged) app.setAsDefaultProtocolClient('locus');
+
+ipcMain.handle('pending-open', () => {
+  const req = pendingOpen;
+  pendingOpen = null;
+  return req;
+});
 
 app.whenReady().then(() => {
   protocol.handle('app', (req) => {

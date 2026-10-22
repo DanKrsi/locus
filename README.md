@@ -32,6 +32,8 @@ Early development (milestones 1–3 done). Windows first. Working today:
   outside the app are detected and offered a one-click **Fix links**
 - **Cited in**: see which notes cite a document, with bookmarks in PDF margins and code gutters
 - **Tour mode** (Ctrl+Shift+T): step through a note's references with the arrow keys
+- **Share** as a single `.locus` file (with full history), or sync through a private GitHub
+  repository with invites and friendly conflict handling
 - Simple / Git terminology setting, five themes, dark mode
 
 ## Claude integration
@@ -70,6 +72,7 @@ npm start                 # build and launch the app
 npm test                  # unit tests for the link format
 npm run test-workspace    # create ../locus-test-workspace with sample history
 npm run smoke             # drive the app against it and save screenshots to test-output/
+npm run test:sharing      # package, sync and conflicts against a local stand-in for GitHub
 npm run test:mcp          # call every MCP tool against the test workspace
 npm run build:plugin      # rebuild plugin/server/server.mjs (commit it)
 npm run build:extension   # pack release/locus.mcpb for Claude Desktop

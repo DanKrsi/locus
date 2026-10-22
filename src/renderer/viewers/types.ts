@@ -17,6 +17,14 @@ export interface RevealRequest {
   nonce: number;
 }
 
+/** A place in this document that some note cites ("Cited in" markers). */
+export interface CiteMark {
+  loc: Location;
+  label: string;
+  note: string;
+  line: number;
+}
+
 export interface ViewerProps {
   data: Uint8Array;
   path: string;
@@ -24,6 +32,9 @@ export interface ViewerProps {
   /** Called by the viewer's Cite button. */
   onCite(): void;
   handle(h: ViewerHandle | null): void;
+  /** Places other notes cite, for margin/gutter markers. */
+  marks?: CiteMark[];
+  onMark?(mark: CiteMark): void;
   /** Rendered at the left of the viewer's toolbar (shared controls). */
   children?: React.ReactNode;
 }

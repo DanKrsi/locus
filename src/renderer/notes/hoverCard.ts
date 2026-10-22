@@ -15,6 +15,8 @@ export interface HoverContext {
   status: RefStatus;
   versionDate(sha: string): string | undefined;
   follow(info: LinkInfo): void;
+  /** Opens a side-by-side comparison of a pinned reference with the latest version. */
+  compare(info: LinkInfo): void;
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string): HTMLElementTagNameMap[K] {
@@ -136,6 +138,7 @@ export function renderHoverCard(info: LinkInfo, view: EditorView, ctx: HoverCont
     actions.append(b);
   };
   button('Open', 'primary', () => ctx.follow(info));
+  if (rev) button('Compare with latest', 'outline', () => ctx.compare(info));
   button('Rename', 'outline', () => renameLink(view, info));
   button('Edit target', 'outline', () => revealLink(view, info));
   button('Remove link', 'danger-text', () => removeLink(view, info));

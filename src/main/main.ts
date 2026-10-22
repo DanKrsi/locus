@@ -5,6 +5,12 @@ import { pathToFileURL } from 'node:url';
 import type { Api, Settings, WorkspaceInfo } from '../shared/api';
 import { API_METHODS } from '../shared/api';
 import * as git from './git';
+import { parseDestination, resolvePath } from '../core/link';
+import { extractLinks } from '../core/mdlinks';
+import { movedPath, rewriteLinks } from '../core/rewrite';
+import { mapLines } from '../core/remap';
+import { fileKind } from '../core/link';
+import type { Citation } from '../shared/api';
 
 const RENDERER_DIR = join(__dirname, '..', 'renderer');
 const WORKSPACE_DIR = '.locus';
@@ -103,6 +109,32 @@ function abs(path: string): string {
   return full;
 }
 
+// ---------- Citation index ----------
+
+const citationCache = new Map<string, { mtime: number; cites: Citation[] }>();
+
+async function citationsIn(note: string): Promise<Citation[]> {
+  const full = abs(note);
+  const st = await fs.stat(full).catch(() => null);
+  if (!st) return [];
+  const key = `${ws().root}|${note}`;
+  const cached = citationCache.get(key);
+  if (cached && cached.mtime === st.mtimeMs) return cached.cites;
+  const md = await fs.readFile(full, 'utf8');
+  const cites: Citation[] = [];
+  for (const link of extractLinks(md)) {
+    const ref = parseDestination(link.dest);
+    if (!ref || ref.pathKind === 'web' || ref.pathKind === 'external' || !ref.path) continue;
+    cites.push({ note, line: link.line, label: link.label, path: resolvePath(ref, note), dest: link.dest, quote: link.title });
+  }
+  citationCache.set(key, { mtime: st.mtimeMs, cites });
+  return cites;
+}
+
+async function workspaceNotes(): Promise<string[]> {
+  return (await git.listWorking(ws().root)).filter((p) => /.md$/i.test(p) && !p.startsWith('/.locus/'));
+}
+
 // ---------- API ----------
 
 const api: Api = {
@@ -180,6 +212,51 @@ const api: Api = {
   async openExternally(path) {
     const full = /^[A-Za-z]:[\\/]/.test(path) ? path : abs(path);
     await shell.openPath(full);
+  },
+  async renameFile(from, to) {
+    const src = abs(from);
+    const dst = abs(to);
+    if (await exists(dst)) throw new Error(`${to.slice(1)} already exists`);
+    const notesBefore = await workspaceNotes();
+    await fs.mkdir(dirname(dst), { recursive: true });
+    await fs.rename(src, dst);
+    const change = [{ from, to }];
+    const updatedNotes: string[] = [];
+    let links = 0;
+    for (const oldNote of notesBefore) {
+      const newNote = movedPath(oldNote, change) ?? oldNote;
+      const file = abs(newNote);
+      const text = await fs.readFile(file, 'utf8');
+      const r = rewriteLinks(text, oldNote, newNote, change);
+      if (!r.count) continue;
+      await fs.writeFile(file, r.text, 'utf8');
+      updatedNotes.push(newNote);
+      links += r.count;
+    }
+    return { updatedNotes, links };
+  },
+  async findMoved(path, at) {
+    const root = ws().root;
+    return git.findMoved(root, path, at, await git.listWorking(root));
+  },
+  async citations() {
+    const all: Citation[] = [];
+    for (const note of await workspaceNotes()) all.push(...(await citationsIn(note)));
+    // Live code links follow their lines through later edits, like following the link does.
+    const root = ws().root;
+    const hunks = new Map<string, Awaited<ReturnType<typeof git.diffHunks>> | null>();
+    return Promise.all(
+      all.map(async (c) => {
+        const ref = parseDestination(c.dest);
+        if (!ref?.loc.lines || ref.rev || !ref.at || fileKind(c.path) !== 'code') return c;
+        const key = c.path + '@' + ref.at;
+        if (!hunks.has(key)) hunks.set(key, await git.diffHunks(root, c.path, ref.at).catch(() => null));
+        const h = hunks.get(key);
+        if (!h) return c;
+        const m = mapLines(h, ref.loc.lines.start, ref.loc.lines.end);
+        return { ...c, lines: { start: m.start, end: m.end } };
+      }),
+    );
   },
   async setTitleBarColors(bg, fg) {
     win?.setTitleBarOverlay({ color: bg, symbolColor: fg, height: 40 });

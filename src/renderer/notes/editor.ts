@@ -229,6 +229,26 @@ export function flashRange(view: EditorView, from: number, to: number) {
   setTimeout(() => view.dispatch({ effects: flashEffect.of(null) }), 1600);
 }
 
+/** The link currently shown by tour mode, highlighted in the note. */
+const setActiveEffect = StateEffect.define<number | null>();
+const activeLinkField = StateField.define<number | null>({
+  create: () => null,
+  update(value, tr) {
+    for (const e of tr.effects) if (e.is(setActiveEffect)) return e.value;
+    return value !== null && tr.docChanged ? tr.changes.mapPos(value, 1) : value;
+  },
+});
+
+export function setActiveLink(view: EditorView, from: number | null) {
+  view.dispatch({ effects: [setActiveEffect.of(from), ...(from !== null ? [EditorView.scrollIntoView(from, { y: 'center' })] : [])] });
+}
+
+/** Scrolls to a line and flashes it ("Cited in" jumps). */
+export function flashLine(view: EditorView, line: number) {
+  const l = view.state.doc.line(Math.min(Math.max(1, line), view.state.doc.lines));
+  flashRange(view, l.from, l.to);
+}
+
 const flashEffect = StateEffect.define<{ from: number; to: number } | null>();
 const flashField = StateField.define<DecorationSet>({
   create: () => Decoration.none,
@@ -251,6 +271,7 @@ class RefWidget extends WidgetType {
     readonly info: LinkInfo,
     readonly status: RefStatus,
     readonly onFollow: (info: LinkInfo) => void,
+    readonly active = false,
   ) {
     super();
   }
@@ -259,13 +280,14 @@ class RefWidget extends WidgetType {
       other.info.label === this.info.label &&
       other.info.dest === this.info.dest &&
       other.status.state === this.status.state &&
-      other.status.badge === this.status.badge
+      other.status.badge === this.status.badge &&
+      other.active === this.active
     );
   }
   toDOM(view: EditorView) {
     const span = document.createElement('span');
     const broken = this.status.state === 'broken';
-    span.className = 'cm-ref' + (broken ? ' broken' : '');
+    span.className = 'cm-ref' + (broken ? ' broken' : '') + (this.active ? ' active' : '');
     if (broken && this.status.reason) span.title = this.status.reason;
     span.innerHTML = iconSvg(kindIcon(fileKind(this.info.ref.path)));
     span.append(this.info.label);
@@ -482,7 +504,7 @@ function buildDecorations(view: EditorView, opts: NoteEditorOptions): Decoration
             const widget =
               info.ref.pathKind === 'web'
                 ? new WebLinkWidget(info.label, info.dest)
-                : new RefWidget(info, opts.refStatus(info), opts.onFollow);
+                : new RefWidget(info, opts.refStatus(info), opts.onFollow, state.field(activeLinkField, false) === info.from);
             decos.push(Decoration.replace({ widget }).range(info.from, info.to));
             return false;
           }
@@ -549,7 +571,7 @@ function livePreview(opts: NoteEditorOptions): Extension {
           u.viewportChanged ||
           u.focusChanged ||
           syntaxTree(u.startState) !== syntaxTree(u.state) ||
-          u.transactions.some((t) => t.effects.some((e) => e.is(refreshEffect) || e.is(startRename) || e.is(endRename)))
+          u.transactions.some((t) => t.effects.some((e) => e.is(refreshEffect) || e.is(startRename) || e.is(endRename) || e.is(setActiveEffect)))
         ) {
           this.decorations = buildDecorations(u.view, opts);
         }
@@ -686,6 +708,7 @@ export function createNoteEditor(parent: HTMLElement, opts: NoteEditorOptions): 
       renameFilter,
       renameKeymap,
       flashField,
+      activeLinkField,
       livePreview(opts),
       hoverTooltip(
         (view, pos) => {

@@ -9,14 +9,15 @@ import {
   type Reference,
 } from '../core/link';
 import { mapLines } from '../core/remap';
-import type { Settings, Version, WorkspaceInfo } from '../shared/api';
+import type { Citation, Settings, Version, WorkspaceInfo } from '../shared/api';
+import { movedPath } from '../core/rewrite';
 import { api, shortSha } from './api';
 import { DocsPane } from './docs/DocsPane';
 import { FileBrowser } from './FileBrowser';
 import { invalidateLatest } from './files';
 import { Icon, Logo } from './icons';
 import { newId, revealOf, type DocTab } from './model';
-import { allLinks, insertReference, type LinkInfo, type RefStatus } from './notes/editor';
+import { allLinks, insertReference, setActiveLink, type LinkInfo, type RefStatus } from './notes/editor';
 import { renderHoverCard } from './notes/hoverCard';
 import { NotesPane, type NotesHandle } from './notes/NotesPane';
 import { longDate, term, versionBadge } from './terms';
@@ -65,11 +66,13 @@ export function App() {
   const [citedRevs, setCitedRevs] = useState(new Map<string, Set<string>>());
   const [dragging, setDragging] = useState(false);
   const [split, setSplit] = useState(0.5);
+  const [citations, setCitations] = useState<Citation[]>([]);
+  const [tour, setTour] = useState<{ index: number; count: number; label: string } | null>(null);
   const notes = useRef<NotesHandle>(null);
   const handles = useRef(new Map<string, ViewerHandle>());
   const statusCache = useRef(new Map<string, RefStatus>());
-  const live = useRef({ settings, versions, docTabs, activeDoc, ws });
-  live.current = { settings, versions, docTabs, activeDoc, ws };
+  const live = useRef({ settings, versions, docTabs, activeDoc, ws, tour });
+  live.current = { settings, versions, docTabs, activeDoc, ws, tour };
   const terminology = settings?.terminology ?? 'simple';
 
   const showToast = useCallback((text: string) => setToast({ text, id: Date.now() }), []);
@@ -113,6 +116,10 @@ export function App() {
     notes.current?.refresh();
   }, []);
 
+  const loadCitations = useCallback(async () => {
+    setCitations(await api.citations().catch(() => [] as Citation[]));
+  }, []);
+
   async function openWorkspace(dir?: string, create = false) {
     const info = create ? await api.createWorkspace() : await api.openWorkspace(dir);
     if (!info) return;
@@ -135,6 +142,7 @@ export function App() {
     setSettings(await api.getSettings());
     const v = await api.versions().catch(() => [] as Version[]);
     setVersions(v);
+    void loadCitations();
   }
 
   const persistSession = (patch: Partial<Session>) => {
@@ -165,6 +173,8 @@ export function App() {
       statusCache.current.clear();
       notes.current?.reloadFromDisk();
       notes.current?.refresh();
+      void loadCitations();
+      void checkMovedLinksRef.current();
     };
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
@@ -282,19 +292,133 @@ export function App() {
     openDoc(path, external, rev, loc);
   };
 
-  const editorCallbacks = (notePath: string) => ({
-    onFollow: (info: LinkInfo) => void followRef(info, notePath),
-    refStatus: (info: LinkInfo) => refStatus(info, notePath),
+  const editorCallbacks = (notePath: () => string) => ({
+    onFollow: (info: LinkInfo) => void followRef(info, notePath()),
+    refStatus: (info: LinkInfo) => refStatus(info, notePath()),
     imageUrl: () => null,
     renderHoverCard: (info: LinkInfo, view: import('@codemirror/view').EditorView) =>
       renderHoverCard(info, view, {
-        notePath,
+        notePath: notePath(),
         terminology: live.current.settings?.terminology ?? 'simple',
-        status: refStatus(info, notePath),
+        status: refStatus(info, notePath()),
         versionDate,
-        follow: (i) => void followRef(i, notePath),
+        follow: (i) => void followRef(i, notePath()),
+        compare: (i) => {
+          if (i.ref.rev) openCompare(resolvePath(i.ref, notePath()), i.ref.rev);
+        },
       }),
   });
+
+  // ---------- Compare, citations, moved files ----------
+
+  const openCompare = (path: string, left: string, right?: string) => {
+    const tab: DocTab = { id: newId(), path, external: false, rev: right, kind: fileKind(path), compare: left };
+    setDocTabs((ts) => [...ts, tab]);
+    setActiveDoc(tab.id);
+  };
+
+  const openCitation = (c: { note: string; line: number }) => void notes.current?.revealLine(c.note, c.line);
+
+  const movedFixes = useRef(new Map<string, string>());
+
+  /** Finds live links in the active note whose file was moved outside the app, and offers to fix them. */
+  const checkMovedLinks = async () => {
+    const view = notes.current?.activeView();
+    const notePath = notes.current?.activePath();
+    if (!view || !notePath) return;
+    const fixes = new Map<string, string>();
+    for (const l of allLinks(view.state)) {
+      const ref = l.ref;
+      if (ref.rev || !ref.at || !ref.path || (ref.pathKind !== 'root' && ref.pathKind !== 'relative')) continue;
+      const path = resolvePath(ref, notePath);
+      if (await api.exists(path).catch(() => true)) continue;
+      const to = await api.findMoved(path, ref.at).catch(() => null);
+      if (to) fixes.set(l.dest, to);
+    }
+    movedFixes.current = fixes;
+    if (!fixes.size) return;
+    const n = allLinks(view.state).filter((l) => fixes.has(l.dest)).length;
+    setNotice({
+      text: `${n} link${n === 1 ? ' points' : 's point'} to ${fixes.size === 1 ? 'a file that was' : 'files that were'} moved.`,
+      action: { label: 'Fix links', run: () => applyMovedFixes() },
+    });
+  };
+  const checkMovedLinksRef = useRef(checkMovedLinks);
+  checkMovedLinksRef.current = checkMovedLinks;
+
+  const applyMovedFixes = () => {
+    const view = notes.current?.activeView();
+    if (!view) return;
+    const changes = allLinks(view.state)
+      .filter((l) => movedFixes.current.has(l.dest))
+      .map((l) => ({
+        from: l.from,
+        to: l.to,
+        insert: formatReference(l.label, { ...l.ref, path: movedFixes.current.get(l.dest)!, pathKind: 'root' }, l.title),
+      }));
+    view.dispatch({ changes });
+    statusCache.current.clear();
+    notes.current?.refresh();
+    showToast(`Fixed ${changes.length} link${changes.length === 1 ? '' : 's'}`);
+  };
+
+  const renameFile = async (from: string, to: string) => {
+    await notes.current?.saveAll();
+    try {
+      const r = await api.renameFile(from, to);
+      notes.current?.handleMove(from, to);
+      setDocTabs((ts) =>
+        ts.map((t) => {
+          const moved = !t.external && !t.rev ? movedPath(t.path, [{ from, to }]) : null;
+          return moved ? { ...t, path: moved, kind: fileKind(moved) } : t;
+        }),
+      );
+      invalidateLatest();
+      statusCache.current.clear();
+      await notes.current?.reloadFromDisk();
+      notes.current?.refresh();
+      void loadCitations();
+      const n = r.updatedNotes.length;
+      showToast(r.links ? `Moved. Updated ${r.links} link${r.links === 1 ? '' : 's'} in ${n} note${n === 1 ? '' : 's'}` : 'Moved');
+    } catch (e) {
+      showToast(String((e as Error).message).replace(/^Error invoking remote method 'api': Error: /, ''));
+    }
+  };
+
+  // ---------- Tour mode ----------
+
+  const tourLinks = () => {
+    const view = notes.current?.activeView();
+    return view ? allLinks(view.state).filter((l) => !l.image && l.ref.pathKind !== 'web') : [];
+  };
+
+  const tourGo = (i: number) => {
+    const view = notes.current?.activeView();
+    const notePath = notes.current?.activePath();
+    if (!view || !notePath) return;
+    const links = tourLinks();
+    if (!links.length) {
+      showToast('This note has no references to tour');
+      return;
+    }
+    const idx = Math.max(0, Math.min(i, links.length - 1));
+    const l = links[idx];
+    setActiveLink(view, l.from);
+    setTour({ index: idx, count: links.length, label: l.label });
+    void followRef(l, notePath);
+  };
+
+  const tourStop = () => {
+    const view = notes.current?.activeView();
+    if (view) setActiveLink(view, null);
+    setTour(null);
+  };
+
+  const toggleTour = () => {
+    if (live.current.tour) return tourStop();
+    (document.activeElement as HTMLElement | null)?.blur?.();
+    tourGo(0);
+  };
 
   const recomputeCited = () => {
     const view = notes.current?.activeView();
@@ -376,6 +500,22 @@ export function App() {
       } else if (e.ctrlKey && e.shiftKey && k === 's') {
         e.preventDefault();
         void openSaveVersion();
+      } else if (e.ctrlKey && e.shiftKey && k === 't') {
+        e.preventDefault();
+        toggleTour();
+      } else if (live.current.tour) {
+        const t = e.target as HTMLElement;
+        const typing = t.isContentEditable || t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT';
+        const cur = live.current.tour.index;
+        if (e.key === 'PageDown' || (!typing && e.key === 'ArrowRight')) {
+          e.preventDefault();
+          tourGo(cur + 1);
+        } else if (e.key === 'PageUp' || (!typing && e.key === 'ArrowLeft')) {
+          e.preventDefault();
+          tourGo(cur - 1);
+        } else if (e.key === 'Escape' && !typing) {
+          tourStop();
+        }
       }
     };
     window.addEventListener('keydown', onKey);
@@ -457,6 +597,18 @@ export function App() {
         </div>
       )}
 
+      {tour && (
+        <div className="tour-bar">
+          <Icon name="presentation" /> Tour · stop {tour.index + 1} of {tour.count}
+          <span className="label">{tour.label}</span>
+          <div className="spacer" />
+          <span style={{ opacity: 0.8, fontSize: 12 }}>← → to move · Esc to end</span>
+          <button onClick={() => tourGo(tour.index - 1)} disabled={tour.index === 0}><Icon name="chevLeft" /> Previous</button>
+          <button onClick={() => tourGo(tour.index + 1)} disabled={tour.index >= tour.count - 1}>Next <Icon name="chevRight" /></button>
+          <button onClick={tourStop}><Icon name="x" /> End</button>
+        </div>
+      )}
+
       {!ws ? (
         <Welcome recent={settings.recentWorkspaces} onOpen={(d) => void openWorkspace(d)} onCreate={() => void openWorkspace(undefined, true)} />
       ) : (
@@ -484,9 +636,14 @@ export function App() {
               onSessionChange={(paths, active) => persistSession({ notes: paths, activeNote: active })}
               onActiveChange={(p) => {
                 setActiveNote(p);
+                if (live.current.tour) tourStop();
                 setTimeout(recomputeCited, 0);
+                setTimeout(() => void checkMovedLinks(), 300);
               }}
               toast={showToast}
+              onTour={toggleTour}
+              touring={!!tour}
+              onSaved={() => void loadCitations()}
             />
           </div>
           <div
@@ -507,6 +664,9 @@ export function App() {
               terminology={terminology}
               versionsKey={versionsKey}
               citedRevs={citedRevs}
+              citations={citations}
+              onCompare={(tab, rev) => setDocTabs((ts) => ts.map((t) => (t.id === tab.id ? { ...t, compare: rev } : t)))}
+              onOpenCitation={openCitation}
               onActivate={setActiveDoc}
               onClose={closeDoc}
               onOpen={() => setBrowser(true)}
@@ -537,6 +697,7 @@ export function App() {
             for (const p of paths) openDoc(p, true);
           }}
           onClose={() => setBrowser(false)}
+          onRename={renameFile}
         />
       )}
       {showSettings && <SettingsDialog settings={settings} onChange={updateSettings} onClose={() => setShowSettings(false)} />}

@@ -24,9 +24,13 @@ Decisions so far live in [decisions.md](decisions.md); the specs are in [spec/](
 
 ## Milestone 3: versions in depth
 
-- Version strip per document, Compare view, location mapping across versions
-- Rename/move tracking and Fix links; "Cited in" markers and backlinks
-- Tour mode
+- [x] Compare view: code as a side-by-side diff; PDFs, spreadsheets and images as two viewers. From the version strip or a pinned link's hover card
+- [x] Rename/move files and folders in the app, rewriting live links (pinned links keep the path from their version)
+- [x] Files moved outside the app: detected by git rename detection or identical content; "Fix links" notice
+- [x] "Cited in": list per document, PDF margin bookmarks, code gutter bookmarks (live code links follow moved lines)
+- [x] Tour mode: step through a note's references with ←/→ (Ctrl+Shift+T)
+- [ ] Cell-level diff for spreadsheets; "Cited in" markers on spreadsheet cells
+- [ ] One intermittent smoke-test failure seen in ~1 of 12 runs, not yet reproduced
 
 ## Milestone 4: sharing
 

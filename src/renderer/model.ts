@@ -10,9 +10,13 @@ export interface DocTab {
   rev?: string;
   kind: FileKind;
   reveal?: RevealRequest;
+  /** When set, the tab compares this version (left) with rev/latest (right). */
+  compare?: string;
 }
 
 export interface NoteTab {
+  /** Stable across renames, so the editor's container isn't remounted. */
+  id: string;
   path: string;
   dirty: boolean;
 }

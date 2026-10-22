@@ -1,7 +1,7 @@
 // Drives the real app against the test workspace and saves screenshots to test-output/.
 // Usage: npm run build && node scripts/make-test-workspace.mjs && node scripts/smoke.mjs
 import { _electron as electron } from 'playwright';
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
 const repo = resolve(import.meta.dirname, '..');
@@ -30,7 +30,7 @@ const step = async (name, fn) => {
     await fn();
     console.log(`ok   ${name}`);
   } catch (e) {
-    console.log(`FAIL ${name}: ${e.message.split('\n')[0]}`);
+    console.log(`FAIL ${name}: ${process.env.VERBOSE ? e.message.slice(0, 1500) : e.message.split('\n')[0]}`);
     await shot(`fail-${name.replace(/\W+/g, '-')}`);
   }
 };
@@ -59,7 +59,7 @@ await step('follow a PDF area reference', async () => {
 await step('follow a live code reference (remapped lines)', async () => {
   await win.locator('.cm-ref', { hasText: 'the backoff loop' }).click();
   await win.locator('.cm-cited-line').first().waitFor({ timeout: 10000 });
-  const first = await win.locator('.code-viewer .cm-activeLineGutter').textContent();
+  const first = await win.locator('.code-viewer .cm-lineNumbers .cm-activeLineGutter').textContent();
   console.log(`     cursor gutter line: ${first?.trim()} (expected 21)`);
   await shot('code-live');
 });
@@ -106,9 +106,89 @@ await step('cite a PDF page with the rename box', async () => {
   await shot('cited');
 });
 
+await step('cited-in markers and list', async () => {
+  await win.locator('.cm-ref', { hasText: 'the backoff loop' }).click();
+  await win.locator('.code-viewer .cm-cite-mark').first().waitFor({ timeout: 10000 });
+  // Live links were cited at L12 and L18; after later edits their lines are 15 and 21.
+  const markedLines = await win.evaluate(() => {
+    const viewer = [...document.querySelectorAll('.viewer:not(.hidden) .code-viewer')].find((v) => v.offsetParent);
+    const numbers = [...viewer.querySelectorAll('.cm-lineNumbers .cm-gutterElement')];
+    return [...viewer.querySelectorAll('.cm-cite-mark')].map((m) => {
+      const top = m.closest('.cm-gutterElement').getBoundingClientRect().top;
+      return numbers.find((n) => Math.abs(n.getBoundingClientRect().top - top) < 2)?.textContent;
+    });
+  });
+  if (markedLines.join(',') !== '15,21') throw new Error(`markers on lines ${markedLines}, expected 15,21`);
+  await win.locator('.viewer:not(.hidden) .strip-btn', { hasText: 'Cited in' }).click();
+  await win.locator('.cite-list .menu-item').first().waitFor({ timeout: 5000 });
+  await shot('cited-in');
+  await win.locator('.cite-list .menu-item', { hasText: 'backoff()' }).click();
+  await win.locator('.cm-flash').first().waitFor({ timeout: 5000 });
+});
+
+await step('compare a pinned reference with latest (code diff)', async () => {
+  const box = await win.locator('.cm-ref', { hasText: 'a fixed sleep' }).boundingBox();
+  await win.mouse.move(box.x - 40, box.y + box.height / 2);
+  await win.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 5 });
+  await win.getByRole('button', { name: 'Compare with latest' }).click();
+  await win.locator('.cm-mergeView').waitFor({ timeout: 10000 });
+  await win.locator('.cm-changedLine').first().waitFor({ timeout: 5000 });
+  await shot('compare-code');
+  await win.mouse.move(5, 500);
+});
+
+await step('compare two PDF versions side by side', async () => {
+  await win.locator('.cm-ref', { hasText: 'Table 5' }).click();
+  await win.locator('.tab.active', { hasText: 'BDS-100' }).waitFor({ timeout: 10000 });
+  await win.locator('.viewer:not(.hidden) .strip-btn', { hasText: 'Compare' }).filter({ visible: true }).click();
+  await win.locator('.compare-split .pdf-page').first().waitFor({ timeout: 15000 });
+  await shot('compare-pdf');
+  await win.getByRole('button', { name: 'Stop comparing' }).click();
+});
+
+await step('tour mode', async () => {
+  await win.getByRole('button', { name: 'Tour' }).click();
+  await win.locator('.tour-bar', { hasText: 'stop 1 of' }).waitFor({ timeout: 5000 });
+  await win.keyboard.press('ArrowRight');
+  await win.keyboard.press('ArrowRight');
+  await win.locator('.tour-bar', { hasText: 'stop 3 of' }).waitFor({ timeout: 5000 });
+  await win.locator('.cm-ref.active').waitFor({ timeout: 5000 });
+  await shot('tour');
+  await win.keyboard.press('Escape');
+  await win.locator('.tour-bar').waitFor({ state: 'detached', timeout: 5000 });
+});
+
+await step('rename a file in the app updates live links only', async () => {
+  await win.keyboard.press('Control+P');
+  await win.getByPlaceholder('Find a file by name').fill('client.py');
+  const row = win.locator('.tree-row', { hasText: 'client.py' }).first();
+  await row.hover();
+  await row.locator('.row-action').click();
+  await win.locator('input.rename').fill('src/http/client.py');
+  await win.locator('input.rename').press('Enter');
+  await win.locator('.toast', { hasText: 'Updated' }).waitFor({ timeout: 10000 });
+  await win.keyboard.press('Escape');
+  const text = await win.evaluate(() => window.api.readText('/notes/review.md'));
+  if (!text.includes('[the backoff loop](/src/http/client.py#')) throw new Error('live link not updated');
+  if (!text.includes('[a fixed sleep](/src/net/client.py#')) throw new Error('pinned link should keep its path');
+});
+
+await step('file moved outside the app offers Fix links', async () => {
+  await mkdir(join(workspace, 'data', 'archive'), { recursive: true });
+  await rename(join(workspace, 'data', 'Bracket loads.xlsx'), join(workspace, 'data', 'archive', 'Bracket loads.xlsx'));
+  await win.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await win.locator('.notice', { hasText: 'moved' }).waitFor({ timeout: 15000 });
+  await shot('fix-links');
+  await win.getByRole('button', { name: 'Fix links' }).click();
+  await win.locator('.toast', { hasText: 'Fixed' }).waitFor({ timeout: 5000 });
+  await win.waitForTimeout(1500);
+  const text = await win.evaluate(() => window.api.readText('/notes/review.md'));
+  if (!text.includes('/data/archive/Bracket loads.xlsx#LoadTable')) throw new Error('link not fixed');
+});
+
 await step('version picker and file browser', async () => {
   await win.locator('.version-pill').click();
-  await win.getByRole('button', { name: /Before retry refactor/ }).click();
+  await win.locator('.popover').getByRole('button', { name: /Before retry refactor/ }).click();
   await win.getByText('deleted later').first().waitFor({ timeout: 10000 }).catch(() => undefined);
   await shot('browser-old-version');
   await win.keyboard.press('Escape');

@@ -21,6 +21,8 @@ interface Props {
   onOpen(path: string, rev: string | undefined): void;
   onOpenExternal(paths: string[]): void;
   onClose(): void;
+  /** Moves a file or folder (latest version only); links to it are updated. */
+  onRename(from: string, to: string): Promise<void>;
 }
 
 export function FileBrowser(p: Props) {
@@ -28,6 +30,58 @@ export function FileBrowser(p: Props) {
   const [filter, setFilter] = useState('');
   const [cursor, setCursor] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const [renaming, setRenaming] = useState<{ path: string; value: string } | null>(null);
+  const [reload, setReload] = useState(0);
+
+  const commitRename = async () => {
+    if (!renaming) return;
+    const to = '/' + renaming.value.trim().replace(/\\/g, '/').replace(/^\/+/, '');
+    const from = renaming.path;
+    setRenaming(null);
+    if (to !== from && to !== '/') {
+      await p.onRename(from, to);
+      setReload((r) => r + 1);
+    }
+  };
+
+  /** Rename/move button, or the inline path editor while renaming. */
+  const renameControl = (path: string) => {
+    if (p.rev) return null;
+    if (renaming?.path === path) {
+      return (
+        <input
+          className="rename"
+          autoFocus
+          value={renaming.value}
+          onClick={(e) => e.stopPropagation()}
+          onFocus={(e) => {
+            const v = e.target.value;
+            const dot = v.lastIndexOf('.');
+            e.target.setSelectionRange(v.lastIndexOf('/') + 1, dot > v.lastIndexOf('/') ? dot : v.length);
+          }}
+          onChange={(e) => setRenaming({ path, value: e.target.value })}
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if (e.key === 'Enter') void commitRename();
+            if (e.key === 'Escape') setRenaming(null);
+          }}
+          onBlur={() => setRenaming(null)}
+        />
+      );
+    }
+    return (
+      <button
+        className="icon row-action"
+        title="Rename or move (links to it are updated)"
+        onClick={(e) => {
+          e.stopPropagation();
+          setRenaming({ path, value: path.slice(1) });
+        }}
+      >
+        <Icon name="edit" size={14} />
+      </button>
+    );
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -56,9 +110,20 @@ export function FileBrowser(p: Props) {
     return () => {
       cancelled = true;
     };
-  }, [p.rev]);
+  }, [p.rev, reload]);
 
   useEffect(() => inputRef.current?.focus(), []);
+
+  // Esc closes the dialog even when focus has left it (e.g. after a rename).
+  const renamingRef = useRef(renaming);
+  renamingRef.current = renaming;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !renamingRef.current) p.onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   const shown = useMemo(() => {
     const q = filter.trim().toLowerCase();
@@ -100,6 +165,7 @@ export function FileBrowser(p: Props) {
           <span className="muted" style={{ fontSize: 12 }}>{f.path.slice(1, -basename(f.path).length - 1)}</span>
           <span className="spacer" />
           {markBadge(f.mark)}
+          {f.mark !== 'notYet' && renameControl(f.path)}
         </div>,
       ),
     );
@@ -114,7 +180,9 @@ export function FileBrowser(p: Props) {
         rows.push(
           <div key={'d:' + folder} className="tree-row folder" style={{ paddingLeft: 8 + (d - 1) * 18 }}>
             <Icon name="folder" />
-            <span className="name">{parts[d - 1]}</span>
+            {renaming?.path === '/' + folder ? renameControl('/' + folder) : <span className="name">{parts[d - 1]}</span>}
+            <span className="spacer" />
+            {renaming?.path !== '/' + folder && renameControl('/' + folder)}
           </div>,
         );
       }
@@ -126,9 +194,10 @@ export function FileBrowser(p: Props) {
           onClick={() => open(f)}
         >
           <Icon name={kindIcon(fileKind(f.path))} />
-          <span className="name">{basename(f.path)}</span>
+          {renaming?.path === f.path ? renameControl(f.path) : <span className="name">{basename(f.path)}</span>}
           <span className="spacer" />
           {markBadge(f.mark)}
+          {f.mark !== 'notYet' && renaming?.path !== f.path && renameControl(f.path)}
         </div>,
       );
     }

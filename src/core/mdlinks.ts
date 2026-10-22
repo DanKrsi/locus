@@ -9,6 +9,9 @@ export interface MdLink {
   line: number;
   from: number;
   to: number;
+  /** Offsets of the raw destination (including any <angle brackets>). */
+  destFrom: number;
+  destTo: number;
   image: boolean;
 }
 
@@ -88,10 +91,16 @@ function tryLink(md: string, start: number): Omit<MdLink, 'line'> | null {
   if (md[j] !== ']' || md[j + 1] !== '(') return null;
   const labelEnd = j;
   let k = j + 2;
+  while (md[k] === ' ' || md[k] === '	') k++;
+  const destFrom = k;
   if (md[k] === '<') {
     const close = md.indexOf('>', k);
     if (close < 0) return null;
     k = close + 1;
+  }
+  let destTo = k;
+  if (md[destFrom] !== '<') {
+    while (destTo < md.length && !/[\s)]/.test(md[destTo])) destTo++;
   }
   let parens = 1;
   let inTitle: string | null = null;
@@ -118,6 +127,8 @@ function tryLink(md: string, start: number): Omit<MdLink, 'line'> | null {
     title,
     from: image ? start - 1 : start,
     to: k + 1,
+    destFrom,
+    destTo,
     image,
   };
 }

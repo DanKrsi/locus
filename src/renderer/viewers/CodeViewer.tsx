@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { EditorState, RangeSetBuilder, StateEffect, StateField } from '@codemirror/state';
-import { Decoration, EditorView, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers, type DecorationSet } from '@codemirror/view';
+import { Decoration, EditorView, GutterMarker, gutter, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers, type DecorationSet } from '@codemirror/view';
 import { LanguageDescription, HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { languages } from '@codemirror/language-data';
 import { search, searchKeymap, highlightSelectionMatches } from '@codemirror/search';
@@ -9,7 +9,26 @@ import { tags } from '@lezer/highlight';
 import { basename } from '../../core/link';
 import { decodeText } from '../files';
 import { Icon } from '../icons';
-import type { ViewerProps } from './types';
+import { iconSvg } from '../icons';
+import type { CiteMark, ViewerProps } from './types';
+
+const marksChanged = StateEffect.define<null>();
+
+class CiteGutterMarker extends GutterMarker {
+  constructor(readonly marks: CiteMark[]) {
+    super();
+  }
+  eq(o: CiteGutterMarker) {
+    return o.marks === this.marks;
+  }
+  toDOM() {
+    const s = document.createElement('div');
+    s.className = 'cm-cite-mark';
+    s.innerHTML = iconSvg('bookmark');
+    s.title = this.marks.map((m) => `Cited in ${m.note.slice(1)}: ${m.label}`).join('\n');
+    return s;
+  }
+}
 
 const setCited = StateEffect.define<{ start: number; end: number } | null>();
 
@@ -43,7 +62,11 @@ const style = HighlightStyle.define([
   { tag: tags.heading, fontWeight: 'bold' },
 ]);
 
-export function CodeViewer({ data, path, reveal, onCite, handle, children }: ViewerProps) {
+export function CodeViewer({ data, path, reveal, onCite, handle, marks, onMark, children }: ViewerProps) {
+  const marksRef = useRef<CiteMark[]>([]);
+  const onMarkRef = useRef(onMark);
+  onMarkRef.current = onMark;
+  const marksAt = (lineNo: number) => marksRef.current.filter((m) => m.loc.lines?.start === lineNo);
   const host = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const [lang, setLang] = useState('Plain text');
@@ -68,6 +91,22 @@ export function CodeViewer({ data, path, reveal, onCite, handle, children }: Vie
           highlightSelectionMatches(),
           keymap.of([...searchKeymap, ...defaultKeymap]),
           citedField,
+          gutter({
+            class: 'cm-cite-gutter',
+            lineMarker: (view, line) => {
+              const here = marksAt(view.state.doc.lineAt(line.from).number);
+              return here.length ? new CiteGutterMarker(here) : null;
+            },
+            lineMarkerChange: (u) => u.transactions.some((t) => t.effects.some((e) => e.is(marksChanged))),
+            domEventHandlers: {
+              mousedown: (view, line) => {
+                const here = marksAt(view.state.doc.lineAt(line.from).number);
+                if (!here.length) return false;
+                onMarkRef.current?.(here[0]);
+                return true;
+              },
+            },
+          }),
           EditorView.updateListener.of((u) => {
             if (u.selectionSet) {
               const sel = u.state.selection.main;
@@ -90,6 +129,11 @@ export function CodeViewer({ data, path, reveal, onCite, handle, children }: Vie
       viewRef.current = null;
     };
   }, [data, path]);
+
+  useEffect(() => {
+    marksRef.current = marks ?? [];
+    viewRef.current?.dispatch({ effects: marksChanged.of(null) });
+  }, [marks, data]);
 
   const goToLine = (n: number, end = n) => {
     const view = viewRef.current;

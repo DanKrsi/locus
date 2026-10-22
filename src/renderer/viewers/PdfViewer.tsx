@@ -3,7 +3,7 @@ import type { PDFDocumentProxy, PDFPageProxy, RenderTask } from 'pdfjs-dist';
 import type { Rect } from '../../core/link';
 import { Icon } from '../icons';
 import { openPdf, pdfjs } from './pdf';
-import type { ViewerProps } from './types';
+import type { CiteMark, ViewerProps } from './types';
 
 interface Size {
   w: number;
@@ -14,7 +14,7 @@ const GAP = 14;
 const PAD = 16;
 const ZOOMS = [0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
 
-export function PdfViewer({ data, reveal, onCite, handle, children }: ViewerProps) {
+export function PdfViewer({ data, reveal, onCite, handle, marks, onMark, children }: ViewerProps) {
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sizes, setSizes] = useState<Size[]>([]);
@@ -262,6 +262,8 @@ export function PdfViewer({ data, reveal, onCite, handle, children }: ViewerProp
                 areaMode={areaMode}
                 area={area?.page === i + 1 ? area.rect : undefined}
                 cited={cited?.page === i + 1 ? cited.rect ?? 'page' : undefined}
+                marks={marks?.filter((m) => m.loc.page === i + 1)}
+                onMark={onMark}
                 onArea={(rect) => {
                   setArea({ page: i + 1, rect });
                   setCited(null);
@@ -285,9 +287,11 @@ interface PageProps {
   area?: Rect;
   cited?: Rect | 'page';
   onArea(r: Rect): void;
+  marks?: CiteMark[];
+  onMark?(m: CiteMark): void;
 }
 
-function PdfPage({ doc, index, size, scale, onSize, areaMode, area, cited, onArea }: PageProps) {
+function PdfPage({ doc, index, size, scale, onSize, areaMode, area, cited, onArea, marks, onMark }: PageProps) {
   const ref = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const textRef = useRef<HTMLDivElement>(null);
@@ -369,6 +373,22 @@ function PdfPage({ doc, index, size, scale, onSize, areaMode, area, cited, onAre
       {area && <div className="area-box" style={boxStyle(area)} />}
       {cited && cited !== 'page' && <div className="area-box cited" style={boxStyle(cited)} />}
       {cited === 'page' && <div className="area-box cited" style={{ inset: 0, background: 'transparent', borderWidth: 3 }} />}
+      {marks?.map((m, i) => (
+        <div key={i}>
+          {m.loc.viewrect && <div className="cite-outline" style={boxStyle(m.loc.viewrect)} />}
+          <div
+            className="cite-marker"
+            style={{ right: 6, top: (m.loc.viewrect ? m.loc.viewrect.y * scale : 6) + i * 2 }}
+            title={`Cited in ${m.note.slice(1)}: ${m.label}`}
+            onMouseDown={(e) => {
+              e.stopPropagation();
+              onMark?.(m);
+            }}
+          >
+            <Icon name="bookmark" size={15} />
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

@@ -4,12 +4,13 @@ import { basename, slugify } from '../../core/link';
 import { api } from '../api';
 import { decodeText } from '../files';
 import { Icon, type IconName } from '../icons';
-import type { NoteTab } from '../model';
+import { newId, type NoteTab } from '../model';
 import {
   createNoteEditor,
   docText,
   editorRedo,
   editorUndo,
+  flashLine,
   flashRange,
   insertBlock,
   insertLink,
@@ -30,6 +31,10 @@ export interface NotesHandle {
   refresh(): void;
   revealHeading(path: string, slug: string): void;
   reloadFromDisk(): Promise<void>;
+  /** Follows a file or folder move for open notes. */
+  handleMove(from: string, to: string): void;
+  /** Opens a note and flashes a line ("Cited in" jumps). */
+  revealLine(path: string, line: number): Promise<void>;
 }
 
 type EditorCallbacks = Pick<NoteEditorOptions, 'onFollow' | 'refStatus' | 'imageUrl' | 'renderHoverCard'>;
@@ -38,13 +43,20 @@ interface Props {
   initialPaths: string[];
   initialActive: string | null;
   autosave: boolean;
-  callbacks(path: string): EditorCallbacks;
+  /** Editor callbacks for a note; `notePath` returns its current path (it can be moved). */
+  callbacks(notePath: () => string): EditorCallbacks;
   onSessionChange(paths: string[], active: string | null): void;
   onActiveChange(path: string | null): void;
   toast(msg: string): void;
+  onTour(): void;
+  touring: boolean;
+  /** Called after a note is written to disk. */
+  onSaved(path: string): void;
 }
 
 interface Doc {
+  /** Current path; updated when the note is moved, so callbacks always save to the right file. */
+  path: string;
   view: EditorView;
   bom: boolean;
   savedText: string;
@@ -73,6 +85,7 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
     if (text !== d.savedText) {
       await api.writeText(path, (d.bom ? '﻿' : '') + text);
       d.savedText = text;
+      p.onSaved(path);
     }
     setDirty(path, false);
     if (announce) p.toast(`Saved ${basename(path)}`);
@@ -94,7 +107,7 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
         return null;
       }
       const { text, bom, eol } = decodeText(bytes);
-      setTabs((ts) => (ts.some((t) => t.path === path) ? ts : [...ts, { path, dirty: false }]));
+      setTabs((ts) => (ts.some((t) => t.path === path) ? ts : [...ts, { id: newId(), path, dirty: false }]));
       setActive(path);
       // Wait for React to mount the tab's host div (can take more than one frame).
       let host = hosts.current.get(path);
@@ -106,21 +119,21 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
         p.toast(`Couldn't open ${basename(path)}`);
         return null;
       }
-      const cb = p.callbacks(path);
-      const view = createNoteEditor(host, {
+      const doc = { path, bom, savedText: text } as Doc;
+      const cb = p.callbacks(() => doc.path);
+      doc.view = createNoteEditor(host, {
         doc: text,
         eol,
         ...cb,
-        onSave: () => void save(path, true),
+        onSave: () => void save(doc.path, true),
         onChange: () => {
-          const d = docs.current.get(path);
-          if (!d) return;
-          setDirty(path, docText(d.view) !== d.savedText);
-          clearTimeout(d.timer);
-          if (autosaveRef.current) d.timer = window.setTimeout(() => void save(path), 900);
+          setDirty(doc.path, docText(doc.view) !== doc.savedText);
+          clearTimeout(doc.timer);
+          if (autosaveRef.current) doc.timer = window.setTimeout(() => void save(doc.path), 900);
         },
       });
-      docs.current.set(path, { view, bom, savedText: text });
+      const view = doc.view;
+      docs.current.set(path, doc);
       return view;
     })();
     pending.current.set(path, promise);
@@ -172,6 +185,24 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
           return;
         }
       }
+    },
+    handleMove: (from, to) => {
+      const moved = (p: string) => (p === from ? to : p.startsWith(from + '/') ? to + p.slice(from.length) : p);
+      const next = new Map<string, Doc>();
+      for (const [p, d] of docs.current) {
+        d.path = moved(p);
+        next.set(d.path, d);
+      }
+      docs.current = next;
+      const nextHosts = new Map<string, HTMLDivElement>();
+      for (const [p, h] of hosts.current) nextHosts.set(moved(p), h);
+      hosts.current = nextHosts;
+      setTabs((ts) => ts.map((t) => ({ ...t, path: moved(t.path) })));
+      setActive((a) => (a ? moved(a) : a));
+    },
+    revealLine: async (path, line) => {
+      const view = await open(path);
+      if (view) requestAnimationFrame(() => flashLine(view, line));
     },
     reloadFromDisk: async () => {
       for (const [path, d] of docs.current) {
@@ -225,7 +256,7 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
       <div className="tabs">
         {tabs.map((t) => (
           <div
-            key={t.path}
+            key={t.id}
             className={'tab' + (t.path === active ? ' active' : '')}
             title={t.path}
             onMouseDown={(e) => {
@@ -275,6 +306,10 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
         <div className="sep" />
         {tool('undo', 'Undo (Ctrl+Z)', editorUndo)}
         {tool('redo', 'Redo (Ctrl+Y)', editorRedo)}
+        <div className="spacer" />
+        <button className={'pill' + (p.touring ? ' active' : '')} title="Step through this note's references (Ctrl+Shift+T)" onClick={p.onTour}>
+          <Icon name="presentation" /> Tour
+        </button>
       </div>
       {tabs.length === 0 && (
         <div className="empty">
@@ -285,7 +320,7 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
       )}
       {tabs.map((t) => (
         <div
-          key={t.path}
+          key={t.id}
           className="editor-wrap"
           style={{ display: t.path === active ? 'flex' : 'none' }}
           ref={(el) => {

@@ -188,3 +188,24 @@ export async function diffHunks(dir: string, path: string, from: string) {
 export async function resolveRev(dir: string, rev: string): Promise<string> {
   return (await git(dir, ['rev-parse', '--verify', `${rev}^{commit}`])).trim();
 }
+
+/** Finds where a file that existed at `at` lives now: git rename detection, then identical content. */
+export async function findMoved(dir: string, path: string, at: string, working: string[]): Promise<string | null> {
+  const present = new Set(working);
+  const renames = parseNameStatus(await git(dir, ['diff', '--name-status', '-M', '-z', at, '--']));
+  const hit = renames.find((c) => c.kind === 'renamed' && c.from === path && present.has(c.path));
+  if (hit) return hit.path;
+  const r = await exec(['rev-parse', `${at}:${gp(path)}`], dir);
+  if (r.exitCode !== 0) return null;
+  const blob = r.stdout.trim();
+  const ext = path.slice(path.lastIndexOf('.'));
+  const candidates = working.filter((p) => p !== path && p.endsWith(ext));
+  if (candidates.length) {
+    const hashes = (await git(dir, ['hash-object', '--', ...candidates.map(gp)])).trim().split(/\r?\n/);
+    const i = hashes.indexOf(blob);
+    if (i >= 0) return candidates[i];
+  }
+  const name = path.slice(path.lastIndexOf('/') + 1);
+  const same = candidates.filter((p) => p.endsWith('/' + name));
+  return same.length === 1 ? same[0] : null;
+}

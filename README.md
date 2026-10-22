@@ -18,7 +18,7 @@ Loads are in [LoadTable](</data/Bracket loads.xlsx#LoadTable&at=71b9e88e01>).
 
 ## Status
 
-Early development (milestone 1). Windows first. Working today:
+Early development (milestones 1–3 done). Windows first. Working today:
 
 - Open any folder as a workspace (version history is set up automatically, git is bundled)
 - Notes editor with live preview; references render as icons + labels with hover previews
@@ -27,6 +27,11 @@ Early development (milestone 1). Windows first. Working today:
 - **Cite** (Ctrl+Shift+L) inserts a reference with an inline rename box; clicking it jumps back
 - Version picker, per-file version strip, pinned (`rev=`) and live (`at=`) references, with
   live code references following lines that moved
+- **Compare** two versions side by side (a diff for code)
+- **Rename or move** files and folders in the app and every live link follows; files moved
+  outside the app are detected and offered a one-click **Fix links**
+- **Cited in**: see which notes cite a document, with bookmarks in PDF margins and code gutters
+- **Tour mode** (Ctrl+Shift+T): step through a note's references with the arrow keys
 - Simple / Git terminology setting, five themes, dark mode
 
 ## Claude integration

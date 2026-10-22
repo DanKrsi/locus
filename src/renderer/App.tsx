@@ -11,6 +11,7 @@ import {
 import { mapLines } from '../core/remap';
 import type { Citation, Settings, SharingInfo, SyncResult, Version, WorkspaceInfo } from '../shared/api';
 import { ConflictDialog, GitHubOpenDialog, ShareDialog } from './ShareDialogs';
+import { HistoryDialog } from './HistoryDialog';
 import { movedPath } from '../core/rewrite';
 import { api, shortSha } from './api';
 import { DocsPane } from './docs/DocsPane';
@@ -54,12 +55,13 @@ export function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [versions, setVersions] = useState<Version[]>([]);
   const [versionsKey, setVersionsKey] = useState(0);
-  const [viewRev, setViewRev] = useState<string | undefined>();
+  /** Version the file browser shows; set when browsing from History, reset otherwise. */
+  const [browserRev, setBrowserRev] = useState<string | undefined>();
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [docTabs, setDocTabs] = useState<DocTab[]>([]);
   const [activeDoc, setActiveDoc] = useState<string | null>(null);
   const [browser, setBrowser] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [picker, setPicker] = useState(false);
   const [saveName, setSaveName] = useState<string | null>(null);
   const [toast, setToast] = useState<{ text: string; id: number } | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
@@ -208,7 +210,7 @@ export function App() {
     const tabs: DocTab[] = s.docs.map((d) => ({ id: newId(), ...d, kind: fileKind(d.path) }));
     statusCache.current.clear();
     invalidateLatest();
-    setViewRev(undefined);
+    setBrowserRev(undefined);
     setNotice(null);
     setDocTabs(tabs);
     setActiveDoc(tabs[s.activeDoc]?.id ?? tabs[0]?.id ?? null);
@@ -281,6 +283,11 @@ export function App() {
     setDocTabs(rest);
     if (live.current.activeDoc === id) setActiveDoc(rest[Math.min(i, rest.length - 1)]?.id ?? null);
     handles.current.delete(id);
+  };
+
+  const openBrowser = (rev?: string) => {
+    setBrowserRev(rev);
+    setBrowser(true);
   };
 
   const openFromBrowser = async (path: string, rev: string | undefined) => {
@@ -572,7 +579,7 @@ export function App() {
         void cite();
       } else if (e.ctrlKey && !e.shiftKey && k === 'p') {
         e.preventDefault();
-        setBrowser(true);
+        openBrowser();
       } else if (e.ctrlKey && !e.shiftKey && k === 'n') {
         e.preventDefault();
         void notes.current?.newNote();
@@ -611,8 +618,6 @@ export function App() {
 
   if (!settings) return null;
 
-  const viewing = viewRev ? versions.find((v) => v.sha === viewRev) : undefined;
-
   return (
     <div className="app">
       <div className="header">
@@ -622,26 +627,9 @@ export function App() {
             <button className="no-drag ws-name" title={ws.root} onClick={() => void openWorkspace()}>
               <Icon name="folder" /> {ws.name}
             </button>
-            <div style={{ position: 'relative' }} className="no-drag">
-              <button className={'version-pill' + (viewRev ? ' old' : '')} onClick={() => setPicker(!picker)} title={term(terminology, 'history')}>
-                <Icon name="history" />
-                {viewing ? versionBadge(terminology, viewing.sha, viewing.date) : term(terminology, 'latest')}
-                <Icon name="chevDown" size={14} />
-              </button>
-              {picker && (
-                <VersionPicker
-                  versions={versions}
-                  current={viewRev}
-                  terminology={terminology}
-                  onPick={(sha) => {
-                    setPicker(false);
-                    setViewRev(sha);
-                    if (sha) setBrowser(true);
-                  }}
-                  onClose={() => setPicker(false)}
-                />
-              )}
-            </div>
+            <button className="outline" onClick={() => setHistoryOpen(true)} title="See what changed in each version">
+              <Icon name="history" /> {term(terminology, 'historyShort')}
+            </button>
             <div style={{ position: 'relative' }} className="no-drag">
               <button className="outline" onClick={() => void openSaveVersion()} title={`${term(terminology, 'saveVersionHint')} (Ctrl+Shift+S)`}>
                 <Icon name="save" /> {term(terminology, 'saveVersion')}
@@ -660,7 +648,7 @@ export function App() {
               <Icon name="share" /> {term(terminology, 'share')}
             </button>
             <div className="spacer" />
-            <button className="quick-open" onClick={() => setBrowser(true)}>
+            <button className="quick-open" onClick={() => openBrowser()}>
               <span><Icon name="search" size={14} /> Go to file…</span>
               <span>Ctrl+P</span>
             </button>
@@ -670,14 +658,6 @@ export function App() {
         <button className="icon" title="Settings" onClick={() => setShowSettings(true)}><Icon name="settings" /></button>
       </div>
 
-      {viewRev && viewing && (
-        <div className="notice">
-          <Icon name="history" />
-          {term(terminology, 'viewingOld')}: {terminology === 'git' ? viewing.sha.slice(0, 7) : longDate(viewing.date)} · {viewing.message}
-          <button className="outline" onClick={() => setBrowser(true)}>Open a file from it</button>
-          <button className="outline" onClick={() => setViewRev(undefined)}>Back to {term(terminology, 'latest').toLowerCase()}</button>
-        </div>
-      )}
       {notice && (
         <div className={'notice' + (notice.danger ? ' danger' : '')}>
           {notice.text}
@@ -776,7 +756,7 @@ export function App() {
               onOpenCitation={openCitation}
               onActivate={setActiveDoc}
               onClose={closeDoc}
-              onOpen={() => setBrowser(true)}
+              onOpen={() => openBrowser()}
               onCite={(t) => void cite(t)}
               onChangeRev={(tab, rev) => {
                 if (sameRev(tab.rev, rev)) return;
@@ -796,8 +776,8 @@ export function App() {
         <FileBrowser
           terminology={terminology}
           versions={versions}
-          rev={viewRev}
-          onRevChange={setViewRev}
+          rev={browserRev}
+          onRevChange={setBrowserRev}
           onOpen={(path, rev) => void openFromBrowser(path, rev)}
           onOpenExternal={(paths) => {
             setBrowser(false);
@@ -805,6 +785,21 @@ export function App() {
           }}
           onClose={() => setBrowser(false)}
           onRename={renameFile}
+        />
+      )}
+      {historyOpen && ws && (
+        <HistoryDialog
+          versions={versions}
+          terminology={terminology}
+          onClose={() => setHistoryOpen(false)}
+          onOpenFile={(path, sha) => {
+            setHistoryOpen(false);
+            openDoc(path, false, sha);
+          }}
+          onBrowse={(sha) => {
+            setHistoryOpen(false);
+            openBrowser(sha);
+          }}
         />
       )}
       {shareOpen && ws && (
@@ -894,43 +889,6 @@ function SyncPill({
     <button className={'sync-pill ' + cls} title={git ? 'Pull and push (Sync)' : 'Sync with the online copy'} onClick={onSync}>
       <Icon name={icon} /> {label}
     </button>
-  );
-}
-
-function VersionPicker({
-  versions,
-  current,
-  terminology,
-  onPick,
-  onClose,
-}: {
-  versions: Version[];
-  current?: string;
-  terminology: Settings['terminology'];
-  onPick(sha: string | undefined): void;
-  onClose(): void;
-}) {
-  useEffect(() => {
-    const close = (e: MouseEvent) => !(e.target as HTMLElement).closest('.popover') && onClose();
-    setTimeout(() => window.addEventListener('mousedown', close));
-    return () => window.removeEventListener('mousedown', close);
-  }, []);
-  return (
-    <div className="popover" style={{ top: 34, left: 0, width: 380, maxHeight: 420, overflow: 'auto' }}>
-      <button className={'menu-item' + (!current ? ' selected' : '')} onClick={() => onPick(undefined)}>
-        <Icon name="check" /> {term(terminology, 'latest')}
-      </button>
-      {versions.map((v) => (
-        <button key={v.sha} className={'menu-item' + (current === v.sha ? ' selected' : '')} onClick={() => onPick(v.sha)}>
-          <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {terminology === 'git' && <span className="mono" style={{ color: 'var(--muted)' }}>{v.sha.slice(0, 7)} </span>}
-            {v.message}
-          </span>
-          <span className="sub">{v.auto && terminology === 'simple' ? 'auto · ' : ''}{longDate(v.date)}</span>
-        </button>
-      ))}
-      {versions.length === 0 && <div className="muted" style={{ padding: 8 }}>No versions yet.</div>}
-    </div>
   );
 }
 

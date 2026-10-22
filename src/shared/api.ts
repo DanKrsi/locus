@@ -121,6 +121,8 @@ export interface Api {
   findMoved(path: string, at: string): Promise<string | null>;
   /** Every reference in every note of the workspace. */
   citations(): Promise<Citation[]>;
+  /** What a version changed compared with the one before it. */
+  versionChanges(sha: string): Promise<FileChange[]>;
 
   /** Saves the workspace with its history as one file. Asks where when `file` is omitted. */
   exportPackage(file?: string): Promise<string | null>;
@@ -150,7 +152,7 @@ export const API_METHODS: (keyof Api)[] = [
   'openWorkspace', 'createWorkspace', 'listFiles', 'readFile', 'readText', 'writeText', 'exists',
   'head', 'versions', 'changesSince', 'uncommitted', 'saveVersion', 'ensureVersion', 'diffHunks',
   'getSettings', 'setSettings', 'pickExternalFiles', 'readExternal', 'openExternally', 'setTitleBarColors',
-  'renameFile', 'findMoved', 'citations',
+  'renameFile', 'findMoved', 'citations', 'versionChanges',
   'exportPackage', 'importPackage', 'sharingStatus', 'sync', 'conflictSides', 'resolveConflict', 'finishSync', 'abortSync',
   'githubSignInStart', 'githubSignInWait', 'githubSignOut', 'githubShare', 'githubInvite', 'githubPeople', 'githubRepos',
   'githubAcceptInvitation', 'githubClone', 'copyText',

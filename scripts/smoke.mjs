@@ -186,13 +186,25 @@ await step('file moved outside the app offers Fix links', async () => {
   if (!text.includes('/data/archive/Bracket loads.xlsx#LoadTable')) throw new Error('link not fixed');
 });
 
-await step('version picker and file browser', async () => {
-  await win.locator('.version-pill').click();
-  await win.locator('.popover').getByRole('button', { name: /Before retry refactor/ }).click();
-  await win.getByText('deleted later').first().waitFor({ timeout: 10000 }).catch(() => undefined);
+await step('history: what changed, open a file as it was, browse a version', async () => {
+  await win.locator('.header').getByRole('button', { name: 'History' }).click();
+  await win.locator('.history-item', { hasText: 'Retry refactor: exponential' }).click();
+  await win.locator('.history-detail .tree-row', { hasText: 'sleep_util.py' }).waitFor({ timeout: 10000 });
+  await win.locator('.history-detail .tree-row', { hasText: 'client.py' }).waitFor();
+  await shot('history');
+  await win.locator('.history-detail .tree-row', { hasText: 'client.py' }).click();
+  await win.locator('.tab.active .badge.mark').waitFor({ timeout: 10000 });
+  await win.locator('.header').getByRole('button', { name: 'History' }).click();
+  await win.locator('.history-item', { hasText: 'Before retry refactor' }).click();
+  await win.getByRole('button', { name: 'Browse all files from this version' }).click();
+  await win.getByText('deleted later').first().waitFor({ timeout: 10000 });
   await shot('browser-old-version');
   await win.keyboard.press('Escape');
-  await win.locator('.backdrop').click({ position: { x: 5, y: 5 } }).catch(() => undefined);
+  // Opening the browser again starts at the latest version.
+  await win.keyboard.press('Control+P');
+  const shown = await win.locator('.dialog select').inputValue();
+  if (shown !== '') throw new Error('file browser should reset to the latest version');
+  await win.keyboard.press('Escape');
 });
 
 await step('git terminology', async () => {

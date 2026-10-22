@@ -9,6 +9,7 @@ const TERMS = {
   versionName: ['Version name', 'Commit message'],
   autoVersion: ['Automatic version', 'Auto-commit'],
   history: ['Version history', 'Log'],
+  historyShort: ['History', 'Log'],
   latest: ['Latest', 'Working tree'],
   unsavedChanges: ['Not saved in a version yet', 'Uncommitted changes'],
   workspace: ['Workspace', 'Repository'],

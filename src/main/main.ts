@@ -301,6 +301,9 @@ const api: Api = {
     const root = ws().root;
     return git.findMoved(root, path, at, await git.listWorking(root));
   },
+  async versionChanges(sha) {
+    return git.versionChanges(ws().root, sha);
+  },
   async citations() {
     const all: Citation[] = [];
     for (const note of await workspaceNotes()) all.push(...(await citationsIn(note)));

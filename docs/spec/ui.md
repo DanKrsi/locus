@@ -11,7 +11,7 @@ version of a file.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│ ◆ Locus  Bracket project  [◷ Latest ▾]   [Go to file… Ctrl+P] [Sync] ⚙ │ header
+│ ◆ Locus  Bracket project  [History] [Save version] [Sync] [Share]  [Go to file…] ⚙ │ header
 ├──────────────────────────────────────┬───────────────────────────────────────┤
 │ [Review.md ●] [Design.md] [+]        │ [spec.pdf] [solver.py · Mar 3] [+ Open]│ tabs
 │ Heading▾ B I S </> • 1. ☐ ❝ ▦ 🔗  Tour│ ‹ 22 of 36 › − Fit + │ Area │ [Cite page]│ toolbars
@@ -36,13 +36,14 @@ version of a file.
 
 ## 3. Header
 
-Logo + name · workspace name (click → switch workspace) · **version picker** · quick open
-(Ctrl+P) · **sync status pill** · settings ⚙ · help (F1).
+Logo + name · workspace name (click → open another workspace) · **History** · **Save version** ·
+sync pill and **Share** (when shared) · quick open (Ctrl+P) · settings ⚙.
 
-**Version picker**: lists versions newest first. Choosing an older version shows the whole
-folder as it was then: the file tree marks files *changed since*, *deleted later* (shown) and
-*didn't exist yet* (greyed). Documents opened while an older version is selected open at that
-version.
+**History** lists the workspace's versions. Selecting one shows what it changed (added, changed,
+moved, deleted files); clicking a file opens it as it was in that version, and **Browse all files
+from this version** opens the file browser at that version. There is no global "viewing an old
+version" mode: each document tab carries its own version (badge on the tab, version strip under
+the toolbar), and the file browser's version selector resets to Latest each time it opens.
 
 ## 4. Left pane: notes
 

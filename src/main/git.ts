@@ -217,3 +217,9 @@ export async function findMoved(dir: string, path: string, at: string, working: 
   const same = candidates.filter((p) => p.endsWith('/' + name));
   return same.length === 1 ? same[0] : null;
 }
+
+/** Files a version added, changed, renamed or deleted compared with the version before it. */
+export async function versionChanges(dir: string, sha: string): Promise<FileChange[]> {
+  const out = await git(dir, ['-c', 'core.quotepath=off', 'diff-tree', '--no-commit-id', '--name-status', '-r', '-M', '-z', '--root', sha]);
+  return parseNameStatus(out);
+}

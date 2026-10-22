@@ -19,7 +19,7 @@ import { extractLinks } from '../core/mdlinks';
 import { findQuote } from '../core/quote';
 import { mapLines } from '../core/remap';
 import * as git from '../main/git';
-import { readPdf, readWorkbook, type PdfPage } from './reader';
+import { readPdf, readSlides, readWorkbook, type PdfPage } from './reader';
 
 export interface Workspace {
   root: string;
@@ -148,6 +148,7 @@ export interface ReferenceRequest {
   quote?: string;
   highlight?: boolean;
   range?: string;
+  slide?: number;
   heading?: string;
   time?: string;
   version?: string;
@@ -225,8 +226,21 @@ export async function makeReference(ws: Workspace, req: ReferenceRequest): Promi
     if (!ref.sheet && !parseA1Range(ref.range) && !wb.names.some((n) => n.name.toLowerCase() === ref.range.toLowerCase())) {
       throw new Error(`"${ref.range}" isn't a cell range or a named range in ${path}`);
     }
-    if (!ref.sheet && parseA1Range(ref.range)) ref.sheet = wb.sheets[0]?.name;
+    // Name the sheet only when there is a choice; single-sheet files (like CSV) stay unqualified.
+    if (!ref.sheet && parseA1Range(ref.range) && wb.sheets.length > 1) ref.sheet = wb.sheets[0]?.name;
     loc.sheet = ref;
+  } else if (kind === 'slides') {
+    const slides = await readSlides(await readBytes(ws, path, pinned));
+    let n = req.slide;
+    if (!n && quote) {
+      const q = quote.replace(/\s+/g, ' ').toLowerCase();
+      const i = slides.findIndex((t) => t.replace(/\s+/g, ' ').toLowerCase().includes(q));
+      if (i < 0) throw new Error(`Couldn't find the quote on any slide of ${path}`);
+      n = i + 1;
+    }
+    if (!n) throw new Error('Slide references need slide (a number) or a quote from the slide');
+    if (n < 1 || n > slides.length) throw new Error(`${path} has ${slides.length} slides; slide ${n} doesn't exist`);
+    loc.slide = n;
   } else if (kind === 'media' && req.time) {
     const ref = parseDestination(`/x.mp4#t=${req.time}`);
     loc.time = ref?.loc.time;
@@ -270,6 +284,7 @@ function findInLines(lines: string[], quote: string): { start: number; end: numb
 }
 
 export function describe(loc: Location): string {
+  if (loc.slide) return `slide ${loc.slide}`;
   if (loc.viewrect) return `area on page ${loc.page}`;
   if (loc.page) return `page ${loc.page}`;
   if (loc.lines) return `lines ${loc.lines.start}-${loc.lines.end}`;
@@ -304,7 +319,7 @@ export async function validateNote(ws: Workspace, notePath: string, markdown: st
       continue;
     }
     try {
-      checks.push({ ...base, ...(await checkReference(ws, notePath, ref, link.title, head)) });
+      checks.push({ ...base, ...(await checkReference(ws, notePath, ref, link.title, head, link.image)) });
     } catch (e) {
       checks.push({ ...base, status: 'broken', detail: (e as Error).message });
     }
@@ -318,6 +333,8 @@ async function checkReference(
   ref: Reference,
   title: string | undefined,
   head: string | null,
+  /** Embedded images show the latest version on purpose, so they need no recorded version. */
+  image = false,
 ): Promise<Pick<LinkCheck, 'status' | 'detail'>> {
   if (ref.pathKind === 'external') {
     return (await exists(ref.path))
@@ -333,7 +350,7 @@ async function checkReference(
   const rev = ref.rev;
   const warnings: string[] = [];
   if (ref.pathKind === 'relative') warnings.push('Relative path: prefer a workspace-root path starting with "/" so moving the note never breaks it');
-  if (!rev && !ref.at && ws.isRepo && fileKind(path) !== 'markdown') warnings.push('No version recorded (at=): the app cannot follow this file through changes');
+  if (!rev && !ref.at && ws.isRepo && !image && fileKind(path) !== 'markdown') warnings.push('No version recorded (at=): the app cannot follow this file through changes');
 
   if (!(await fileExists(ws, path, rev))) {
     if (!rev && ref.at && (await fileExists(ws, path, ref.at))) return { status: 'broken', detail: `${path} existed at ${ref.at} but is gone now (moved or deleted)` };
@@ -389,6 +406,9 @@ async function checkReference(
         }
       }
     }
+  } else if (kind === 'slides' && loc.slide) {
+    const slides = await readSlides(await readBytes(ws, path, rev));
+    if (loc.slide > slides.length) return { status: 'broken', detail: `Slide ${loc.slide} doesn't exist (${slides.length} slides)` };
   } else if (kind === 'sheet' && loc.sheet) {
     const wb = await readWorkbook(await readBytes(ws, path, rev), path);
     const { sheet, range } = loc.sheet;

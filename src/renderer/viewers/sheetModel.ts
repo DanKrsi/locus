@@ -225,7 +225,9 @@ export function resolveSheetRef(wb: WorkbookModel, ref: SheetRef): { sheet: numb
       range = named.range;
     }
   }
-  const sheet = sheetName ? wb.sheets.findIndex((s) => s.name === sheetName) : 0;
+  let sheet = sheetName ? wb.sheets.findIndex((s) => s.name === sheetName) : 0;
+  // A single-sheet file (CSV) matches whatever name a link used for it.
+  if (sheet < 0 && wb.sheets.length === 1) sheet = 0;
   const box = parseA1Range(range);
   if (sheet < 0 || !box) return null;
   return { sheet, box };

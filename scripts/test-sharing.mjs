@@ -41,9 +41,9 @@ const callApi = (method, ...args) => win.evaluate(([m, a]) => window.api[m](...a
 const pkg = join(out, 'Bracket project.locus');
 const imported = join(out, 'imported');
 
-await step('share dialog without a GitHub client ID offers the file option', async () => {
-  await win.getByRole('button', { name: 'Share' }).click();
-  await win.getByText("GitHub sign-in isn't set up in this build").waitFor({ timeout: 5000 });
+await step('share dialog offers GitHub sign-in and the file option', async () => {
+  await win.locator('.header').getByRole('button', { name: 'Share', exact: true }).click();
+  await win.getByRole('button', { name: 'Sign in with GitHub' }).waitFor({ timeout: 5000 });
   await win.getByRole('button', { name: /Save as a file/ }).waitFor();
   await shot('share-dialog');
   await win.getByRole('button', { name: 'Done' }).click();
@@ -137,7 +137,7 @@ await step('git terminology shows ahead/behind', async () => {
   await win.getByText('Git', { exact: true }).click();
   await win.getByRole('button', { name: 'Done' }).click();
   await win.locator('.sync-pill', { hasText: /Up to date|↓/ }).waitFor({ timeout: 5000 });
-  await win.getByRole('button', { name: 'Share' }).click();
+  await win.locator('.header').getByRole('button', { name: 'Share', exact: true }).click();
   await win.getByText('Export git bundle').waitFor();
   await shot('git-terms-share');
   await win.getByRole('button', { name: 'Done' }).click();

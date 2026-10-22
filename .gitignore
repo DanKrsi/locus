@@ -5,3 +5,4 @@ out/
 *.log
 .locus/cache/
 test-output/
+.sample-cache/

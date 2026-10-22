@@ -23,7 +23,10 @@ Early development (milestones 1–3 done). Windows first. Working today:
 - Open any folder as a workspace (version history is set up automatically, git is bundled)
 - Notes editor with live preview; references render as icons + labels with hover previews
 - Viewers: PDF (pages, area highlights, text selection), code (syntax highlighting, line
-  ranges), spreadsheets (.xlsx/.csv, Excel-like grid, named ranges), images, audio/video
+  ranges), spreadsheets (.xlsx/.csv, Excel-like grid, named ranges), PowerPoint (slides),
+  images, audio/video
+- Notes show embedded images and render markdown tables (with clickable links in cells);
+  **Open note** (Ctrl+O) on the left, **Open document** (Ctrl+P) on the right
 - **Cite** (Ctrl+Shift+L) inserts a reference with an inline rename box; clicking it jumps back
 - Version picker, per-file version strip, pinned (`rev=`) and live (`at=`) references, with
   live code references following lines that moved
@@ -35,6 +38,13 @@ Early development (milestones 1–3 done). Windows first. Working today:
 - **Share** as a single `.locus` file (with full history), or sync through a private GitHub
   repository with invites and friendly conflict handling
 - Simple / Git terminology setting, five themes, dark mode
+
+## Sample project
+
+`npm run sample` builds `../locus-sample`: a small CubeSat bracket project with real NASA
+standards (NASA-STD-5001B in two editions, NASA-STD-5020B), Python code, Excel workbooks, a
+PowerPoint deck, images, a spoken meeting recording and a version history from January to
+April. Its notes use every kind of link; start with `notes/00 Start here.md`.
 
 ## Claude integration
 

@@ -42,7 +42,9 @@ Decisions so far live in [decisions.md](decisions.md); the specs are in [spec/](
 
 ## Milestone 5: more formats and polish
 
-- PowerPoint (via installed PowerPoint, with a fallback), Word, images, audio/video, web pages
+- [x] PowerPoint viewer (pptx-preview) with slide citations; images and tables rendered in notes
+- [x] Aurora-3 sample project (`npm run sample`) demonstrating every feature
+- [ ] Word documents, web pages; higher-fidelity PowerPoint via installed Office
 - [x] Windows installer (per-user NSIS, no admin): shortcuts, .locus file association, locus:// links, bundled git
 - [ ] Code signing (SignPath free OSS program), auto-update, Explorer "Open in Locus" menu, a real app icon
 - Mac build; VS Code extension built on `src/core`

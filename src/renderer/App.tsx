@@ -16,7 +16,7 @@ import { movedPath } from '../core/rewrite';
 import { api, shortSha } from './api';
 import { DocsPane } from './docs/DocsPane';
 import { FileBrowser } from './FileBrowser';
-import { invalidateLatest } from './files';
+import { invalidateLatest, loadBytes, mimeFor } from './files';
 import { Icon, Logo } from './icons';
 import { newId, revealOf, type DocTab } from './model';
 import { allLinks, insertReference, setActiveLink, type LinkInfo, type RefStatus } from './notes/editor';
@@ -285,14 +285,17 @@ export function App() {
     handles.current.delete(id);
   };
 
-  const openBrowser = (rev?: string) => {
-    setBrowserRev(rev);
+  const [browserTarget, setBrowserTarget] = useState<'notes' | 'documents'>('documents');
+  const openBrowser = (rev?: string, target: 'notes' | 'documents' = 'documents') => {
+    setBrowserRev(target === 'notes' ? undefined : rev);
+    setBrowserTarget(target);
     setBrowser(true);
   };
 
   const openFromBrowser = async (path: string, rev: string | undefined) => {
     setBrowser(false);
-    if (fileKind(path) === 'markdown' && !rev) {
+    // Notes open on the left; anything picked through "Open document" opens in the viewer.
+    if (browserTarget === 'notes') {
       await notes.current?.open(path);
       return;
     }
@@ -380,7 +383,7 @@ export function App() {
   const editorCallbacks = (notePath: () => string) => ({
     onFollow: (info: LinkInfo) => void followRef(info, notePath()),
     refStatus: (info: LinkInfo) => refStatus(info, notePath()),
-    imageUrl: () => null,
+    imageUrl: (info: LinkInfo) => imageUrl(info, notePath()),
     renderHoverCard: (info: LinkInfo, view: import('@codemirror/view').EditorView) =>
       renderHoverCard(info, view, {
         notePath: notePath(),
@@ -393,6 +396,29 @@ export function App() {
         },
       }),
   });
+
+  // ---------- Images in notes ----------
+
+  /** Object URLs for images shown in notes, loaded on first use (null while loading or missing). */
+  const imageCache = useRef(new Map<string, string | null>());
+
+  const imageUrl = (info: LinkInfo, notePath: string): string | null => {
+    const ref = info.ref;
+    if (ref.pathKind === 'web') return /^https:/i.test(info.dest) ? info.dest : null;
+    const external = ref.pathKind === 'external';
+    const path = external ? ref.path : resolvePath(ref, notePath);
+    const key = `${path}@${ref.rev ?? ''}`;
+    if (imageCache.current.has(key)) return imageCache.current.get(key)!;
+    imageCache.current.set(key, null);
+    loadBytes({ path, external, rev: ref.rev })
+      .then((bytes) => {
+        const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: mimeFor(path.split('.').pop()!.toLowerCase()) }));
+        imageCache.current.set(key, url);
+        notes.current?.refresh();
+      })
+      .catch(() => undefined);
+    return null;
+  };
 
   // ---------- Compare, citations, moved files ----------
 
@@ -580,6 +606,9 @@ export function App() {
       } else if (e.ctrlKey && !e.shiftKey && k === 'p') {
         e.preventDefault();
         openBrowser();
+      } else if (e.ctrlKey && !e.shiftKey && k === 'o') {
+        e.preventDefault();
+        openBrowser(undefined, 'notes');
       } else if (e.ctrlKey && !e.shiftKey && k === 'n') {
         e.preventDefault();
         void notes.current?.newNote();
@@ -649,7 +678,7 @@ export function App() {
             </button>
             <div className="spacer" />
             <button className="quick-open" onClick={() => openBrowser()}>
-              <span><Icon name="search" size={14} /> Go to file…</span>
+              <span><Icon name="search" size={14} /> Open document…</span>
               <span>Ctrl+P</span>
             </button>
           </>
@@ -726,6 +755,7 @@ export function App() {
               }}
               toast={showToast}
               onTour={toggleTour}
+              onOpenNote={() => openBrowser(undefined, 'notes')}
               touring={!!tour}
               onSaved={() => {
                 void loadCitations();
@@ -785,6 +815,11 @@ export function App() {
           }}
           onClose={() => setBrowser(false)}
           onRename={renameFile}
+          target={browserTarget}
+          onNewNote={() => {
+            setBrowser(false);
+            void notes.current?.newNote();
+          }}
         />
       )}
       {historyOpen && ws && (

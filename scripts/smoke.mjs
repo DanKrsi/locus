@@ -41,12 +41,23 @@ await step('workspace opens', async () => {
 });
 
 await step('quick open a note', async () => {
-  await win.keyboard.press('Control+P');
-  await win.getByPlaceholder('Find a file by name').fill('review');
+  await win.keyboard.press('Control+O');
+  await win.getByPlaceholder('Find a note by name').fill('review');
   await win.locator('.tree-row', { hasText: 'review.md' }).waitFor();
   await win.keyboard.press('Enter');
   await win.locator('.cm-ref').first().waitFor({ timeout: 10000 });
   await shot('note');
+});
+
+await step('markdown tables render as tables', async () => {
+  await win.locator('.cm-md-table table').waitFor({ timeout: 5000 });
+});
+
+await step('Open note lists notes only and opens on the left', async () => {
+  await win.getByRole('button', { name: 'Open note' }).first().click();
+  await win.locator('.dialog h2', { hasText: 'Open note' }).waitFor();
+  if (await win.locator('.tree-row', { hasText: '.pdf' }).count()) throw new Error('PDFs listed in Open note');
+  await win.keyboard.press('Escape');
 });
 
 await step('follow a PDF area reference', async () => {

@@ -2,6 +2,7 @@
 // with positioned text, and spreadsheet cells with their addresses.
 import './domPolyfill';
 import ExcelJS from 'exceljs';
+import JSZip from 'jszip';
 import { basename, colLetters, fileKind } from '../core/link';
 import type { TextRun } from '../core/quote';
 
@@ -44,6 +45,30 @@ export async function readPdf(data: Uint8Array): Promise<PdfPage[]> {
   return pages;
 }
 
+/** Slide texts in presentation order (slide 1 first). */
+export async function readSlides(data: Uint8Array): Promise<string[]> {
+  const zip = await JSZip.loadAsync(data);
+  const pres = (await zip.file('ppt/presentation.xml')?.async('string')) ?? '';
+  const rels = (await zip.file('ppt/_rels/presentation.xml.rels')?.async('string')) ?? '';
+  const target = new Map<string, string>();
+  for (const m of rels.matchAll(/<Relationship\b[^>]*>/g)) {
+    const id = m[0].match(/Id="([^"]+)"/)?.[1];
+    const t = m[0].match(/Target="([^"]+)"/)?.[1];
+    if (id && t) target.set(id, t.replace(/^\//, '').replace(/^(?!ppt\/)/, 'ppt/'));
+  }
+  const order = [...pres.matchAll(/<p:sldId\b[^>]*r:id="([^"]+)"/g)].map((m) => target.get(m[1])).filter(Boolean) as string[];
+  const decode = (s: string) => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&');
+  const out: string[] = [];
+  for (const path of order) {
+    const xml = (await zip.file(path)?.async('string')) ?? '';
+    const paras = [...xml.matchAll(/<a:p>([\s\S]*?)<\/a:p>/g)]
+      .map((p) => [...p[1].matchAll(/<a:t>([\s\S]*?)<\/a:t>/g)].map((t) => decode(t[1])).join(''))
+      .filter((t) => t.trim());
+    out.push(paras.join('\n'));
+  }
+  return out;
+}
+
 export interface SheetDump {
   name: string;
   /** Row number → [column letter, display text][] */
@@ -80,7 +105,7 @@ export async function readWorkbook(data: Uint8Array, fileName: string): Promise<
         if (!line) return;
         rows.set(i + 1, line.split(sep).map((v, c) => [colLetters(c + 1), v.replace(/^"|"$/g, '')] as [string, string]));
       });
-    return { sheets: [{ name: fileName.replace(/\.[^.]+$/, ''), rows, dims: '' }], names: [] };
+    return { sheets: [{ name: basename(fileName).replace(/\.[^.]+$/, ''), rows, dims: '' }], names: [] };
   }
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(Buffer.from(data) as unknown as ArrayBuffer);
@@ -167,6 +192,12 @@ export async function renderForClaude(path: string, data: Uint8Array, opts: Read
         break;
       }
     }
+    return out;
+  }
+  if (kind === 'slides') {
+    const slides = await readSlides(data);
+    out += `Presentation "${basename(path)}", ${slides.length} slides. Cite with slide=<n>.\n`;
+    slides.forEach((t, i) => (out += `\n=== slide ${i + 1} ===\n${t}\n`));
     return out;
   }
   return `${basename(path)} is a ${kind} file. It can be cited as a whole file${kind === 'media' ? ' or at a time (t=m:ss)' : ''}, but its contents can't be read as text.`;

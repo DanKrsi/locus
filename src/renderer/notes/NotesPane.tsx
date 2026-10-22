@@ -49,6 +49,8 @@ interface Props {
   onActiveChange(path: string | null): void;
   toast(msg: string): void;
   onTour(): void;
+  /** Opens the note picker (left-pane files only). */
+  onOpenNote(): void;
   touring: boolean;
   /** Called after a note is written to disk. */
   onSaved(path: string): void;
@@ -275,6 +277,7 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
           </div>
         ))}
         <button className="tab-add" title="New note (Ctrl+N)" onClick={() => void newNote()}><Icon name="plus" size={14} /></button>
+        <button className="tab-add" title="Open a note (Ctrl+O)" onClick={p.onOpenNote}><Icon name="folderOpen" size={14} /> Open note</button>
       </div>
       <div className="toolbar">
         <select
@@ -315,7 +318,11 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
         <div className="empty">
           <h3>No note open</h3>
           <div>Notes are markdown files in this workspace.</div>
-          <button className="primary" onClick={() => void newNote()}><Icon name="plus" /> New note</button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="primary" onClick={p.onOpenNote}><Icon name="folderOpen" /> Open note</button>
+            <button className="outline" onClick={() => void newNote()}><Icon name="plus" /> New note</button>
+          </div>
+          <div className="muted" style={{ fontSize: 12 }}>Ctrl+O to find a note by name</div>
         </div>
       )}
       {tabs.map((t) => (

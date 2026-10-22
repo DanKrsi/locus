@@ -154,6 +154,7 @@ server.registerTool(
     description: `Builds a verified markdown reference to an exact place in a file. Paste the returned markdown into the note unchanged.
 - Code: give lines [start, end], or a quote of the code and the lines are found for you.
 - PDF: give a quote (exact text from the page) and optionally page; set highlight=true to draw a box around the quoted passage. Without a quote, give page.
+- PowerPoint: give slide (number), or a quote from the slide.
 - Spreadsheet: give range, e.g. "'Load cases'!B4:D12", "Margins!B2:C6" or a named range.
 - Markdown note: give heading.
 - Audio/video: give time "m:ss".
@@ -167,6 +168,7 @@ version: omit for a live link to the latest file; pass a commit SHA to pin the l
       quote: z.string().optional().describe('Exact text from the cited spot; shown on hover and used to find the spot again'),
       highlight: z.boolean().optional().describe('PDF only: box the quoted passage'),
       range: z.string().optional(),
+      slide: z.number().int().optional().describe('PowerPoint: slide number (or give a quote from the slide)'),
       heading: z.string().optional(),
       time: z.string().optional(),
       version: z.string().optional(),

@@ -23,6 +23,9 @@ interface Props {
   onClose(): void;
   /** Moves a file or folder (latest version only); links to it are updated. */
   onRename(from: string, to: string): Promise<void>;
+  /** "notes" lists notes for the left pane (latest only); "documents" lists everything for the viewer. */
+  target: 'notes' | 'documents';
+  onNewNote?(): void;
 }
 
 export function FileBrowser(p: Props) {
@@ -125,15 +128,17 @@ export function FileBrowser(p: Props) {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  const pool = useMemo(() => (p.target === 'notes' ? files.filter((f) => fileKind(f.path) === 'markdown') : files), [files, p.target]);
+
   const shown = useMemo(() => {
     const q = filter.trim().toLowerCase();
-    if (!q) return files;
-    return files.filter((f) => f.path.toLowerCase().includes(q)).sort((a, b) => {
+    if (!q) return pool;
+    return pool.filter((f) => f.path.toLowerCase().includes(q)).sort((a, b) => {
       const an = basename(a.path).toLowerCase().includes(q) ? 0 : 1;
       const bn = basename(b.path).toLowerCase().includes(q) ? 0 : 1;
       return an - bn || a.path.localeCompare(b.path);
     });
-  }, [files, filter]);
+  }, [pool, filter]);
 
   const openable = shown.filter((f) => f.mark !== 'notYet');
   const open = (e: Entry) => {
@@ -207,8 +212,10 @@ export function FileBrowser(p: Props) {
     <div className="backdrop" onMouseDown={(e) => e.target === e.currentTarget && p.onClose()}>
       <div className="dialog" onKeyDown={(e) => e.key === 'Escape' && p.onClose()}>
         <div className="dialog-head">
-          <h2>Open file</h2>
+          <h2>{p.target === 'notes' ? 'Open note' : 'Open document'}</h2>
+          <span className="muted" style={{ fontSize: 12.5 }}>{p.target === 'notes' ? 'opens on the left' : 'opens in the viewer on the right'}</span>
           <div className="spacer" />
+          {p.target === 'documents' && <>
           <span className="muted" style={{ fontSize: 12.5 }}>{term(p.terminology, 'showFolderAs')}</span>
           <select value={p.rev ?? ''} onChange={(e) => p.onRevChange(e.target.value || undefined)} style={{ maxWidth: 280 }}>
             <option value="">{term(p.terminology, 'latest')}</option>
@@ -219,12 +226,13 @@ export function FileBrowser(p: Props) {
               </option>
             ))}
           </select>
+          </>}
         </div>
         <div style={{ padding: '0 16px 10px' }}>
           <input
             ref={inputRef}
             style={{ width: '100%' }}
-            placeholder="Find a file by name"
+            placeholder={p.target === 'notes' ? 'Find a note by name' : 'Find a file by name'}
             value={filter}
             onChange={(e) => {
               setFilter(e.target.value);
@@ -238,18 +246,24 @@ export function FileBrowser(p: Props) {
           />
         </div>
         <div className="dialog-body tree" style={{ minHeight: 280 }}>
-          {rows.length ? rows : <div className="muted" style={{ padding: 8 }}>No files match.</div>}
+          {rows.length ? rows : <div className="muted" style={{ padding: 8 }}>{p.target === 'notes' ? 'No notes match.' : 'No files match.'}</div>}
         </div>
         <div className="dialog-foot">
-          <button
-            className="outline"
-            onClick={async () => {
-              const paths = await api.pickExternalFiles();
-              if (paths.length) p.onOpenExternal(paths);
-            }}
-          >
-            <Icon name="folderOpen" /> Browse this computer…
-          </button>
+          {p.target === 'documents' ? (
+            <button
+              className="outline"
+              onClick={async () => {
+                const paths = await api.pickExternalFiles();
+                if (paths.length) p.onOpenExternal(paths);
+              }}
+            >
+              <Icon name="folderOpen" /> Browse this computer…
+            </button>
+          ) : (
+            <button className="outline" onClick={p.onNewNote}>
+              <Icon name="plus" /> New note
+            </button>
+          )}
           <div className="spacer" />
           <button className="outline" onClick={p.onClose}>Cancel</button>
         </div>

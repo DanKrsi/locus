@@ -37,8 +37,8 @@ await step('bundled git reads version history', async () => {
   if (v.length < 5) throw new Error(`only ${v.length} versions`);
 });
 await step('note, PDF viewer and a reference', async () => {
-  await win.keyboard.press('Control+P');
-  await win.getByPlaceholder('Find a file by name').fill('review');
+  await win.keyboard.press('Control+O');
+  await win.getByPlaceholder('Find a note by name').fill('review');
   await win.locator('.tree-row', { hasText: 'review.md' }).waitFor();
   await win.keyboard.press('Enter');
   await win.locator('.cm-ref', { hasText: 'Table 5' }).click();

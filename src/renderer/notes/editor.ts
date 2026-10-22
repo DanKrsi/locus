@@ -21,6 +21,7 @@ import { tags } from '@lezer/highlight';
 import type { SyntaxNode } from '@lezer/common';
 import { escapeLabel, fileKind, parseDestination, splitLinkTarget, type Reference } from '../../core/link';
 import { iconSvg, kindIcon } from '../icons';
+import { renderedTables } from './tables';
 
 export interface LinkInfo {
   from: number;
@@ -710,6 +711,7 @@ export function createNoteEditor(parent: HTMLElement, opts: NoteEditorOptions): 
       flashField,
       activeLinkField,
       livePreview(opts),
+      renderedTables(opts),
       hoverTooltip(
         (view, pos) => {
           const info = linkAt(view.state, pos);

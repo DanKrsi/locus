@@ -15,16 +15,16 @@ const win = await app.firstWindow();
 await win.setViewportSize({ width: 1500, height: 900 });
 await win.locator('.header .ws-name').waitFor({ timeout: 15000 });
 await win.evaluate(() => localStorage.clear());
-await win.keyboard.press('Control+P');
-await win.getByPlaceholder('Find a file by name').fill(note);
+await win.keyboard.press('Control+O');
+await win.getByPlaceholder('Find a note by name').fill(note);
 await win.locator('.tree-row').first().waitFor();
 await win.keyboard.press('Enter');
-await win.locator('.cm-ref').first().waitFor({ timeout: 10000 });
+await win.locator('.cm-ref:visible').first().waitFor({ timeout: 10000 });
 await win.waitForTimeout(800);
 await win.screenshot({ path: join(out, '0-note.png') });
 let i = 1;
 for (const label of labels) {
-  await win.locator('.cm-ref', { hasText: label }).first().click();
+  await win.locator('.cm-ref:visible', { hasText: label }).first().click();
   await win.waitForTimeout(1800);
   await win.screenshot({ path: join(out, `${i++}-${label.replace(/\W+/g, '-')}.png`) });
 }

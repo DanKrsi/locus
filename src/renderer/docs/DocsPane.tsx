@@ -11,6 +11,7 @@ import { DiffViewer } from '../viewers/DiffViewer';
 import { ImageViewer, MediaViewer, UnsupportedViewer } from '../viewers/OtherViewers';
 import { PdfViewer } from '../viewers/PdfViewer';
 import { SheetViewer } from '../viewers/SheetViewer';
+import { SlidesViewer } from '../viewers/SlidesViewer';
 import type { CiteMark, RevealRequest, ViewerHandle } from '../viewers/types';
 
 interface Props {
@@ -61,13 +62,13 @@ export function DocsPane(p: Props) {
             <span className="close" onMouseDown={(e) => { e.stopPropagation(); p.onClose(t.id); }}><Icon name="x" size={12} /></span>
           </div>
         ))}
-        <button className="tab-add" onClick={p.onOpen}><Icon name="plus" size={14} /> Open</button>
+        <button className="tab-add" title="Open a document in the viewer (Ctrl+P)" onClick={p.onOpen}><Icon name="plus" size={14} /> Open document</button>
       </div>
       {p.tabs.length === 0 && (
         <div className="empty">
           <h3>No document open</h3>
           <div>Open PDFs, code, spreadsheets, images or recordings to cite them in your notes.</div>
-          <button className="primary" onClick={p.onOpen}><Icon name="folderOpen" /> Open file</button>
+          <button className="primary" onClick={p.onOpen}><Icon name="folderOpen" /> Open document</button>
           <div className="muted" style={{ fontSize: 12 }}>Ctrl+P to find a file by name</div>
         </div>
       )}
@@ -130,6 +131,8 @@ function ViewerBody({ kind, ...props }: BodyProps) {
       return <ImageViewer {...props} />;
     case 'media':
       return <MediaViewer {...props} />;
+    case 'slides':
+      return <SlidesViewer {...props} />;
     case 'code':
     case 'markdown':
       return <CodeViewer {...props} />;

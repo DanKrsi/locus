@@ -18,6 +18,7 @@ so explain in your own words and let the links show the source.
 2. **Quote, don't guess.** Read the file first (`read_file`), then pass an exact `quote`:
    - code: the quote finds the lines for you (or pass `lines` you read with line numbers);
    - PDF: the quote finds the page, and `highlight: true` boxes the passage;
+   - slides: pass `slide` (a number) or a quote from the slide;
    - spreadsheets: pass `range` ("'Load cases'!B4:D12", "Margins!B2:C6") or a named range.
 3. **Check before you finish.** Run `validate_note` (or read the result of `write_note`) and
    fix every link that is not OK. `MOVED` is fine; `CHANGED`, `WARNING` and `BROKEN` need a look.
@@ -40,6 +41,13 @@ so explain in your own words and let the links show the source.
    Pair it with a live link to the current code so the reader can click between them.
 5. Save with `write_note` (default location `notes/<topic>.md`) and fix anything it flags.
 
+## Images and tables
+
+Notes can embed images with `![alt](/images/plot.png)`; they show inline in the app. Add
+`#rev=<sha>` to show an image as it was in a past version (e.g. before/after drawings).
+Markdown tables render as real tables, and references inside cells stay clickable, which suits
+evidence tables (claim | value | reference).
+
 ## Example stop
 
 ```markdown
@@ -60,6 +68,7 @@ five attempts comes from [BDS-100 §4.2](</docs/BDS-100.pdf#page=5&viewrect=69,1
 | Code / text | `L12-L18` |
 | PDF page / area | `page=5`, `page=5&viewrect=x,y,w,h` (points from the page's top-left) |
 | Spreadsheet | `'Sheet name'!B4:D12`, `Sheet!4:12`, or a named range |
+| Slides (.pptx) | `slide=6` |
 | Note section | `#heading-slug` |
 | Media | `t=14:32` |
 | Version | `at=<sha>` live link recorded at that version; `rev=<sha>` pinned to that version |

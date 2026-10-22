@@ -7,10 +7,10 @@ import { API_METHODS } from '../shared/api';
 import * as git from './git';
 
 const RENDERER_DIR = join(__dirname, '..', 'renderer');
-const WORKSPACE_DIR = '.smartdoc';
+const WORKSPACE_DIR = '.locus';
 
 // Lets automated tests run with their own settings, away from the user's.
-if (process.env.SDL_USER_DATA) app.setPath('userData', process.env.SDL_USER_DATA);
+if (process.env.LOCUS_USER_DATA) app.setPath('userData', process.env.LOCUS_USER_DATA);
 
 protocol.registerSchemesAsPrivileged([
   { scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } },
@@ -53,7 +53,7 @@ async function exists(p: string): Promise<boolean> {
   return fs.access(p).then(() => true, () => false);
 }
 
-/** Finds the workspace root for a folder: nearest .smartdoc, else the git top level, else the folder. */
+/** Finds the workspace root for a folder: nearest .locus, else the git top level, else the folder. */
 async function findRoot(dir: string): Promise<string> {
   for (let d = dir; ; ) {
     if (await exists(join(d, WORKSPACE_DIR))) return d;
@@ -125,7 +125,7 @@ const api: Api = {
   async listFiles(rev) {
     const root = ws().root;
     const files = rev ? await git.listTree(root, rev) : await git.listWorking(root);
-    return files.filter((f) => !f.startsWith('/.smartdoc/')).sort();
+    return files.filter((f) => !f.startsWith('/.locus/')).sort();
   },
   async readFile(path, rev) {
     return rev ? git.readBlob(ws().root, path, rev) : fs.readFile(abs(path));
@@ -200,7 +200,7 @@ function createWindow() {
     minWidth: 900,
     minHeight: 600,
     show: false,
-    title: 'Smart Doc Link',
+    title: 'Locus',
     backgroundColor: '#f5f6f3',
     titleBarStyle: 'hidden',
     titleBarOverlay: { color: '#f5f6f3', symbolColor: '#1f2328', height: 40 },

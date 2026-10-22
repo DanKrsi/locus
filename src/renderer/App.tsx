@@ -397,7 +397,7 @@ export function App() {
   return (
     <div className="app">
       <div className="header">
-        <span className="wordmark"><Logo /> Smart Doc Link</span>
+        <span className="wordmark"><Logo /> Locus</span>
         {ws && (
           <>
             <button className="no-drag ws-name" title={ws.root} onClick={() => void openWorkspace()}>

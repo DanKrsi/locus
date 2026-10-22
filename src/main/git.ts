@@ -4,7 +4,7 @@ import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import type { FileChange, Version } from '../shared/api';
 
-export const SNAPSHOT_REF = 'refs/smartdoc/snapshots';
+export const SNAPSHOT_REF = 'refs/locus/snapshots';
 const AUTO_PREFIX = 'Automatic version';
 const MAX_BUFFER = 1024 * 1024 * 1024;
 
@@ -42,9 +42,9 @@ export async function init(dir: string): Promise<void> {
 /** A fresh machine has no git identity, which makes commits fail; give the repo a local one. */
 export async function ensureIdentity(dir: string): Promise<void> {
   const name = await exec(['config', 'user.name'], dir);
-  if (name.exitCode !== 0 || !name.stdout.trim()) await git(dir, ['config', 'user.name', 'Smart Doc Link']);
+  if (name.exitCode !== 0 || !name.stdout.trim()) await git(dir, ['config', 'user.name', 'Locus']);
   const email = await exec(['config', 'user.email'], dir);
-  if (email.exitCode !== 0 || !email.stdout.trim()) await git(dir, ['config', 'user.email', 'noreply@smartdoclink.local']);
+  if (email.exitCode !== 0 || !email.stdout.trim()) await git(dir, ['config', 'user.email', 'noreply@locus.local']);
 }
 
 export async function head(dir: string): Promise<string | null> {
@@ -157,7 +157,7 @@ export async function ensureVersion(dir: string, path: string, managed: boolean)
     return head(dir);
   }
   const gitDir = (await git(dir, ['rev-parse', '--absolute-git-dir'])).trim();
-  const env = { GIT_INDEX_FILE: join(gitDir, 'smartdoc-index') };
+  const env = { GIT_INDEX_FILE: join(gitDir, 'locus-index') };
   await fs.rm(env.GIT_INDEX_FILE, { force: true });
   if (current) await git(dir, ['read-tree', 'HEAD'], env);
   await git(dir, ['add', '--', gp(path)], env);

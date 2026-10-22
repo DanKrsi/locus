@@ -3,5 +3,5 @@ dist/
 release/
 out/
 *.log
-.smartdoc/cache/
+.locus/cache/
 test-output/

@@ -96,10 +96,16 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
       const { text, bom, eol } = decodeText(bytes);
       setTabs((ts) => (ts.some((t) => t.path === path) ? ts : [...ts, { path, dirty: false }]));
       setActive(path);
-      // Wait for the host div to mount.
-      await new Promise((r) => requestAnimationFrame(r));
-      const host = hosts.current.get(path);
-      if (!host) return null;
+      // Wait for React to mount the tab's host div (can take more than one frame).
+      let host = hosts.current.get(path);
+      for (let i = 0; !host && i < 120; i++) {
+        await new Promise((r) => requestAnimationFrame(r));
+        host = hosts.current.get(path);
+      }
+      if (!host) {
+        p.toast(`Couldn't open ${basename(path)}`);
+        return null;
+      }
       const cb = p.callbacks(path);
       const view = createNoteEditor(host, {
         doc: text,

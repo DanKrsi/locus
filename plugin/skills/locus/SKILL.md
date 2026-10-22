@@ -1,12 +1,12 @@
 ---
-name: smart-doc-link
-description: Write Smart Doc Link notes - markdown whose links jump to exact places in a workspace (code lines, PDF pages and highlighted passages, spreadsheet ranges, note sections, past versions of files). Use when asked for a tour or walkthrough of a codebase or folder of documents, a code review write-up, study or research notes that cite sources, or any note "with links to where things are".
+name: locus
+description: Write Locus notes - markdown whose links jump to exact places in a workspace (code lines, PDF pages and highlighted passages, spreadsheet ranges, note sections, past versions of files). Use when asked for a tour or walkthrough of a codebase or folder of documents, a code review write-up, study or research notes that cite sources, or any note "with links to where things are".
 ---
 
-# Smart Doc Link notes
+# Locus notes
 
-A Smart Doc Link note is a plain markdown file in the workspace. Its links are **references**:
-clicking one in the Smart Doc Link app opens the file on the right at the exact spot, with the
+A Locus note is a plain markdown file in the workspace. Its links are **references**:
+clicking one in the Locus app opens the file on the right at the exact spot, with the
 cited lines, cells or passage highlighted. The reader sees the real document, not a snippet,
 so explain in your own words and let the links show the source.
 

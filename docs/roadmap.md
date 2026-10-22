@@ -30,7 +30,7 @@ Decisions so far live in [decisions.md](decisions.md); the specs are in [spec/](
 
 ## Milestone 4: sharing
 
-- Single-file `.sdl` package (git bundle)
+- Single-file `.locus` package (git bundle)
 - GitHub sign-in (device flow), Share / Invite / Sync, friendly conflicts
 - GitLab, GitHub Enterprise, Azure DevOps
 

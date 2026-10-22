@@ -7,13 +7,13 @@ import { join, resolve } from 'node:path';
 const repo = resolve(import.meta.dirname, '..');
 const out = join(repo, 'test-output');
 const userData = join(out, 'user-data');
-const workspace = resolve(repo, '..', 'sdl-test-workspace');
+const workspace = resolve(repo, '..', 'locus-test-workspace');
 
 await rm(out, { recursive: true, force: true });
 await mkdir(userData, { recursive: true });
 await writeFile(join(userData, 'settings.json'), JSON.stringify({ recentWorkspaces: [workspace], dark: 'light' }));
 
-const app = await electron.launch({ args: [repo], env: { ...process.env, SDL_USER_DATA: userData } });
+const app = await electron.launch({ args: [repo], env: { ...process.env, LOCUS_USER_DATA: userData } });
 const win = await app.firstWindow();
 await win.setViewportSize({ width: 1500, height: 900 });
 const errors = [];
@@ -77,7 +77,10 @@ await step('follow a spreadsheet named range', async () => {
 });
 
 await step('hover card', async () => {
-  await win.locator('.cm-ref', { hasText: 'BDS-100 p5' }).hover();
+  // CodeMirror opens hover cards on mouse movement, so move onto the link in a few steps.
+  const box = await win.locator('.cm-ref', { hasText: 'BDS-100 p5' }).boundingBox();
+  await win.mouse.move(box.x - 40, box.y + box.height / 2);
+  await win.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 5 });
   await win.locator('.hover-card').waitFor({ timeout: 5000 });
   await win.waitForTimeout(800);
   await shot('hover-card');

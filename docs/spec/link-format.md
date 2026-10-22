@@ -1,6 +1,6 @@
 # Link format spec (v1)
 
-Status: draft · Working title: Smart Doc Link
+Status: draft · Name: Locus
 
 A **reference** is an ordinary markdown link whose destination points at a file in the
 workspace plus a location inside it. Notes stay plain `.md` files; nothing is stored anywhere
@@ -16,10 +16,10 @@ get back to the exact spot.
 
 - A **workspace** is one folder with one version history (a git repository). Notes and the
   files they cite live inside it.
-- The workspace root is the nearest ancestor folder containing `.smartdoc/`. Opening a plain
-  folder creates `.smartdoc/workspace.json` and, if needed, a git repository.
-- `.smartdoc/workspace.json` holds `{ "format": 1, "name": "<display name>" }`.
-  `.smartdoc/cache/` is local-only and git-ignored.
+- The workspace root is the nearest ancestor folder containing `.locus/`. Opening a plain
+  folder creates `.locus/workspace.json` and, if needed, a git repository.
+- `.locus/workspace.json` holds `{ "format": 1, "name": "<display name>" }`.
+  `.locus/cache/` is local-only and git-ignored.
 
 ## 2. Destination
 
@@ -116,15 +116,15 @@ Statuses surfaced in the UI: `ok`, `remapped`, `changed`, `moved`, `deleted`, `m
 - **Simple mode / app-managed workspaces**: an automatic version is a normal commit with the
   message `Automatic version (cited <file>)`.
 - **Repos with their own history (developer mode)**: automatic versions are written as
-  commits on `refs/smartdoc/snapshots` (not on any branch), so the developer's branch history
-  stays clean. Sharing pushes `refs/smartdoc/*` along with branches.
+  commits on `refs/locus/snapshots` (not on any branch), so the developer's branch history
+  stays clean. Sharing pushes `refs/locus/*` along with branches.
 
 ## 6. Keeping links healthy
 
 - Renaming or moving a file **inside the app** rewrites every reference in the workspace.
 - Files moved outside the app are detected through git rename detection at the next version;
   the app offers to fix the affected links.
-- The app keeps a local index (`.smartdoc/cache/`) of all references for "Cited in" markers,
+- The app keeps a local index (`.locus/cache/`) of all references for "Cited in" markers,
   backlinks, and link health.
 
 ## 7. Outside the app

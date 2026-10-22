@@ -33,11 +33,11 @@ async function exists(p: string) {
 }
 
 export async function openWorkspace(dir?: string): Promise<Workspace> {
-  const start = resolve(dir || process.env.SDL_WORKSPACE || process.cwd());
+  const start = resolve(dir || process.env.LOCUS_WORKSPACE || process.cwd());
   if (!(await exists(start))) throw new Error(`Folder not found: ${start}`);
   let root: string | null = null;
   for (let d = start; ; ) {
-    if (await exists(join(d, '.smartdoc'))) {
+    if (await exists(join(d, '.locus'))) {
       root = d;
       break;
     }
@@ -50,7 +50,7 @@ export async function openWorkspace(dir?: string): Promise<Workspace> {
   let name = pathBase(root);
   let managed = false;
   try {
-    const meta = JSON.parse(await fs.readFile(join(root, '.smartdoc', 'workspace.json'), 'utf8'));
+    const meta = JSON.parse(await fs.readFile(join(root, '.locus', 'workspace.json'), 'utf8'));
     name = meta.name ?? name;
     managed = !!meta.managed;
   } catch {
@@ -62,12 +62,12 @@ export async function openWorkspace(dir?: string): Promise<Workspace> {
 /** Initialises version history the same way the app does when it opens a plain folder. */
 export async function initWorkspace(dir?: string): Promise<Workspace> {
   const ws = await openWorkspace(dir);
-  const metaFile = join(ws.root, '.smartdoc', 'workspace.json');
+  const metaFile = join(ws.root, '.locus', 'workspace.json');
   if (await exists(metaFile)) return ws;
   const managed = !ws.isRepo;
-  await fs.mkdir(join(ws.root, '.smartdoc'), { recursive: true });
+  await fs.mkdir(join(ws.root, '.locus'), { recursive: true });
   await fs.writeFile(metaFile, JSON.stringify({ format: 1, name: ws.name, managed }, null, 2) + '\n');
-  await fs.writeFile(join(ws.root, '.smartdoc', '.gitignore'), 'cache/\n');
+  await fs.writeFile(join(ws.root, '.locus', '.gitignore'), 'cache/\n');
   if (!ws.isRepo) {
     await git.init(ws.root);
     await git.commitAll(ws.root, 'Workspace created');
@@ -108,7 +108,7 @@ export async function listFiles(ws: Workspace, rev?: string): Promise<string[]> 
     const out: string[] = [];
     const walk = async (dir: string) => {
       for (const e of await fs.readdir(dir, { withFileTypes: true })) {
-        if (e.name === '.git' || e.name === 'node_modules' || e.name === '.smartdoc') continue;
+        if (e.name === '.git' || e.name === 'node_modules' || e.name === '.locus') continue;
         const full = join(dir, e.name);
         if (e.isDirectory()) await walk(full);
         else out.push('/' + relative(ws.root, full).replace(/\\/g, '/'));
@@ -118,7 +118,7 @@ export async function listFiles(ws: Workspace, rev?: string): Promise<string[]> 
     return out.sort();
   }
   const files = rev ? await git.listTree(ws.root, rev) : await git.listWorking(ws.root);
-  return files.filter((f) => !f.startsWith('/.smartdoc/')).sort();
+  return files.filter((f) => !f.startsWith('/.locus/')).sort();
 }
 
 const pdfCache = new Map<string, Promise<PdfPage[]>>();

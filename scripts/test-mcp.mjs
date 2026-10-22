@@ -5,9 +5,9 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { resolve } from 'node:path';
 
 const repo = resolve(import.meta.dirname, '..');
-const workspace = resolve(repo, '..', 'sdl-test-workspace');
+const workspace = resolve(repo, '..', 'locus-test-workspace');
 const client = new Client({ name: 'test', version: '1' });
-await client.connect(new StdioClientTransport({ command: process.execPath, args: [process.env.SDL_SERVER ?? resolve(repo, 'dist/mcp/server.mjs'), workspace] }));
+await client.connect(new StdioClientTransport({ command: process.execPath, args: [process.env.LOCUS_SERVER ?? resolve(repo, 'dist/mcp/server.mjs'), workspace] }));
 
 let failures = 0;
 async function call(name, args, expect) {

@@ -1,4 +1,4 @@
-// MCP server that lets Claude read a Smart Doc Link workspace and write notes whose links jump
+// MCP server that lets Claude read a Locus workspace and write notes whose links jump
 // to exact places in files and versions. Run with: node dist/mcp/server.mjs [workspace-folder]
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import { fileKind } from '../core/link';
-import skillDoc from '../../plugin/skills/smart-doc-link/SKILL.md';
+import skillDoc from '../../plugin/skills/locus/SKILL.md';
 import { renderForClaude, readWorkbook } from './reader';
 import {
   git,
@@ -22,14 +22,14 @@ import {
   type LinkCheck,
 } from './workspace';
 
-if (process.argv[2]) process.env.SDL_WORKSPACE = process.argv[2];
+if (process.argv[2]) process.env.LOCUS_WORKSPACE = process.argv[2];
 
-const INSTRUCTIONS = `Smart Doc Link notes are markdown files whose links jump to exact places in a workspace:
+const INSTRUCTIONS = `Locus notes are markdown files whose links jump to exact places in a workspace:
 PDF pages and highlighted areas, code lines, spreadsheet ranges, note headings, media times, and past versions of files.
 Never hand-write reference links: get each one from make_reference, which verifies the target and records the version.
 Before finishing a note, run validate_note and fix anything that is not "ok".`;
 
-const server = new McpServer({ name: 'smart-doc-link', version: '0.1.0' }, { instructions: INSTRUCTIONS });
+const server = new McpServer({ name: 'locus', version: '0.1.0' }, { instructions: INSTRUCTIONS });
 
 const workspaceArg = z
   .string()
@@ -254,7 +254,7 @@ server.registerPrompt(
   'write_tour',
   {
     title: 'Write a tour',
-    description: 'Write a guided tour of the workspace (or part of it) as a Smart Doc Link note with exact references',
+    description: 'Write a guided tour of the workspace (or part of it) as a Locus note with exact references',
     argsSchema: { topic: z.string().optional().describe('What the tour should cover, e.g. "the retry logic" or "the whole codebase"') },
   },
   ({ topic }) => ({

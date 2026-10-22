@@ -1,4 +1,4 @@
-# Smart Doc Link (working title)
+# Locus
 
 Write markdown notes on the left, read the source on the right, and link to the **exact
 spot**: a PDF page or highlighted area, lines of code, a range of spreadsheet cells, a
@@ -47,14 +47,14 @@ lines from a quote, and records the version.
 **Claude Code** (plugin with the MCP server and a skill that teaches how to write a good tour):
 
 ```bash
-claude plugin marketplace add DanKrsi/smart-doc-link
-claude plugin install smart-doc-link@smart-doc-link
+claude plugin marketplace add DanKrsi/locus
+claude plugin install locus@locus
 ```
 
-Then, in a workspace folder: "give me a tour of this codebase as a Smart Doc Link note".
+Then, in a workspace folder: "give me a tour of this codebase as a Locus note".
 
 **Claude Desktop**: build the extension with `npm run build:extension` and double-click
-`release/smart-doc-link.mcpb`. It bundles its own git, so nothing else needs installing. Use the
+`release/locus.mcpb`. It bundles its own git, so nothing else needs installing. Use the
 "Write a tour" prompt from the + menu.
 
 ## Development
@@ -63,11 +63,11 @@ Then, in a workspace folder: "give me a tour of this codebase as a Smart Doc Lin
 npm install
 npm start                 # build and launch the app
 npm test                  # unit tests for the link format
-npm run test-workspace    # create ../sdl-test-workspace with sample history
+npm run test-workspace    # create ../locus-test-workspace with sample history
 npm run smoke             # drive the app against it and save screenshots to test-output/
 npm run test:mcp          # call every MCP tool against the test workspace
 npm run build:plugin      # rebuild plugin/server/server.mjs (commit it)
-npm run build:extension   # pack release/smart-doc-link.mcpb for Claude Desktop
+npm run build:extension   # pack release/locus.mcpb for Claude Desktop
 ```
 
 ## License

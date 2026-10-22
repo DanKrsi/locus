@@ -1,9 +1,9 @@
 {
-  "name": "smart-doc-link",
+  "name": "locus",
   "version": "0.1.0",
-  "description": "Write markdown notes and tours whose links jump to exact code lines, PDF passages, spreadsheet ranges and past versions, for the Smart Doc Link app.",
+  "description": "Write markdown notes and tours whose links jump to exact code lines, PDF passages, spreadsheet ranges and past versions, for the Locus app.",
   "author": { "name": "Daniel Krsikapa" },
-  "repository": "https://github.com/DanKrsi/smart-doc-link",
+  "repository": "https://github.com/DanKrsi/locus",
   "license": "MIT",
   "keywords": ["notes", "markdown", "citations", "code-tour", "pdf"]
 }

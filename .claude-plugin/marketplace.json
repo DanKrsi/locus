@@ -1,12 +1,12 @@
 {
-  "name": "smart-doc-link",
-  "description": "Smart Doc Link: notes with links to exact places in documents, code and versions",
+  "name": "locus",
+  "description": "Locus: notes with links to exact places in documents, code and versions",
   "owner": { "name": "Daniel Krsikapa" },
   "plugins": [
     {
-      "name": "smart-doc-link",
+      "name": "locus",
       "source": "./plugin",
-      "description": "MCP server and skill for writing Smart Doc Link notes and tours"
+      "description": "MCP server and skill for writing Locus notes and tours"
     }
   ]
 }

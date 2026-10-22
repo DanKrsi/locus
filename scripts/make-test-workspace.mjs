@@ -1,5 +1,5 @@
 // Builds a throwaway workspace with real version history for manual and automated testing.
-// Usage: node scripts/make-test-workspace.mjs [target-dir]   (default: ../sdl-test-workspace)
+// Usage: node scripts/make-test-workspace.mjs [target-dir]   (default: ../locus-test-workspace)
 import { exec } from 'dugite';
 import ExcelJS from 'exceljs';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
@@ -7,7 +7,7 @@ import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { formatReference } from '../src/core/link.ts';
 
-const root = resolve(process.argv[2] ?? join(import.meta.dirname, '..', '..', 'sdl-test-workspace'));
+const root = resolve(process.argv[2] ?? join(import.meta.dirname, '..', '..', 'locus-test-workspace'));
 
 async function git(args, env = {}) {
   const r = await exec(args, root, { env: { ...process.env, ...env } });
@@ -206,15 +206,15 @@ await mkdir(root, { recursive: true });
 await git(['init', '-b', 'main']);
 await git(['config', 'user.name', 'Test Author']);
 await git(['config', 'user.email', 'test@example.com']);
-await put('.smartdoc/workspace.json', JSON.stringify({ format: 1, name: 'Bracket project', managed: true }, null, 2) + '\n');
-await put('.smartdoc/.gitignore', 'cache/\n');
+await put('.locus/workspace.json', JSON.stringify({ format: 1, name: 'Bracket project', managed: true }, null, 2) + '\n');
+await put('.locus/.gitignore', 'cache/\n');
 
 await put('src/net/client.py', clientV1);
 await put('src/solver.py', solver);
 await put('docs/BDS-100 Bracket Design Standard.pdf', await makePdf());
 await put('data/Bracket loads.xlsx', await makeWorkbook(false));
 await put('notes/design-basis.md', '# Design basis\n\n## Loads\n\nLoads come from the launch and landing environments.\n\n## Factors of safety\n\nUltimate factor 1.4 on all metallic parts.\n');
-await put('README.md', '# Bracket project\n\nTest workspace for Smart Doc Link.\n');
+await put('README.md', '# Bracket project\n\nTest workspace for Locus.\n');
 const v1 = await commit('First draft', '2026-02-20T10:00:00');
 await put('src/net/client.py', clientV1.replace('RETRIES = 3', 'RETRIES = 3  # per BDS-100 4.2'));
 const v2 = await commit('Before retry refactor', '2026-03-03T16:30:00');

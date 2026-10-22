@@ -1,6 +1,6 @@
 {
-  "name": "smart-doc-link",
-  "productName": "Smart Doc Link",
+  "name": "locus",
+  "productName": "Locus",
   "version": "0.1.0",
   "description": "Write markdown notes that link to exact places in PDFs, code, spreadsheets and their versions.",
   "license": "MIT",

@@ -1,12 +1,12 @@
 {
   "manifest_version": "0.3",
-  "name": "smart-doc-link",
-  "display_name": "Smart Doc Link",
+  "name": "locus",
+  "display_name": "Locus",
   "version": "0.1.0",
   "description": "Write notes and tours whose links jump to exact code lines, PDF passages, spreadsheet ranges and past versions.",
-  "long_description": "Lets Claude read a Smart Doc Link workspace (code, PDFs, spreadsheets and their version history) and write markdown notes whose links open the exact spot in the Smart Doc Link app. Use the \"Write a tour\" prompt to get a guided walkthrough of a folder or codebase.",
+  "long_description": "Lets Claude read a Locus workspace (code, PDFs, spreadsheets and their version history) and write markdown notes whose links open the exact spot in the Locus app. Use the \"Write a tour\" prompt to get a guided walkthrough of a folder or codebase.",
   "author": { "name": "Daniel Krsikapa" },
-  "repository": { "type": "git", "url": "https://github.com/DanKrsi/smart-doc-link" },
+  "repository": { "type": "git", "url": "https://github.com/DanKrsi/locus" },
   "license": "MIT",
   "keywords": ["notes", "markdown", "citations", "tour", "pdf", "spreadsheet"],
   "server": {
@@ -15,7 +15,7 @@
     "mcp_config": {
       "command": "node",
       "args": ["${__dirname}/server/server.mjs"],
-      "env": { "SDL_WORKSPACE": "${user_config.workspace}" }
+      "env": { "LOCUS_WORKSPACE": "${user_config.workspace}" }
     }
   },
   "user_config": {
@@ -37,7 +37,7 @@
     { "name": "init_workspace", "description": "Set up version history for a folder" }
   ],
   "prompts": [
-    { "name": "write_tour", "description": "Write a guided tour as a Smart Doc Link note", "arguments": ["topic"], "text": "Write a tour of ${arguments.topic} as a Smart Doc Link note." }
+    { "name": "write_tour", "description": "Write a guided tour as a Locus note", "arguments": ["topic"], "text": "Write a tour of ${arguments.topic} as a Locus note." }
   ],
   "compatibility": { "platforms": ["win32", "darwin"], "runtimes": { "node": ">=18.0.0" } }
 }

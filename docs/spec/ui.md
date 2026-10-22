@@ -11,7 +11,7 @@ version of a file.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│ ◆ Smart Doc Link  Bracket project  [◷ Latest ▾]   [Go to file… Ctrl+P] [Sync] ⚙ │ header
+│ ◆ Locus  Bracket project  [◷ Latest ▾]   [Go to file… Ctrl+P] [Sync] ⚙ │ header
 ├──────────────────────────────────────┬───────────────────────────────────────┤
 │ [Review.md ●] [Design.md] [+]        │ [spec.pdf] [solver.py · Mar 3] [+ Open]│ tabs
 │ Heading▾ B I S </> • 1. ☐ ❝ ▦ 🔗  Tour│ ‹ 22 of 36 › − Fit + │ Area │ [Cite page]│ toolbars
@@ -123,7 +123,7 @@ follows and the current reference is highlighted in the note. Esc exits.
 | Updates available | Commits behind |
 | Online copy | Remote (`origin`) |
 | Download workspace | Clone |
-| Share as file (.sdl) | Export git bundle |
+| Share as file (.locus) | Export git bundle |
 | Keep mine / Keep theirs | Resolve: ours / theirs |
 | Workspace | Repository |
 
@@ -134,7 +134,7 @@ follows and the current reference is highlighted in the note. Esc exits.
 Share → sign in with GitHub (device code) → private repo created → invite by username/email →
 copy open link. Sync pill: Synced / Changes to share / Updates available. Conflicts on notes
 are shown side by side (Keep mine / Keep theirs / Keep both); binary conflicts keep both
-copies. Single-file `.sdl` package (git bundle) for sharing without accounts.
+copies. Single-file `.locus` package (git bundle) for sharing without accounts.
 
 ## 8. Keyboard shortcuts
 

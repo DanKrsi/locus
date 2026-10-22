@@ -21,9 +21,13 @@
     "test:mcp": "node scripts/build-mcp.mjs && node scripts/make-test-workspace.mjs && node scripts/test-mcp.mjs",
     "build:extension": "node scripts/build-extension.mjs",
     "test:isolated": "npm run build:plugin && npm run build:extension && node scripts/test-isolated.mjs",
-    "test:sharing": "npm run build && node scripts/make-test-workspace.mjs && node scripts/test-sharing.mjs"
+    "test:sharing": "npm run build && node scripts/make-test-workspace.mjs && node scripts/test-sharing.mjs",
+    "dist": "npm run build && electron-builder --win nsis"
   },
   "dependencies": {
+    "dugite": "^3.3.0"
+  },
+  "devDependencies": {
     "@codemirror/commands": "^6.11.1",
     "@codemirror/lang-markdown": "^6.5.2",
     "@codemirror/language": "^6.13.1",
@@ -35,23 +39,78 @@
     "@lezer/highlight": "^1.2.5",
     "@modelcontextprotocol/sdk": "^1.32.1",
     "@thednp/dommatrix": "^3.1.2",
-    "dugite": "^3.3.0",
-    "exceljs": "^4.4.0",
-    "pdfjs-dist": "^5.7.284",
-    "react": "^19.3.1",
-    "react-dom": "^19.3.1",
-    "zod": "^4.6.7"
-  },
-  "devDependencies": {
     "@types/node": "^26.6.5",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
     "electron": "^45.0.0",
+    "electron-builder": "^26.15.3",
     "esbuild": "^0.28.2",
+    "exceljs": "^4.4.0",
     "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "^5.7.284",
     "playwright": "^1.64.1",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "typescript": "^5.9.3",
-    "vite": "^8.3.5"
+    "vite": "^8.3.5",
+    "zod": "^4.6.7"
+  },
+  "author": {
+    "name": "Daniel Krsikapa"
+  },
+  "homepage": "https://github.com/DanKrsi/locus",
+  "build": {
+    "appId": "io.github.dankrsi.locus",
+    "productName": "Locus",
+    "copyright": "Copyright © 2026 Daniel Krsikapa",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**",
+      "package.json",
+      "!dist/mcp/**"
+    ],
+    "asarUnpack": [
+      "node_modules/dugite/**"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "artifactName": "Locus-Setup-${version}.exe"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Locus",
+      "deleteAppDataOnUninstall": false
+    },
+    "fileAssociations": [
+      {
+        "ext": "locus",
+        "name": "Locus package",
+        "description": "Locus shared workspace",
+        "icon": "build/icon.png"
+      }
+    ],
+    "protocols": [
+      {
+        "name": "Locus link",
+        "schemes": [
+          "locus"
+        ]
+      }
+    ]
   }
 }

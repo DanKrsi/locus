@@ -64,6 +64,15 @@ Then, in a workspace folder: "give me a tour of this codebase as a Locus note".
 `release/locus.mcpb`. It bundles its own git, so nothing else needs installing. Use the
 "Write a tour" prompt from the + menu.
 
+## Install (Windows)
+
+Build the installer with `npm run dist`, then run `release/Locus-Setup-<version>.exe`. It installs
+for the current user (no admin rights), adds Start menu and desktop shortcuts, opens `.locus`
+files, and handles `locus://` links. Everything it needs, including git, is inside.
+
+The installer isn't code-signed yet, so Windows SmartScreen shows "Windows protected your PC"
+the first time: click **More info** → **Run anyway**.
+
 ## Development
 
 ```bash
@@ -76,6 +85,7 @@ npm run test:sharing      # package, sync and conflicts against a local stand-in
 npm run test:mcp          # call every MCP tool against the test workspace
 npm run build:plugin      # rebuild plugin/server/server.mjs (commit it)
 npm run build:extension   # pack release/locus.mcpb for Claude Desktop
+npm run dist              # build the Windows installer into release/
 npm run test:isolated     # test the shipped plugin and extension outside the repo
 ```
 

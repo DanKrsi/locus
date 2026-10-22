@@ -1,0 +1,7 @@
+node_modules/
+dist/
+release/
+out/
+*.log
+.smartdoc/cache/
+test-output/

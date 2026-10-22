@@ -1,0 +1,155 @@
+import { useEffect, useRef, useState } from 'react';
+import { EditorState, RangeSetBuilder, StateEffect, StateField } from '@codemirror/state';
+import { Decoration, EditorView, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers, type DecorationSet } from '@codemirror/view';
+import { LanguageDescription, HighlightStyle, syntaxHighlighting } from '@codemirror/language';
+import { languages } from '@codemirror/language-data';
+import { search, searchKeymap, highlightSelectionMatches } from '@codemirror/search';
+import { defaultKeymap } from '@codemirror/commands';
+import { tags } from '@lezer/highlight';
+import { basename } from '../../core/link';
+import { decodeText } from '../files';
+import { Icon } from '../icons';
+import type { ViewerProps } from './types';
+
+const setCited = StateEffect.define<{ start: number; end: number } | null>();
+
+const citedField = StateField.define<DecorationSet>({
+  create: () => Decoration.none,
+  update(value, tr) {
+    for (const e of tr.effects) {
+      if (!e.is(setCited)) continue;
+      if (!e.value) return Decoration.none;
+      const b = new RangeSetBuilder<Decoration>();
+      const { start, end } = e.value;
+      for (let l = start; l <= Math.min(end, tr.state.doc.lines); l++) {
+        const cls = 'cm-cited-line' + (l === start ? ' first' : '') + (l === end ? ' last' : '');
+        b.add(tr.state.doc.line(l).from, tr.state.doc.line(l).from, Decoration.line({ class: cls }));
+      }
+      return b.finish();
+    }
+    return value;
+  },
+  provide: (f) => EditorView.decorations.from(f),
+});
+
+const style = HighlightStyle.define([
+  { tag: tags.keyword, color: '#7c3aed' },
+  { tag: [tags.string, tags.special(tags.string)], color: '#0f7b45' },
+  { tag: tags.comment, color: '#8a918c', fontStyle: 'italic' },
+  { tag: [tags.number, tags.bool, tags.null], color: '#b45309' },
+  { tag: [tags.function(tags.variableName), tags.function(tags.propertyName)], color: '#1d4f91' },
+  { tag: [tags.typeName, tags.className], color: '#9c4221' },
+  { tag: tags.definition(tags.variableName), color: '#1f2328' },
+  { tag: tags.heading, fontWeight: 'bold' },
+]);
+
+export function CodeViewer({ data, path, reveal, onCite, handle, children }: ViewerProps) {
+  const host = useRef<HTMLDivElement>(null);
+  const viewRef = useRef<EditorView | null>(null);
+  const [lang, setLang] = useState('Plain text');
+  const [lines, setLines] = useState(0);
+  const [lineInput, setLineInput] = useState('1');
+  const [hasSelection, setHasSelection] = useState(false);
+
+  useEffect(() => {
+    const { text } = decodeText(data);
+    const view = new EditorView({
+      parent: host.current!,
+      state: EditorState.create({
+        doc: text,
+        extensions: [
+          EditorState.readOnly.of(true),
+          EditorView.editable.of(false),
+          lineNumbers(),
+          highlightActiveLineGutter(),
+          highlightActiveLine(),
+          syntaxHighlighting(style),
+          search({ top: true }),
+          highlightSelectionMatches(),
+          keymap.of([...searchKeymap, ...defaultKeymap]),
+          citedField,
+          EditorView.updateListener.of((u) => {
+            if (u.selectionSet) {
+              const sel = u.state.selection.main;
+              setHasSelection(!sel.empty);
+              setLineInput(String(u.state.doc.lineAt(sel.head).number));
+            }
+          }),
+        ],
+      }),
+    });
+    viewRef.current = view;
+    setLines(view.state.doc.lines);
+    const desc = LanguageDescription.matchFilename(languages, basename(path));
+    if (desc) {
+      setLang(desc.name);
+      desc.load().then((support) => view.dispatch({ effects: StateEffect.appendConfig.of(support) }));
+    }
+    return () => {
+      view.destroy();
+      viewRef.current = null;
+    };
+  }, [data, path]);
+
+  const goToLine = (n: number, end = n) => {
+    const view = viewRef.current;
+    if (!view) return;
+    const total = view.state.doc.lines;
+    const start = Math.min(Math.max(1, n), total);
+    const last = Math.min(Math.max(start, end), total);
+    const line = view.state.doc.line(start);
+    view.dispatch({
+      selection: { anchor: line.from },
+      effects: [setCited.of(end !== n || reveal ? { start, end: last } : null), EditorView.scrollIntoView(line.from, { y: 'center' })],
+    });
+  };
+
+  useEffect(() => {
+    if (reveal?.loc.lines) {
+      // Wait a frame so a freshly created view has measured itself.
+      requestAnimationFrame(() => goToLine(reveal.loc.lines!.start, reveal.loc.lines!.end));
+    }
+  }, [reveal, data]);
+
+  useEffect(() => {
+    handle({
+      citeTarget: () => {
+        const view = viewRef.current;
+        if (!view) return null;
+        const sel = view.state.selection.main;
+        const doc = view.state.doc;
+        const start = doc.lineAt(sel.from).number;
+        let endPos = sel.to;
+        if (!sel.empty && endPos > sel.from && doc.lineAt(endPos).from === endPos) endPos -= 1;
+        const end = doc.lineAt(endPos).number;
+        const quote = sel.empty ? doc.line(start).text.trim() : view.state.sliceDoc(sel.from, sel.to);
+        return { loc: { lines: { start, end } }, quote: quote.slice(0, 200) };
+      },
+    });
+    return () => handle(null);
+  }, [data]);
+
+  return (
+    <>
+      <div className="toolbar">
+        {children}
+        <span className="muted">Line</span>
+        <input
+          className="page-input"
+          value={lineInput}
+          onChange={(e) => setLineInput(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && goToLine(parseInt(lineInput, 10) || 1)}
+          onFocus={(e) => e.target.select()}
+        />
+        <span className="muted">of {lines}</span>
+        <div className="sep" />
+        <span className="muted">{lang}</span>
+        <div className="spacer" />
+        <button className="cite" onClick={onCite} title="Insert a link to these lines into the note (Ctrl+Shift+L)">
+          <Icon name="code" /> {hasSelection ? 'Cite selection' : 'Cite line'}
+        </button>
+      </div>
+      <div className="code-viewer" ref={host} />
+    </>
+  );
+}

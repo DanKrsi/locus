@@ -17,6 +17,7 @@ import { api, shortSha } from './api';
 import { DocsPane } from './docs/DocsPane';
 import { FileBrowser } from './FileBrowser';
 import { invalidateLatest, loadBytes, mimeFor } from './files';
+import { locateQuote } from './viewers/pdf';
 import { Icon, Logo } from './icons';
 import { newId, revealOf, type DocTab } from './model';
 import { allLinks, insertReference, setActiveLink, type LinkInfo, type RefStatus } from './notes/editor';
@@ -24,6 +25,7 @@ import { renderHoverCard } from './notes/hoverCard';
 import { NotesPane, type NotesHandle } from './notes/NotesPane';
 import { longDate, term, versionBadge } from './terms';
 import type { ViewerHandle } from './viewers/types';
+import type { CiteMode } from './viewers/CiteButton';
 
 interface Session {
   notes: string[];
@@ -35,7 +37,7 @@ interface Session {
 interface Notice {
   text: string;
   danger?: boolean;
-  action?: { label: string; run(): void };
+  actions?: { label: string; run(): void }[];
 }
 
 const THEMES = [
@@ -65,6 +67,14 @@ export function App() {
   const [saveName, setSaveName] = useState<string | null>(null);
   const [toast, setToast] = useState<{ text: string; id: number } | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
+  /** Kind of link Cite inserts while viewing the latest version (older versions are always pinned). */
+  const [citeMode, setCiteMode] = useState<CiteMode>(() => {
+    try {
+      return localStorage.getItem('citeMode') === 'pinned' ? 'pinned' : 'live';
+    } catch {
+      return 'live';
+    }
+  });
   const [activeNote, setActiveNote] = useState<string | null>(null);
   const [citedRevs, setCitedRevs] = useState(new Map<string, Set<string>>());
   const [dragging, setDragging] = useState(false);
@@ -82,8 +92,8 @@ export function App() {
   const notes = useRef<NotesHandle>(null);
   const handles = useRef(new Map<string, ViewerHandle>());
   const statusCache = useRef(new Map<string, RefStatus>());
-  const live = useRef({ settings, versions, docTabs, activeDoc, ws, tour });
-  live.current = { settings, versions, docTabs, activeDoc, ws, tour };
+  const live = useRef({ settings, versions, docTabs, activeDoc, ws, tour, citeMode });
+  live.current = { settings, versions, docTabs, activeDoc, ws, tour, citeMode };
   const terminology = settings?.terminology ?? 'simple';
 
   const showToast = useCallback((text: string) => setToast({ text, id: Date.now() }), []);
@@ -329,12 +339,35 @@ export function App() {
       const ok = await api.exists(path, ref.rev).catch(() => false);
       return ok ? { state: 'ok', badge } : { state: 'broken', reason: `${basename(path)} isn't in that version`, badge };
     }
-    if (await api.exists(path).catch(() => false)) return { state: 'ok' };
+    if (await api.exists(path).catch(() => false)) return ref.at ? changeSinceCited(path, ref, info.title) : { state: 'ok' };
     const existed = ref.at ? await api.exists(path, ref.at).catch(() => false) : false;
     return {
       state: 'broken',
       reason: existed ? `${path.slice(1)} was moved or deleted since it was cited` : `File not found: ${path.slice(1)}`,
     };
+  };
+
+  /**
+   * Whether what a live link points at changed since it was cited: cited code lines edited or
+   * deleted, a quoted PDF passage moved or gone, or (other files) any change to the file.
+   */
+  const changeSinceCited = async (path: string, ref: Reference, quote?: string): Promise<RefStatus> => {
+    const at = ref.at!;
+    if (!(await api.fileChangedSince(path, at).catch(() => false))) return { state: 'ok' };
+    const kind = fileKind(path);
+    if ((kind === 'code' || kind === 'markdown') && ref.loc.lines) {
+      const m = mapLines(await api.diffHunks(path, at).catch(() => []), ref.loc.lines.start, ref.loc.lines.end);
+      if (m.status === 'same' || m.status === 'moved') return { state: 'ok' };
+      return { state: 'ok', changed: true, reason: m.status === 'gone' ? 'The cited lines were deleted since' : 'The cited lines were edited since' };
+    }
+    if (kind === 'pdf' && quote && ref.loc.page) {
+      const found = await loadBytes({ path, external: false })
+        .then((data) => locateQuote(data, quote, ref.loc.page!))
+        .catch(() => null);
+      if (found?.page === ref.loc.page) return { state: 'ok' };
+      return { state: 'ok', changed: true, reason: found ? `The quoted text moved to page ${found.page}` : 'The quoted text is no longer in the file' };
+    }
+    return { state: 'ok', changed: true, reason: `${basename(path)} changed since it was cited` };
   };
 
   const refStatus = (info: LinkInfo, notePath: string): RefStatus => {
@@ -344,7 +377,7 @@ export function App() {
     statusCache.current.set(key, { state: 'unknown' });
     checkRef(info, notePath).then((s) => {
       statusCache.current.set(key, s);
-      if (s.state !== 'ok' || s.badge) notes.current?.refresh();
+      if (s.state !== 'ok' || s.badge || s.changed) notes.current?.refresh();
     });
     return { state: 'unknown' };
   };
@@ -376,14 +409,37 @@ export function App() {
           setNotice({ text: `${path.slice(1)} wasn't found.`, danger: true });
           return;
         }
-      } else if (ref.at && loc.lines && kind === 'code') {
-        const hunks = await api.diffHunks(path, ref.at).catch(() => []);
-        const m = mapLines(hunks, loc.lines.start, loc.lines.end);
-        loc = { ...loc, lines: { start: m.start, end: m.end } };
-        const showCited = { label: 'Show the cited version', run: () => openDoc(path, false, ref.at, ref.loc) };
-        if (m.status === 'changed') setNotice({ text: 'Some of these lines were edited since they were cited.', action: showCited });
-        else if (m.status === 'gone') setNotice({ text: 'The cited lines were deleted since.', danger: true, action: showCited });
-        else if (m.status === 'moved') showToast(`Lines moved to ${m.start}–${m.end} since this was cited`);
+      } else if (ref.at) {
+        const at = ref.at;
+        const date = versionDate(at);
+        const since = date ? ` (cited ${longDate(date)})` : '';
+        const actions = [
+          { label: 'Compare', run: () => openCompare(path, at) },
+          { label: 'Show the cited version', run: () => openDoc(path, false, at, ref.loc) },
+        ];
+        if (loc.lines && kind === 'code') {
+          const hunks = await api.diffHunks(path, at).catch(() => []);
+          const m = mapLines(hunks, loc.lines.start, loc.lines.end);
+          loc = { ...loc, lines: { start: m.start, end: m.end } };
+          if (m.status === 'changed') setNotice({ text: `Some of these lines were edited since they were cited${since}.`, actions });
+          else if (m.status === 'gone') setNotice({ text: `The cited lines were deleted since${since}.`, danger: true, actions });
+          else if (m.status === 'moved') showToast(`Lines moved to ${m.start}–${m.end} since this was cited`);
+        } else if (await api.fileChangedSince(path, at).catch(() => false)) {
+          const name = basename(path);
+          if (kind === 'pdf' && info.title && loc.page) {
+            // The quote says what was cited: find it in the latest file, even on another page.
+            const found = await loadBytes({ path, external: false })
+              .then((data) => locateQuote(data, info.title!, loc.page!))
+              .catch(() => null);
+            if (!found) setNotice({ text: `The quoted text is no longer in ${name}. It changed since you cited it${since}.`, danger: true, actions });
+            else if (found.page !== loc.page) {
+              loc = { ...loc, page: found.page, viewrect: loc.viewrect ? found.rect : undefined };
+              setNotice({ text: `${name} changed since you cited it${since}. The quoted text is now on page ${found.page}.`, actions });
+            }
+          } else {
+            setNotice({ text: `${name} changed since you cited it${since}. This shows the latest version.`, actions });
+          }
+        }
       }
     }
     openDoc(path, external, rev, loc);
@@ -401,7 +457,8 @@ export function App() {
         versionDate,
         follow: (i) => void followRef(i, notePath()),
         compare: (i) => {
-          if (i.ref.rev) openCompare(resolvePath(i.ref, notePath()), i.ref.rev);
+          const left = i.ref.rev ?? i.ref.at;
+          if (left) openCompare(resolvePath(i.ref, notePath()), left);
         },
       }),
   });
@@ -460,7 +517,7 @@ export function App() {
     const n = allLinks(view.state).filter((l) => fixes.has(l.dest)).length;
     setNotice({
       text: `${n} link${n === 1 ? ' points' : 's point'} to ${fixes.size === 1 ? 'a file that was' : 'files that were'} moved.`,
-      action: { label: 'Fix links', run: () => applyMovedFixes() },
+      actions: [{ label: 'Fix links', run: () => applyMovedFixes() }],
     });
   };
   const checkMovedLinksRef = useRef(checkMovedLinks);
@@ -573,8 +630,10 @@ export function App() {
       let at: string | undefined;
       if (tab.rev) rev = shortSha(tab.rev);
       else {
+        // Citing the latest version: a live link remembers it, a pinned link points at it.
         const sha = await api.ensureVersion(tab.path).catch(() => null);
-        if (sha) at = shortSha(sha);
+        if (sha && live.current.citeMode === 'pinned') rev = shortSha(sha);
+        else if (sha) at = shortSha(sha);
       }
       ref = { path: tab.path, pathKind: 'root', loc: target.loc, rev, at, extra: [] };
     }
@@ -707,7 +766,9 @@ export function App() {
       {notice && (
         <div className={'notice' + (notice.danger ? ' danger' : '')}>
           {notice.text}
-          {notice.action && <button className="outline" onClick={() => { notice.action!.run(); setNotice(null); }}>{notice.action.label}</button>}
+          {notice.actions?.map((a) => (
+            <button key={a.label} className="outline" onClick={() => { a.run(); setNotice(null); }}>{a.label}</button>
+          ))}
           <div className="spacer" />
           <button className="icon" onClick={() => setNotice(null)}><Icon name="x" /></button>
         </div>
@@ -805,6 +866,15 @@ export function App() {
               onClose={closeDoc}
               onOpen={() => openBrowser()}
               onCite={(t) => void cite(t)}
+              citeMode={citeMode}
+              onCiteMode={(m) => {
+                setCiteMode(m);
+                try {
+                  localStorage.setItem('citeMode', m);
+                } catch {
+                  /* ignore */
+                }
+              }}
               onChangeRev={(tab, rev) => {
                 if (sameRev(tab.rev, rev)) return;
                 setDocTabs((ts) => ts.map((t) => (t.id === tab.id ? { ...t, rev, reveal: undefined } : t)));

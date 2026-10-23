@@ -8,7 +8,7 @@ import { ensureSyntaxTree, syntaxTree } from '@codemirror/language';
 import { fileKind, parseDestination } from '../../core/link';
 import { extractLinks } from '../../core/mdlinks';
 import { iconSvg, kindIcon } from '../icons';
-import { inlineEditorExtensions, linkAt, refreshEffect, type LinkInfo, type NoteEditorOptions } from './editor';
+import { inlineEditorExtensions, linkAt, refBadges, refreshEffect, type LinkInfo, type NoteEditorOptions, type RefStatus } from './editor';
 
 interface Cell {
   text: string;
@@ -239,17 +239,11 @@ function fillCell(td: HTMLElement, cell: Cell, view: EditorView, opts: NoteEdito
     }
     const pos = cell.from + link.from + 1;
     const info = linkAt(view.state, pos);
-    const status = info ? opts.refStatus(info) : { state: 'unknown' as const };
+    const status: RefStatus = info ? opts.refStatus(info) : { state: 'unknown' };
     const span = document.createElement('span');
     span.className = 'cm-ref' + (status.state === 'broken' ? ' broken' : '');
     span.innerHTML = iconSvg(kindIcon(fileKind(ref.path)));
-    span.append(link.label);
-    if (status.badge) {
-      const b = document.createElement('span');
-      b.className = 'badge mark';
-      b.textContent = status.badge;
-      span.append(b);
-    }
+    span.append(link.label, ...refBadges(status));
     span.addEventListener('mousedown', (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -475,7 +469,7 @@ function buildTables(state: EditorState, opts: NoteEditorOptions): DecorationSet
         .map((l) => {
           const info = linkAt(state, from + l.from + 1);
           const st = info ? opts.refStatus(info) : null;
-          return `${st?.state}:${st?.badge ?? ''}`;
+          return `${st?.state}:${st?.badge ?? ''}:${st?.changed ?? ''}`;
         })
         .join(',');
       decos.push(Decoration.replace({ widget: new TableWidget(source, from, key, opts), block: true }).range(from, to));

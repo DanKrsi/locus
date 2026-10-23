@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { PDFDocumentProxy, PDFPageProxy, RenderTask } from 'pdfjs-dist';
 import type { Rect } from '../../core/link';
 import { Icon } from '../icons';
+import { CiteButton } from './CiteButton';
 import { openPdf, pdfjs } from './pdf';
 import type { CiteMark, ViewerProps } from './types';
 
@@ -242,9 +243,7 @@ export function PdfViewer({ data, reveal, onCite, handle, marks, onMark, childre
         </button>
         {area && <button className="icon" title="Clear the box" onClick={() => setArea(null)}><Icon name="x" /></button>}
         <div className="spacer" />
-        <button className="cite" onClick={onCite} title="Insert a link to this into the note (Ctrl+Shift+L)">
-          <Icon name="pdf" /> {area ? 'Cite area' : 'Cite page'}
-        </button>
+        <CiteButton icon="pdf" label={area ? 'Cite area' : 'Cite page'} onCite={onCite} />
       </div>
       <div className="pdf-scroll" ref={scrollRef} onScroll={onScroll}>
         <div className="pdf-pages">

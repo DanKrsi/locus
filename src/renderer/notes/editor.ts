@@ -46,7 +46,8 @@ export interface LinkInfo {
   image: boolean;
 }
 
-export type RefStatus = { state: 'ok' | 'broken' | 'unknown'; reason?: string; badge?: string };
+/** A link's state; `changed` marks a live link whose cited content changed since (reason says how). */
+export type RefStatus = { state: 'ok' | 'broken' | 'unknown'; reason?: string; badge?: string; changed?: boolean };
 
 export interface NoteEditorOptions {
   doc: string;
@@ -295,6 +296,25 @@ const flashField = StateField.define<DecorationSet>({
 
 // ---------- Widgets ----------
 
+/** Badges after a reference: its pinned version, and "changed" when a live link's target changed. */
+export function refBadges(status: RefStatus): HTMLElement[] {
+  const out: HTMLElement[] = [];
+  if (status.badge) {
+    const b = document.createElement('span');
+    b.className = 'badge mark';
+    b.textContent = status.badge;
+    out.push(b);
+  }
+  if (status.changed) {
+    const c = document.createElement('span');
+    c.className = 'badge warn';
+    c.textContent = 'changed';
+    c.title = (status.reason ?? 'Changed since it was cited') + ' · hover for options';
+    out.push(c);
+  }
+  return out;
+}
+
 class RefWidget extends WidgetType {
   constructor(
     readonly info: LinkInfo,
@@ -310,6 +330,7 @@ class RefWidget extends WidgetType {
       other.info.dest === this.info.dest &&
       other.status.state === this.status.state &&
       other.status.badge === this.status.badge &&
+      other.status.changed === this.status.changed &&
       other.active === this.active
     );
   }
@@ -319,13 +340,7 @@ class RefWidget extends WidgetType {
     span.className = 'cm-ref' + (broken ? ' broken' : '') + (this.active ? ' active' : '');
     if (broken && this.status.reason) span.title = this.status.reason;
     span.innerHTML = iconSvg(kindIcon(fileKind(this.info.ref.path)));
-    span.append(this.info.label);
-    if (this.status.badge) {
-      const b = document.createElement('span');
-      b.className = 'badge mark';
-      b.textContent = this.status.badge;
-      span.append(b);
-    }
+    span.append(this.info.label, ...refBadges(this.status));
     span.addEventListener('mousedown', (e) => {
       if (e.button !== 0) return;
       e.preventDefault();
@@ -406,19 +421,19 @@ class LinkIconWidget extends WidgetType {
   }
 }
 
-/** Stands in for a reference's hidden "](target)": its version badge. */
+/** Stands in for a reference's hidden "](target)": its version and "changed" badges. */
 class LinkBadgeWidget extends WidgetType {
-  constructor(readonly badge: string) {
+  constructor(readonly status: RefStatus) {
     super();
   }
   eq(o: LinkBadgeWidget) {
-    return o.badge === this.badge;
+    return o.status.badge === this.status.badge && o.status.changed === this.status.changed && o.status.reason === this.status.reason;
   }
   toDOM() {
-    const b = document.createElement('span');
-    b.className = 'badge mark cm-ref-badge';
-    b.textContent = this.badge;
-    return b;
+    const wrap = document.createElement('span');
+    wrap.className = 'cm-ref-badge';
+    wrap.append(...refBadges(this.status));
+    return wrap;
   }
 }
 
@@ -612,7 +627,7 @@ function buildDecorations(view: EditorView, opts: NoteEditorOptions): Preview {
             );
             const title = web ? info.dest : status!.state === 'broken' ? status!.reason : undefined;
             decos.push(Decoration.mark({ class: cls + ' cm-link-label', attributes: title ? { title } : undefined }).range(info.labelFrom, info.labelTo));
-            conceal(status?.badge ? Decoration.replace({ widget: new LinkBadgeWidget(status.badge) }) : hide, info.labelTo, info.to);
+            conceal(status?.badge || status?.changed ? Decoration.replace({ widget: new LinkBadgeWidget(status) }) : hide, info.labelTo, info.to);
             return false;
           }
           case 'Blockquote': {

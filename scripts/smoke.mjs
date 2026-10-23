@@ -1,8 +1,9 @@
 // Drives the real app against the test workspace and saves screenshots to test-output/.
 // Usage: npm run build && node scripts/make-test-workspace.mjs && node scripts/smoke.mjs
 import { _electron as electron } from 'playwright';
-import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
+import { PDFDocument } from 'pdf-lib';
 
 const repo = resolve(import.meta.dirname, '..');
 const out = join(repo, 'test-output');
@@ -200,6 +201,70 @@ await step('editing keeps the formatted view: link labels edit as text', async (
   await win.locator('.cm-line:not(.cm-h2)', { hasText: /^Loads$/ }).waitFor({ timeout: 5000 });
   await win.keyboard.press('Control+Z');
   await win.locator('.cm-line.cm-h2', { hasText: 'Loads' }).waitFor({ timeout: 5000 });
+});
+
+await step('live or pinned: choose when citing, switch from the hover card', async () => {
+  const viewer = win.locator('.viewer:not(.hidden)');
+  const lineOf = async () => (await reviewText()).split('\n').find((l) => l.includes('Pinned citation:')) ?? '';
+  // Pick "Pinned" in the Cite button's menu, then cite.
+  await viewer.locator('.cite-more').first().click();
+  await win.locator('.cite-mode-menu .menu-item', { hasText: 'Pinned' }).click();
+  await viewer.locator('.cite-kind.pinned').first().waitFor({ timeout: 5000 });
+  await win.locator('.editor-wrap .cm-content').first().focus();
+  await win.keyboard.press('Control+End');
+  await win.keyboard.type('\n\nPinned citation: ');
+  await viewer.locator('.cite-split > button.cite').first().click();
+  await win.locator('.cm-renaming').waitFor({ timeout: 10000 });
+  await win.keyboard.type('Pinned p5');
+  await win.keyboard.press('Enter');
+  await win.keyboard.press('Control+S');
+  if (!/&rev=[0-9a-f]{10}/.test(await lineOf())) throw new Error('not pinned: ' + (await lineOf()));
+  // Back to Live for the rest of the run.
+  await viewer.locator('.cite-more').first().click();
+  await win.locator('.cite-mode-menu .menu-item', { hasText: 'Live' }).click();
+  await viewer.locator('.cite-kind.live').first().waitFor({ timeout: 5000 });
+  // The hover card turns it live, and pins it again.
+  await hoverLink('Pinned p5');
+  await win.locator('.hover-card .link-kind', { hasText: 'Pinned' }).waitFor({ timeout: 5000 });
+  await win.locator('.hover-card').getByRole('button', { name: 'Make live' }).click();
+  await win.mouse.move(5, 500);
+  await win.locator('.editor-wrap .cm-content').first().focus();
+  await win.keyboard.press('Control+S');
+  if (!/&at=[0-9a-f]{10}/.test(await lineOf()) || /rev=/.test(await lineOf())) throw new Error('not made live: ' + (await lineOf()));
+  await hoverLink('Pinned p5');
+  await win.locator('.hover-card .link-kind', { hasText: 'Live' }).waitFor({ timeout: 5000 });
+  await win.locator('.hover-card').getByRole('button', { name: 'Pin to this version' }).click();
+  await win.mouse.move(5, 500);
+  await win.locator('.editor-wrap .cm-content').first().focus();
+  await win.keyboard.press('Control+S');
+  if (!/&rev=[0-9a-f]{10}/.test(await lineOf())) throw new Error('not pinned again: ' + (await lineOf()));
+});
+
+await step('a live link whose file changed is marked and warns when opened', async () => {
+  // Someone adds a cover page outside the app: everything moves down a page.
+  const file = join(workspace, 'docs', 'BDS-100 Bracket Design Standard.pdf');
+  const current = await readFile(file);
+  const doc = await PDFDocument.load(current);
+  doc.insertPage(0);
+  await writeFile(file, await doc.save());
+  try {
+    await win.evaluate(() => window.dispatchEvent(new Event('focus')));
+    const line = win.locator('.cm-line', { hasText: 'verification methods' });
+    await line.locator('.badge.warn').nth(1).waitFor({ timeout: 15000 });
+    await shot('changed-badge');
+    // The quoted passage is found on its new page.
+    await win.locator('.cm-ref', { hasText: 'BDS-100 p5' }).click();
+    await win.locator('.notice', { hasText: 'now on page 6' }).waitFor({ timeout: 15000 });
+    await shot('changed-notice');
+    // An area with no quote: the app says the file changed and offers a comparison.
+    await win.locator('.cm-ref', { hasText: 'Table 5' }).click();
+    await win.locator('.notice', { hasText: 'changed since you cited it' }).waitFor({ timeout: 10000 });
+    await win.locator('.notice').getByRole('button', { name: 'Compare' }).waitFor();
+  } finally {
+    await writeFile(file, current);
+    await win.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await win.locator('.notice .icon').click().catch(() => undefined);
+  }
 });
 
 await step('cited-in markers and list', async () => {

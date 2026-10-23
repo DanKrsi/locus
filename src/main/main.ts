@@ -238,6 +238,9 @@ const api: Api = {
   async exists(path, rev) {
     return rev ? git.blobExists(ws().root, path, rev) : exists(abs(path));
   },
+  async fileChangedSince(path, rev) {
+    return git.changedSince(ws().root, path, rev);
+  },
   async head() {
     return git.head(ws().root);
   },

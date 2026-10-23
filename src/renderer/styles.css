@@ -134,6 +134,18 @@ button.cite {
   font-weight: 600;
 }
 button.cite:hover { background: var(--mark-tint); }
+/* Split Cite button: cite, plus a menu to choose a live or pinned link */
+.cite-split { position: relative; display: inline-flex; }
+.cite-split > button.cite:first-child { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.cite-split > button.cite-more { border-left: none; border-top-left-radius: 0; border-bottom-left-radius: 0; padding-left: 5px; padding-right: 5px; }
+.cite-kind { margin-left: 6px; font-size: 11px; font-weight: 600; padding: 0 6px; border-radius: 999px; background: var(--panel); color: var(--mark-text); border: 1px solid var(--mark); }
+.cite-kind.live { color: var(--accent); border-color: var(--accent); }
+.cite-mode-menu { top: calc(100% + 4px); right: 0; width: 300px; z-index: 30; }
+.cite-mode-menu .menu-item { flex-direction: column; align-items: flex-start; gap: 2px; white-space: normal; }
+.cite-mode-menu .menu-item .name { font-weight: 600; display: flex; align-items: center; gap: 6px; }
+.cite-mode-menu .menu-item .desc { font-size: 12px; color: var(--faint); padding-left: 19px; }
+.cite-mode-menu .menu-item:disabled { opacity: 0.55; cursor: default; }
+.cite-mode-menu .check-space { display: inline-block; width: 13px; }
 input, select {
   font: inherit;
   color: inherit;
@@ -237,6 +249,7 @@ svg.ico { width: 16px; height: 16px; flex: none; }
 .badge.accent { background: var(--accent-soft); color: var(--accent); }
 .badge.danger { background: var(--danger-soft); color: var(--danger); }
 .badge.muted { background: var(--panel-2); color: var(--faint); }
+.badge.warn { background: var(--danger-soft); color: var(--danger); font-weight: 600; }
 
 /* ---------- Notices, toasts, dialogs ---------- */
 .notice {
@@ -390,7 +403,8 @@ svg.ico { width: 16px; height: 16px; flex: none; }
 .cm-ref.cm-ref-icon { padding-right: 0; border-radius: 4px 0 0 4px; }
 .cm-ref.cm-ref-icon svg { margin-right: 1px; }
 .cm-ref.cm-link-label { padding-left: 0; border-radius: 0 4px 4px 0; white-space: normal; }
-.cm-ref-badge { margin-left: 4px; font-weight: 500; vertical-align: 1px; }
+.cm-ref-badge .badge { margin-left: 4px; font-weight: 500; vertical-align: 1px; }
+.cm-ref .badge.warn, .cm-ref-badge .badge.warn { font-weight: 600; cursor: help; }
 .cm-renaming { outline: 2px solid var(--accent); border-radius: 3px; background: var(--panel); color: var(--accent); font-weight: 600; }
 .cm-rename-hint { font-size: 12px; color: var(--faint); margin-left: 8px; font-weight: 400; }
 .cm-image { display: block; max-width: 100%; max-height: 360px; border-radius: 6px; margin: 4px 0; }
@@ -656,3 +670,7 @@ svg.ico { width: 16px; height: 16px; flex: none; }
 [data-mode='dark'] .cm-collapsedLines { background: var(--panel-2); color: var(--muted); }
 [data-mode='dark'] select, [data-mode='dark'] option { background: var(--panel); color: var(--text); }
 [data-mode='dark'] .pdf-page, [data-mode='dark'] .pptx-preview-slide-wrapper { box-shadow: 0 1px 6px rgba(0, 0, 0, 0.6); }
+
+/* Hover card: what kind of link this is, and whether its target changed */
+.hover-card .link-kind { color: var(--muted); font-size: 12.5px; }
+.hover-card .link-changed { color: var(--danger); font-size: 12.5px; font-weight: 600; }

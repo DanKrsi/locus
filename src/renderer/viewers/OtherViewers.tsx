@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { extname, formatTime } from '../../core/link';
 import { mimeFor } from '../files';
 import { Icon } from '../icons';
+import { CiteButton } from './CiteButton';
 import type { ViewerProps } from './types';
 
 function useObjectUrl(data: Uint8Array, path: string) {
@@ -21,7 +22,7 @@ export function ImageViewer({ data, path, onCite, handle, children }: ViewerProp
       <div className="toolbar">
         {children}
         <div className="spacer" />
-        <button className="cite" onClick={onCite}><Icon name="image" /> Cite image</button>
+        <CiteButton icon="image" label="Cite image" onCite={onCite} />
       </div>
       <div className="image-viewer">
         <img src={url} alt="" />
@@ -52,7 +53,7 @@ export function MediaViewer({ data, path, reveal, onCite, handle, children }: Vi
         {children}
         <span className="muted">{formatTime(time)}</span>
         <div className="spacer" />
-        <button className="cite" onClick={onCite}><Icon name="play" /> Cite time</button>
+        <CiteButton icon="play" label="Cite time" onCite={onCite} />
       </div>
       <div className="media-viewer">{isVideo ? <video {...props} /> : <audio {...props} />}</div>
     </>

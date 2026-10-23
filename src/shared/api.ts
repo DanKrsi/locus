@@ -100,6 +100,8 @@ export interface Api {
   readText(path: string, rev?: string): Promise<string>;
   writeText(path: string, text: string): Promise<void>;
   exists(path: string, rev?: string): Promise<boolean>;
+  /** Whether the file now differs from the file in a version. */
+  fileChangedSince(path: string, rev: string): Promise<boolean>;
   head(): Promise<string | null>;
   versions(path?: string): Promise<Version[]>;
   changesSince(rev: string): Promise<FileChange[]>;
@@ -149,7 +151,7 @@ export interface Api {
 }
 
 export const API_METHODS: (keyof Api)[] = [
-  'openWorkspace', 'createWorkspace', 'listFiles', 'readFile', 'readText', 'writeText', 'exists',
+  'openWorkspace', 'createWorkspace', 'listFiles', 'readFile', 'readText', 'writeText', 'exists', 'fileChangedSince',
   'head', 'versions', 'changesSince', 'uncommitted', 'saveVersion', 'ensureVersion', 'diffHunks',
   'getSettings', 'setSettings', 'pickExternalFiles', 'readExternal', 'openExternally', 'setTitleBarColors',
   'renameFile', 'findMoved', 'citations', 'versionChanges',

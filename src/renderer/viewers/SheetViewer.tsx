@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { basename, colLetters, formatA1Range, formatSheetRef, parseSheetRef, type CellBox } from '../../core/link';
 import { Icon } from '../icons';
+import { CiteButton } from './CiteButton';
 import { cellKey, loadWorkbook, nameForBox, resolveSheetRef, type CellModel, type SheetModel, type WorkbookModel } from './sheetModel';
 import type { ViewerProps } from './types';
 
@@ -323,9 +324,7 @@ export function SheetViewer({ data, path, reveal, onCite, handle, children }: Vi
         />
         <span className="muted" style={{ fontStyle: 'italic', fontFamily: 'Georgia, serif', padding: '0 4px' }}>fx</span>
         <div className="formula" title={focusCell?.formula}>{focusCell?.formula ?? ''}</div>
-        <button className="cite" onClick={onCite} title="Insert a link to these cells into the note (Ctrl+Shift+L)">
-          <Icon name="grid" /> Cite range
-        </button>
+        <CiteButton icon="grid" label="Cite range" title="Insert a link to these cells into the note (Ctrl+Shift+L)" onCite={onCite} />
       </div>
       <div className="sheet">
         <div

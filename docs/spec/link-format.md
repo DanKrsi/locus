@@ -68,8 +68,10 @@ identifier on a spreadsheet target is a named range.
 - SHAs are written as 10 hex characters; readers accept 7–40.
 - A pinned link interprets the **path at that version**, so moving or deleting the file later
   can never break it.
-- Which one gets written follows "what you see is what you cite": viewing the latest version
-  writes `at=`, viewing an older version writes `rev=`.
+- Which one gets written: viewing an older version always writes `rev=`. Viewing the latest
+  version writes `at=` (**Live**, the default) or `rev=` (**Pinned**), chosen in the Cite
+  button's menu; the choice is remembered. A link can be switched later from its hover card
+  (**Make live** turns `rev=X` into `at=X`; **Pin** turns `at=X` into `rev=X`).
 - If the cited file has changes that aren't in a version yet, the app first saves an
   automatic version so the SHA always exists (see §5).
 

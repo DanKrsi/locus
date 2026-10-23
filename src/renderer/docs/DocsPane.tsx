@@ -12,6 +12,7 @@ import { ImageViewer, MediaViewer, UnsupportedViewer } from '../viewers/OtherVie
 import { PdfViewer } from '../viewers/PdfViewer';
 import { SheetViewer } from '../viewers/SheetViewer';
 import { SlidesViewer } from '../viewers/SlidesViewer';
+import { CiteModeContext, type CiteMode } from '../viewers/CiteButton';
 import type { CiteMark, RevealRequest, ViewerHandle } from '../viewers/types';
 
 interface Props {
@@ -28,6 +29,9 @@ interface Props {
   onClose(id: string): void;
   onOpen(): void;
   onCite(tab: DocTab): void;
+  /** Kind of link the Cite buttons insert when viewing the latest version. */
+  citeMode: CiteMode;
+  onCiteMode(mode: CiteMode): void;
   onChangeRev(tab: DocTab, rev: string | undefined): void;
   /** Starts or changes a comparison (left side = `rev`); undefined ends it. */
   onCompare(tab: DocTab, rev: string | undefined): void;
@@ -194,6 +198,7 @@ function DocView({ tab, visible, ...p }: Props & { tab: DocTab; visible: boolean
           {head}
           <div className="compare-split">
             <div className="side">
+              <CiteModeContext.Provider value={{ mode: p.citeMode, setMode: p.onCiteMode, pinnedOnly: true }}>
               <ViewerBody
                 kind={tab.kind}
                 path={tab.path}
@@ -203,6 +208,7 @@ function DocView({ tab, visible, ...p }: Props & { tab: DocTab; visible: boolean
                 onCite={() => p.onCite(leftTab)}
                 handle={(h) => p.registerHandle(leftTab.id, h)}
               />
+              </CiteModeContext.Provider>
             </div>
             <div className="side">
               <ViewerBody
@@ -236,7 +242,7 @@ function DocView({ tab, visible, ...p }: Props & { tab: DocTab; visible: boolean
 
   return (
     <div className={'viewer' + (visible ? '' : ' hidden')}>
-      {body}
+      <CiteModeContext.Provider value={{ mode: p.citeMode, setMode: p.onCiteMode, pinnedOnly: !!tab.rev }}>{body}</CiteModeContext.Provider>
       {strip}
     </div>
   );

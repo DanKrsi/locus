@@ -72,12 +72,21 @@ the toolbar), and the file browser's version selector resets to Latest each time
 - Accent colour, medium weight, no underline until hover, small icon by type (PDF page, code,
   grid for cells, # for notes, play for media).
 - **Pinned** references show a small date badge (Simple mode) or short SHA (Git mode).
+- **Live** references whose cited content changed since they were cited show a red **changed**
+  badge: cited code lines edited or deleted (lines that only moved don't count), a quoted PDF
+  passage moved to another page or gone, or for other files any change to the file.
 - Broken references: red wavy underline with the reason; `moved` ones offer **Fix links**.
 - **Hover card** (~400ms): preview (page thumbnail with the area drawn, code lines with
-  numbers, mini table of cells) · file name and folder · location description · version
-  ("Version from Mar 3 · changed since") · quote in italics · buttons **Open**, **Compare with
-  latest** (pinned only), **Rename**, **Edit target**, **Remove link**.
-- Click → opens the document on the right at the location, scrolled into view, highlighted.
+  numbers, mini table of cells) · file name and folder · location description · kind
+  ("Live · shows the latest version · cited Mar 3" or "Pinned · always shows the version from
+  Mar 3") · what changed, if anything · quote in italics · buttons **Open**, **Compare with
+  latest** and **Make live** (pinned), **Compare with cited version** (live, changed) and
+  **Pin to this version** / **Pin to cited version** (live), **Rename**, **Edit target**,
+  **Remove link**.
+- Click → opens the document on the right at the location, scrolled into view, highlighted. A
+  live link whose content changed opens the latest version with a notice saying so, with
+  **Compare** and **Show the cited version**; a quoted PDF passage that moved is found on its
+  new page.
 
 ### 4.2 Citing
 

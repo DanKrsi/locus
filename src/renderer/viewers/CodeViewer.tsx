@@ -9,6 +9,7 @@ import { tags } from '@lezer/highlight';
 import { basename } from '../../core/link';
 import { decodeText } from '../files';
 import { Icon } from '../icons';
+import { CiteButton } from './CiteButton';
 import { iconSvg } from '../icons';
 import type { CiteMark, ViewerProps } from './types';
 
@@ -189,9 +190,7 @@ export function CodeViewer({ data, path, reveal, onCite, handle, marks, onMark, 
         <div className="sep" />
         <span className="muted">{lang}</span>
         <div className="spacer" />
-        <button className="cite" onClick={onCite} title="Insert a link to these lines into the note (Ctrl+Shift+L)">
-          <Icon name="code" /> {hasSelection ? 'Cite selection' : 'Cite line'}
-        </button>
+        <CiteButton icon="code" label={hasSelection ? 'Cite selection' : 'Cite line'} title="Insert a link to these lines into the note (Ctrl+Shift+L)" onCite={onCite} />
       </div>
       <div className="code-viewer" ref={host} />
     </>

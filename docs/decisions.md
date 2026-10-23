@@ -11,7 +11,7 @@ Short record of the choices made while planning, and why.
 | Link format = plain markdown links | Notes stay readable and portable; works on GitHub. Borrows GitHub `#L`, PDF `page=`/`viewrect=`, Excel references. Compatible with Folio notes. |
 | Root-relative paths (`/docs/x.pdf`) | Moving a note never breaks its links. |
 | Every reference records a version (`at=` or `rev=`) | Lets the app follow renames, map shifted lines, and recover deleted files. |
-| "What you see is what you cite" | Viewing an older version writes a pinned link; viewing the latest writes a live link. No separate setting. |
+| Live or pinned is the citer's choice | Viewing an older version writes a pinned link. On the latest version the Cite button offers Live (default) or Pinned, and the hover card switches a link later. Live links flag content that changed since citing instead of silently showing it. |
 | Workspace = one folder with one history | Notes and cited files live together; keeps links stable and sharing simple. Multiple repos per workspace is a later feature. |
 | Simple vs Git terminology setting | Non-technical users see "versions" and "sync"; developers see commits, pull and push. |
 | Sharing: `.locus` package first, then GitHub | Package works with no accounts; GitHub (device-flow sign-in, no client secret) for ongoing collaboration. |

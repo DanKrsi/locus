@@ -20,6 +20,7 @@ async function sanitize(data: Uint8Array): Promise<ArrayBuffer> {
   return data.slice().buffer as ArrayBuffer;
 }
 import { Icon } from '../icons';
+import { CiteButton } from './CiteButton';
 import type { ViewerProps } from './types';
 
 /** Slide elements produced by pptx-preview, in order. */
@@ -153,9 +154,7 @@ export function SlidesViewer({ data, reveal, onCite, handle, marks, onMark, chil
           </button>
         )}
         <div className="spacer" />
-        <button className="cite" onClick={onCite} title="Insert a link to this slide into the note (Ctrl+Shift+L)">
-          <Icon name="slides" /> Cite slide
-        </button>
+        <CiteButton icon="slides" label="Cite slide" title="Insert a link to this slide into the note (Ctrl+Shift+L)" onCite={onCite} />
       </div>
       <div className="slides-scroll" ref={scrollRef} onScroll={onScroll}>
         <div className="slides-host" ref={hostRef} />

@@ -1,13 +1,24 @@
 // Hover card for references: preview on the left, details and actions on the right (UI spec §4.1).
 import type { EditorView } from '@codemirror/view';
-import { basename, dirname, fileKind, formatSheetRef, formatTime, parseA1Range, resolvePath, colLetters } from '../../core/link';
+import {
+  basename,
+  colLetters,
+  dirname,
+  fileKind,
+  formatReference,
+  formatSheetRef,
+  formatTime,
+  parseA1Range,
+  resolvePath,
+  type Reference,
+} from '../../core/link';
 import type { Terminology } from '../../shared/api';
 import { decodeText, loadBytes, type FileSource } from '../files';
 import { iconSvg, kindIcon } from '../icons';
 import { longDate } from '../terms';
 import { renderThumb } from '../viewers/pdf';
 import { cellKey, loadWorkbook, resolveSheetRef } from '../viewers/sheetModel';
-import { removeLink, renameLink, revealLink, type LinkInfo, type RefStatus } from './editor';
+import { removeLink, renameLink, replaceLink, revealLink, type LinkInfo, type RefStatus } from './editor';
 
 export interface HoverContext {
   notePath: string;
@@ -15,7 +26,7 @@ export interface HoverContext {
   status: RefStatus;
   versionDate(sha: string): string | undefined;
   follow(info: LinkInfo): void;
-  /** Opens a side-by-side comparison of a pinned reference with the latest version. */
+  /** Compares the latest file with the version a reference is pinned to or was cited from. */
   compare(info: LinkInfo): void;
 }
 
@@ -113,16 +124,17 @@ export function renderHoverCard(info: LinkInfo, view: EditorView, ctx: HoverCont
   infoEl.append(el('div', undefined, describeLocation(info)));
 
   const { rev, at } = info.ref;
+  const when = (sha: string) => {
+    const date = ctx.versionDate(sha);
+    return ctx.terminology === 'git' || !date ? sha.slice(0, 7) : longDate(date);
+  };
   if (rev) {
-    const date = ctx.versionDate(rev);
-    const v = el('div', 'muted');
-    v.textContent = ctx.terminology === 'git' ? `Pinned to ${rev.slice(0, 7)}` : `Version from ${date ? longDate(date) : rev.slice(0, 7)}`;
-    infoEl.append(v);
+    infoEl.append(el('div', 'link-kind', `Pinned · always shows the version from ${when(rev)}`));
   } else if (at) {
-    const date = ctx.versionDate(at);
-    infoEl.append(el('div', 'muted', ctx.terminology === 'git' ? `Latest · cited at ${at.slice(0, 7)}` : `Latest version · cited ${date ? longDate(date) : ''}`));
+    infoEl.append(el('div', 'link-kind', `Live · shows the latest version · cited ${when(at)}`));
   }
-  if (ctx.status.state === 'broken') {
+  if (ctx.status.changed) infoEl.append(el('div', 'link-changed', `${ctx.status.reason ?? 'Changed since it was cited'}.`));
+  if (ctx.status.state === 'broken' && !ctx.status.changed) {
     const b = el('div');
     b.style.color = 'var(--danger)';
     b.textContent = ctx.status.reason ?? 'This link is broken';
@@ -137,8 +149,16 @@ export function renderHoverCard(info: LinkInfo, view: EditorView, ctx: HoverCont
     b.addEventListener('click', fn);
     actions.append(b);
   };
+  // Turns the link into the other kind, keeping its label, location and quote.
+  const relink = (ref: Reference) => replaceLink(view, info, formatReference(info.label, ref, info.title));
   button('Open', 'primary', () => ctx.follow(info));
-  if (rev) button('Compare with latest', 'outline', () => ctx.compare(info));
+  if (rev) {
+    button('Compare with latest', 'outline', () => ctx.compare(info));
+    button('Make live', 'outline', () => relink({ ...info.ref, at: rev, rev: undefined }));
+  } else if (at) {
+    if (ctx.status.changed) button('Compare with cited version', 'outline', () => ctx.compare(info));
+    button(ctx.status.changed ? 'Pin to cited version' : 'Pin to this version', 'outline', () => relink({ ...info.ref, rev: at, at: undefined }));
+  }
   button('Rename', 'outline', () => renameLink(view, info));
   button('Edit target', 'outline', () => revealLink(view, info));
   button('Remove link', 'danger-text', () => removeLink(view, info));

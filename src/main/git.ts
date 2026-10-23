@@ -74,6 +74,16 @@ export async function blobExists(dir: string, path: string, rev: string): Promis
   return gitOk(dir, ['cat-file', '-e', `${rev}:${gp(path)}`]);
 }
 
+/** Whether the working file differs from the file in a version (true if either is missing). */
+export async function changedSince(dir: string, path: string, rev: string): Promise<boolean> {
+  const [then, now] = await Promise.all([
+    exec(['rev-parse', '--verify', '--quiet', `${rev}:${gp(path)}`], dir),
+    exec(['hash-object', '--', gp(path)], dir),
+  ]);
+  if (then.exitCode !== 0 || now.exitCode !== 0) return true;
+  return then.stdout.trim() !== now.stdout.trim();
+}
+
 export async function listTree(dir: string, rev: string): Promise<string[]> {
   const out = await git(dir, ['-c', 'core.quotepath=off', 'ls-tree', '-r', '--name-only', rev]);
   return out.split('\n').filter(Boolean).map(wp);

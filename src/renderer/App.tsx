@@ -691,14 +691,9 @@ export function App() {
             <button className="outline" onClick={() => setShareOpen(true)}>
               <Icon name="share" /> {term(terminology, 'share')}
             </button>
-            <div className="spacer" />
-            <button className="quick-open" onClick={() => openBrowser()}>
-              <span><Icon name="search" size={14} /> Open document…</span>
-              <span>Ctrl+P</span>
-            </button>
           </>
         )}
-        {!ws && <div className="spacer" />}
+        <div className="spacer" />
         <button
           className="icon"
           title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}

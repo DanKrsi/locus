@@ -11,7 +11,7 @@ version of a file.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│ ◆ Locus  Bracket project  [Open] [Save version] [Sync] [Share]  [Go to file…] ⚙    │ header
+│ ◆ Locus  Bracket project  [Open] [Save version] [Sync] [Share]                  ☀ ⚙ │ header
 ├──────────────────────────────────────┬───────────────────────────────────────┤
 │ [Review.md ●] [Design.md] [+]        │ [spec.pdf] [solver.py · Mar 3] [+ Open]│ tabs
 │ Heading▾ B I S </> • 1. ☐ ❝ ▦ 🔗  Tour│ ‹ 22 of 36 › − Fit + │ Area │ [Cite page]│ toolbars
@@ -37,7 +37,8 @@ version of a file.
 ## 3. Header
 
 Logo + name · workspace name (click → open another workspace) · **Open** · **Save version** ·
-sync pill and **Share** (when shared) · quick open (Ctrl+P) · settings ⚙.
+sync pill and **Share** (when shared) · light/dark toggle · settings ⚙. Ctrl+P opens the file browser
+like **Open**; Ctrl+O opens a note.
 
 **Open** shows the file browser (the same one as Ctrl+P), with a selector for the version to
 show the folder as it was. Its **Version history** button leads to the history: the workspace's

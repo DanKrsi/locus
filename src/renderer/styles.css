@@ -173,7 +173,6 @@ svg.ico { width: 16px; height: 16px; flex: none; }
 .ws-name { color: var(--muted); }
 .version-pill { border: 1px solid var(--border-strong); background: var(--panel); }
 .version-pill.old { border-color: var(--mark); background: var(--mark-soft); color: var(--mark-text); }
-.quick-open { color: var(--faint); border: 1px solid var(--border); background: var(--panel); min-width: 220px; justify-content: space-between; }
 
 /* ---------- Layout ---------- */
 .app { height: 100%; display: flex; flex-direction: column; }

@@ -30,7 +30,7 @@ function slideElements(root: HTMLElement): HTMLElement[] {
   return direct.length ? direct : ([...wrapper.children] as HTMLElement[]).filter((c) => c.offsetHeight > 50);
 }
 
-export function SlidesViewer({ data, reveal, onCite, handle, marks, onMark, children }: ViewerProps) {
+export function SlidesViewer({ data, reveal, onCite, handle, marks, onMark, zoom = 1, children }: ViewerProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
   const [count, setCount] = useState(0);
@@ -66,7 +66,8 @@ export function SlidesViewer({ data, reveal, onCite, handle, marks, onMark, chil
     rendering.current = true;
     host.replaceChildren();
     setError(null);
-    const previewer = init(host, { width, height: Math.round((width * 9) / 16), mode: 'list' });
+    const w = Math.round(width * zoom);
+    const previewer = init(host, { width: w, height: Math.round((w * 9) / 16), mode: 'list' });
     sanitize(data)
       .then((buf) => previewer.preview(buf))
       .then(() => {
@@ -84,7 +85,7 @@ export function SlidesViewer({ data, reveal, onCite, handle, marks, onMark, chil
       cancelled = true;
       previewer.destroy?.();
     };
-  }, [data, width]);
+  }, [data, width, zoom]);
 
   const goTo = (n: number, keepPending = true) => {
     const host = hostRef.current;

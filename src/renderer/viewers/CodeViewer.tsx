@@ -9,6 +9,7 @@ import { tags } from '@lezer/highlight';
 import { basename } from '../../core/link';
 import { decodeText } from '../files';
 import { Icon } from '../icons';
+import { editorZoom, setEditorZoom } from '../zoom';
 import { CiteButton } from './CiteButton';
 import { iconSvg } from '../icons';
 import type { CiteMark, ViewerProps } from './types';
@@ -63,7 +64,9 @@ const style = HighlightStyle.define([
   { tag: tags.heading, fontWeight: 'bold' },
 ]);
 
-export function CodeViewer({ data, path, reveal, onCite, handle, marks, onMark, children }: ViewerProps) {
+export function CodeViewer({ data, path, reveal, onCite, handle, marks, onMark, zoom = 1, children }: ViewerProps) {
+  const zoomRef = useRef(zoom);
+  zoomRef.current = zoom;
   const marksRef = useRef<CiteMark[]>([]);
   const onMarkRef = useRef(onMark);
   onMarkRef.current = onMark;
@@ -76,6 +79,10 @@ export function CodeViewer({ data, path, reveal, onCite, handle, marks, onMark, 
   const [hasSelection, setHasSelection] = useState(false);
 
   useEffect(() => {
+    if (viewRef.current) setEditorZoom(viewRef.current, zoom);
+  }, [zoom]);
+
+  useEffect(() => {
     const { text } = decodeText(data);
     const view = new EditorView({
       parent: host.current!,
@@ -84,6 +91,7 @@ export function CodeViewer({ data, path, reveal, onCite, handle, marks, onMark, 
         extensions: [
           EditorState.readOnly.of(true),
           EditorView.editable.of(false),
+          editorZoom(zoomRef.current),
           lineNumbers(),
           highlightActiveLineGutter(),
           highlightActiveLine(),

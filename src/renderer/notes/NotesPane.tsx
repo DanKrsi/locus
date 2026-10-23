@@ -21,6 +21,7 @@ import {
   type NoteEditorOptions,
 } from './editor';
 import { insertTable } from './tables';
+import { setEditorZoom, ZoomControl } from '../zoom';
 
 export interface NotesHandle {
   activeView(): EditorView | null;
@@ -53,6 +54,9 @@ interface Props {
   /** Opens the note picker (left-pane files only). */
   onOpenNote(): void;
   touring: boolean;
+  /** Zoom of the notes editor, separate from the documents'. */
+  zoom: number;
+  onZoom(z: number): void;
   /** Called after a note is written to disk. */
   onSaved(path: string): void;
 }
@@ -127,6 +131,7 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
       doc.view = createNoteEditor(host, {
         doc: text,
         eol,
+        zoom: zoomRef.current,
         ...cb,
         onSave: () => void save(doc.path, true),
         onChange: () => {
@@ -164,6 +169,12 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
     await api.writeText(path, '# Untitled\n\n');
     return open(path);
   };
+
+  const zoomRef = useRef(p.zoom);
+  zoomRef.current = p.zoom;
+  useEffect(() => {
+    for (const d of docs.current.values()) setEditorZoom(d.view, p.zoom);
+  }, [p.zoom]);
 
   useImperativeHandle(ref, () => ({
     activeView: () => (active ? docs.current.get(active)?.view ?? null : null),
@@ -279,6 +290,8 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
         ))}
         <button className="tab-add" title="New note (Ctrl+N)" onClick={() => void newNote()}><Icon name="plus" size={14} /></button>
         <button className="tab-add" title="Open a note (Ctrl+O)" onClick={p.onOpenNote}><Icon name="folderOpen" size={14} /> Open note</button>
+        <div className="spacer" />
+        <ZoomControl zoom={p.zoom} onZoom={p.onZoom} label="Notes" />
       </div>
       <div className="toolbar">
         <select

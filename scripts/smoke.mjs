@@ -393,6 +393,50 @@ await step('dark mode', async () => {
   await shot('dark');
 });
 
+await step('notes and documents zoom independently', async () => {
+  const px = (sel) => win.locator(sel).first().evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+  const windowZoom = () => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.getZoomFactor());
+  const notesPct = win.locator('[data-pane="notes"] .zoom-pct');
+  const docsPct = () => win.locator('[data-pane="docs"] .viewer:not(.hidden) .zoom-pct');
+  await win.locator('[data-pane="docs"] .tab', { hasText: 'client.py' }).first().click();
+  await win.locator('.code-viewer .cm-content').first().waitFor({ timeout: 10000 });
+  const note0 = await px('.editor-wrap .cm-scroller');
+  const code0 = await px('.viewer:not(.hidden) .code-viewer .cm-scroller');
+  // Keys zoom the pane being worked in.
+  await win.locator('.editor-wrap .cm-content').first().focus();
+  await win.keyboard.press('Control+=');
+  await win.keyboard.press('Control+=');
+  if ((await notesPct.textContent()) !== '125%') throw new Error('notes zoom shows ' + (await notesPct.textContent()));
+  if (!((await px('.editor-wrap .cm-scroller')) > note0 * 1.2)) throw new Error('notes text did not grow');
+  if ((await px('.viewer:not(.hidden) .code-viewer .cm-scroller')) !== code0) throw new Error('documents zoomed with the notes');
+  await win.locator('.viewer:not(.hidden) .code-viewer .cm-content').first().click();
+  await win.keyboard.press('Control+-');
+  if ((await docsPct().textContent()) !== '90%') throw new Error('documents zoom shows ' + (await docsPct().textContent()));
+  if (!((await px('.viewer:not(.hidden) .code-viewer .cm-scroller')) < code0)) throw new Error('code text did not shrink');
+  if ((await notesPct.textContent()) !== '125%') throw new Error('notes zoom changed with the documents');
+  // Ctrl+wheel zooms the pane under the pointer; the window itself never zooms.
+  const box = await win.locator('.editor-wrap').first().boundingBox();
+  await win.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await win.keyboard.down('Control');
+  await win.mouse.wheel(0, -100);
+  await win.keyboard.up('Control');
+  await win.locator('[data-pane="notes"] .zoom-pct', { hasText: '150%' }).waitFor({ timeout: 3000 });
+  if ((await windowZoom()) !== 1) throw new Error('the whole window zoomed');
+  await shot('zoomed');
+  // A PDF keeps its own zoom.
+  await win.locator('[data-pane="docs"] .tab', { hasText: 'BDS-100' }).first().click();
+  const pdfSel = win.locator('.viewer:not(.hidden) .toolbar select').first();
+  await win.locator('.viewer:not(.hidden) .pdf-scroll').click({ position: { x: 5, y: 5 } });
+  await win.keyboard.press('Control+=');
+  if ((await pdfSel.inputValue()) === 'width') throw new Error('PDF did not zoom');
+  // Clicking the percentage goes back to 100%.
+  await notesPct.click();
+  await win.locator('[data-pane="docs"] .tab', { hasText: 'client.py' }).first().click();
+  await docsPct().click();
+  if ((await notesPct.textContent()) !== '100%' || (await docsPct().textContent()) !== '100%') throw new Error('reset failed');
+  if ((await px('.editor-wrap .cm-scroller')) !== note0) throw new Error('notes text not back to normal');
+});
+
 await step('restored tabs that no longer exist are dropped', async () => {
   await win.evaluate(() => {
     const key = Object.keys(localStorage).find((k) => k.startsWith('session:'));

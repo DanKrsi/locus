@@ -33,6 +33,7 @@ import type { SyntaxNode } from '@lezer/common';
 import { escapeLabel, fileKind, parseDestination, splitLinkTarget, type Reference } from '../../core/link';
 import { iconSvg, kindIcon } from '../icons';
 import { renderedTables } from './tables';
+import { editorZoom } from '../zoom';
 
 export interface LinkInfo {
   from: number;
@@ -58,6 +59,8 @@ export interface NoteEditorOptions {
   refStatus(info: LinkInfo): RefStatus;
   imageUrl(info: LinkInfo): string | null;
   renderHoverCard(info: LinkInfo, view: EditorView): HTMLElement;
+  /** Notes zoom (1 = 100%). */
+  zoom?: number;
 }
 
 /** Ask the editor to rebuild decorations (e.g. after async link checks finish). */
@@ -996,6 +999,7 @@ export function createNoteEditor(parent: HTMLElement, opts: NoteEditorOptions): 
     doc: opts.doc,
     extensions: [
       EditorState.lineSeparator.of(opts.eol),
+      editorZoom(opts.zoom ?? 1),
       history(),
       drawSelection(),
       EditorView.lineWrapping,

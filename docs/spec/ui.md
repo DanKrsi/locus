@@ -34,6 +34,14 @@ version of a file.
   Terracotta, Slate. Every theme has a dark variant; "System" follows Windows.
 - UI: Segoe UI 14px. Note body 16px / 1.65, max width ~860px. Code: Cascadia Code / Consolas.
 
+### 2.1 Zoom
+
+The notes editor and the document viewers zoom separately (50%–300%), each with **− 100% +**
+controls: in the notes tab row, and in each viewer's toolbar (PDFs keep their own zoom steps
+and Fit width). Ctrl+= / Ctrl+− zoom the pane last clicked or typed in, and Ctrl+wheel (or a
+touchpad pinch) zooms the pane under the pointer; the window itself never zooms. Clicking the
+percentage returns to 100% (Ctrl+0 stays "normal text" in notes). Both levels are remembered.
+
 ## 3. Header
 
 Logo + name · workspace name (click → open another workspace) · **Open** · **Save version** ·
@@ -169,6 +177,7 @@ copies. Single-file `.locus` package (git bundle) for sharing without accounts.
 | Cite what's shown on the right | Ctrl+Shift+L |
 | Link to a section of a note | Ctrl+Alt+L |
 | Search open document | Ctrl+F |
+| Zoom the pane you're in (notes or documents) | Ctrl+= / Ctrl+− or Ctrl+mouse wheel |
 | Tour mode | Ctrl+Shift+T |
 | Save version | Ctrl+Shift+S |
 | Shortcuts | F1 |

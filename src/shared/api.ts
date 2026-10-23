@@ -90,6 +90,9 @@ export interface Settings {
   recentWorkspaces: string[];
   splitRatio: number;
   autosave: boolean;
+  /** Zoom of the notes editor and of the document viewers (1 = 100%), set separately. */
+  noteZoom: number;
+  docZoom: number;
 }
 
 export interface Api {

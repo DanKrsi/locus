@@ -154,13 +154,15 @@ export function PdfViewer({ data, reveal, onCite, handle, marks, onMark, childre
     if (target && doc) scrollToPage(Math.min(target, doc.numPages));
   };
 
-  const zoom = (dir: 1 | -1) => {
-    const next = dir > 0 ? ZOOMS.find((z) => z > scale + 0.01) : [...ZOOMS].reverse().find((z) => z < scale - 0.01);
+  const zoom = (dir: 1 | -1 | 0) => {
+    const next = dir === 0 ? 1 : dir > 0 ? ZOOMS.find((z) => z > scale + 0.01) : [...ZOOMS].reverse().find((z) => z < scale - 0.01);
     if (next) {
       setFit(null);
       setScale(next);
     }
   };
+  const zoomRef = useRef(zoom);
+  zoomRef.current = zoom;
 
   const selectionQuote = (): { text: string; page?: number } | null => {
     const sel = window.getSelection();
@@ -171,6 +173,7 @@ export function PdfViewer({ data, reveal, onCite, handle, marks, onMark, childre
 
   useEffect(() => {
     handle({
+      zoom: (dir) => zoomRef.current(dir),
       citeTarget: () => {
         if (!doc) return null;
         const q = selectionQuote();

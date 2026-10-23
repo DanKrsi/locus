@@ -10,6 +10,8 @@ export interface CiteTarget {
 
 export interface ViewerHandle {
   citeTarget(): CiteTarget | null;
+  /** Viewers with their own zoom (PDF) take the zoom keys here; 0 resets to 100%. */
+  zoom?(dir: 1 | -1 | 0): void;
 }
 
 export interface RevealRequest {
@@ -35,6 +37,8 @@ export interface ViewerProps {
   /** Places other notes cite, for margin/gutter markers. */
   marks?: CiteMark[];
   onMark?(mark: CiteMark): void;
+  /** Documents zoom (1 = 100%); PDFs use their own zoom instead. */
+  zoom?: number;
   /** Rendered at the left of the viewer's toolbar (shared controls). */
   children?: React.ReactNode;
 }

@@ -36,6 +36,8 @@ const DEFAULT_SETTINGS: Settings = {
   recentWorkspaces: [],
   splitRatio: 0.5,
   autosave: true,
+  noteZoom: 1,
+  docZoom: 1,
 };
 
 const settingsFile = () => join(app.getPath('userData'), 'settings.json');

@@ -11,8 +11,9 @@ function useObjectUrl(data: Uint8Array, path: string) {
   return url;
 }
 
-export function ImageViewer({ data, path, onCite, handle, children }: ViewerProps) {
+export function ImageViewer({ data, path, onCite, handle, zoom = 1, children }: ViewerProps) {
   const url = useObjectUrl(data, path);
+  const [natural, setNatural] = useState(0);
   useEffect(() => {
     handle({ citeTarget: () => ({ loc: {} }) });
     return () => handle(null);
@@ -25,7 +26,12 @@ export function ImageViewer({ data, path, onCite, handle, children }: ViewerProp
         <CiteButton icon="image" label="Cite image" onCite={onCite} />
       </div>
       <div className="image-viewer">
-        <img src={url} alt="" />
+        <img
+          src={url}
+          alt=""
+          onLoad={(e) => setNatural(e.currentTarget.naturalWidth)}
+          style={zoom === 1 || !natural ? undefined : { width: `calc(min(${natural}px, 100%) * ${zoom})`, maxWidth: 'none' }}
+        />
       </div>
     </>
   );

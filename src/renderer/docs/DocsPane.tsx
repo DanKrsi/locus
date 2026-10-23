@@ -13,6 +13,7 @@ import { PdfViewer } from '../viewers/PdfViewer';
 import { SheetViewer } from '../viewers/SheetViewer';
 import { SlidesViewer } from '../viewers/SlidesViewer';
 import { CiteModeContext, type CiteMode } from '../viewers/CiteButton';
+import { ZoomControl } from '../zoom';
 import type { CiteMark, RevealRequest, ViewerHandle } from '../viewers/types';
 
 interface Props {
@@ -32,6 +33,9 @@ interface Props {
   /** Kind of link the Cite buttons insert when viewing the latest version. */
   citeMode: CiteMode;
   onCiteMode(mode: CiteMode): void;
+  /** Zoom of the document viewers (PDFs keep their own). */
+  docZoom: number;
+  onDocZoom(z: number): void;
   onChangeRev(tab: DocTab, rev: string | undefined): void;
   /** Starts or changes a comparison (left side = `rev`); undefined ends it. */
   onCompare(tab: DocTab, rev: string | undefined): void;
@@ -123,9 +127,14 @@ interface BodyProps {
   onMark?(m: CiteMark): void;
   onCite(): void;
   handle(h: ViewerHandle | null): void;
+  zoom: number;
+  onZoom(z: number): void;
+  children?: React.ReactNode;
 }
 
-function ViewerBody({ kind, ...props }: BodyProps) {
+function ViewerBody({ kind, onZoom, ...props }: BodyProps) {
+  // PDFs have their own zoom in their toolbar; recordings have nothing to zoom.
+  if (kind !== 'pdf' && kind !== 'media') props = { ...props, children: <ZoomControl zoom={props.zoom} onZoom={onZoom} label="Document" /> };
   switch (kind) {
     case 'pdf':
       return <PdfViewer {...props} />;
@@ -206,6 +215,8 @@ function DocView({ tab, visible, ...p }: Props & { tab: DocTab; visible: boolean
                 marks={marksFor(p.citations, tab.path, tab.compare)}
                 onMark={onMark}
                 onCite={() => p.onCite(leftTab)}
+                zoom={p.docZoom}
+                onZoom={p.onDocZoom}
                 handle={(h) => p.registerHandle(leftTab.id, h)}
               />
               </CiteModeContext.Provider>
@@ -220,6 +231,8 @@ function DocView({ tab, visible, ...p }: Props & { tab: DocTab; visible: boolean
                 reveal={tab.reveal}
                 onCite={() => p.onCite(tab)}
                 handle={(h) => p.registerHandle(tab.id, h)}
+                zoom={p.docZoom}
+                onZoom={p.onDocZoom}
               />
             </div>
           </div>
@@ -236,6 +249,8 @@ function DocView({ tab, visible, ...p }: Props & { tab: DocTab; visible: boolean
         onMark={onMark}
         onCite={() => p.onCite(tab)}
         handle={(h) => p.registerHandle(tab.id, h)}
+        zoom={p.docZoom}
+        onZoom={p.onDocZoom}
       />
     );
   }

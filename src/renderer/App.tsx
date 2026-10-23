@@ -26,6 +26,7 @@ import { NotesPane, type NotesHandle } from './notes/NotesPane';
 import { longDate, term, versionBadge } from './terms';
 import type { ViewerHandle } from './viewers/types';
 import type { CiteMode } from './viewers/CiteButton';
+import { stepZoom } from './zoom';
 
 interface Session {
   notes: string[];
@@ -127,6 +128,55 @@ export function App() {
   }, [settings?.theme, settings?.dark]);
 
   const updateSettings = async (patch: Partial<Settings>) => setSettings(await api.setSettings(patch));
+
+  // ---------- Zoom (notes and documents separately) ----------
+
+  /** The pane last clicked or typed in, so the zoom keys know which pane to zoom. */
+  const lastPane = useRef<'notes' | 'docs'>('notes');
+  const paneOf = (el: EventTarget | Element | null): 'notes' | 'docs' | null =>
+    ((el instanceof Element ? el : null)?.closest('[data-pane]')?.getAttribute('data-pane') as 'notes' | 'docs' | null) ?? null;
+
+  const setZoom = (key: 'noteZoom' | 'docZoom', z: number) => {
+    setSettings((s) => (s ? { ...s, [key]: z } : s));
+    void api.setSettings({ [key]: z }).catch(() => undefined);
+  };
+
+  const zoomPane = (pane: 'notes' | 'docs', dir: 1 | -1 | 0) => {
+    const s = live.current.settings;
+    if (!s) return;
+    if (pane === 'notes') return setZoom('noteZoom', stepZoom(s.noteZoom ?? 1, dir));
+    // A PDF zooms itself; every other viewer follows the documents zoom.
+    const own = handles.current.get(live.current.activeDoc ?? '')?.zoom;
+    if (own) own(dir);
+    else setZoom('docZoom', stepZoom(s.docZoom ?? 1, dir));
+  };
+
+  useEffect(() => {
+    const mark = (e: Event) => {
+      const pane = paneOf(e.target);
+      if (pane) lastPane.current = pane;
+    };
+    // Ctrl+wheel (and touchpad pinch) zooms the pane under the pointer, never the whole window.
+    let acc = 0;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      const pane = paneOf(e.target);
+      if (!pane) return;
+      acc += e.deltaY;
+      if (Math.abs(acc) < 40) return;
+      zoomPane(pane, acc < 0 ? 1 : -1);
+      acc = 0;
+    };
+    window.addEventListener('pointerdown', mark, true);
+    window.addEventListener('focusin', mark, true);
+    window.addEventListener('wheel', onWheel, { passive: false });
+    return () => {
+      window.removeEventListener('pointerdown', mark, true);
+      window.removeEventListener('focusin', mark, true);
+      window.removeEventListener('wheel', onWheel);
+    };
+  }, []);
 
   // ---------- Workspace ----------
 
@@ -668,7 +718,13 @@ export function App() {
     const onKey = (e: KeyboardEvent) => {
       if (!live.current.ws) return;
       const k = e.key.toLowerCase();
-      if (e.ctrlKey && e.shiftKey && k === 'l') {
+      const zoomIn = e.key === '=' || e.key === '+' || e.code === 'NumpadAdd';
+      const zoomOut = e.key === '-' || e.key === '_' || e.code === 'NumpadSubtract';
+      if (e.ctrlKey && !e.altKey && (zoomIn || zoomOut)) {
+        // Zoom the pane being worked in (Ctrl+0 stays "normal text" in notes; click the % to reset).
+        e.preventDefault();
+        zoomPane(paneOf(document.activeElement) ?? lastPane.current, zoomIn ? 1 : -1);
+      } else if (e.ctrlKey && e.shiftKey && k === 'l') {
         e.preventDefault();
         void cite();
       } else if (e.ctrlKey && !e.shiftKey && k === 'p') {
@@ -816,7 +872,7 @@ export function App() {
             void updateSettings({ splitRatio: split });
           }}
         >
-          <div style={{ width: `${split * 100}%`, display: 'flex', minWidth: 0 }}>
+          <div data-pane="notes" style={{ width: `${split * 100}%`, display: 'flex', minWidth: 0 }}>
             <NotesPane
               key={ws.root}
               ref={notes}
@@ -835,6 +891,8 @@ export function App() {
               onTour={toggleTour}
               onOpenNote={() => openBrowser(undefined, 'notes')}
               touring={!!tour}
+              zoom={settings.noteZoom ?? 1}
+              onZoom={(z) => setZoom('noteZoom', z)}
               onSaved={() => {
                 void loadCitations();
                 void refreshSharing(false);
@@ -852,8 +910,10 @@ export function App() {
               void updateSettings({ splitRatio: 0.5 });
             }}
           />
-          <div style={{ flex: 1, display: 'flex', minWidth: 0 }}>
+          <div data-pane="docs" style={{ flex: 1, display: 'flex', minWidth: 0 }}>
             <DocsPane
+              docZoom={settings.docZoom ?? 1}
+              onDocZoom={(z) => setZoom('docZoom', z)}
               tabs={docTabs}
               activeId={activeDoc}
               terminology={terminology}

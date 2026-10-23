@@ -5,8 +5,9 @@ import { CiteButton } from './CiteButton';
 import { cellKey, loadWorkbook, nameForBox, resolveSheetRef, type CellModel, type SheetModel, type WorkbookModel } from './sheetModel';
 import type { ViewerProps } from './types';
 
-const HEAD_H = 22;
-const HEAD_W = 46;
+/** Header sizes at 100%; the grid scales them (and every row and column) with the zoom. */
+const HEAD_H_100 = 22;
+const HEAD_W_100 = 46;
 const MAX_ROW = 1048576;
 const MAX_COL = 16384;
 /** Extra blank rows/columns beyond the used range, like Excel. */
@@ -66,7 +67,9 @@ const boxOf = (a: Pt, b: Pt): CellBox => ({
   right: Math.max(a.c, b.c),
 });
 
-export function SheetViewer({ data, path, reveal, onCite, handle, children }: ViewerProps) {
+export function SheetViewer({ data, path, reveal, onCite, handle, zoom = 1, children }: ViewerProps) {
+  const HEAD_H = Math.round(HEAD_H_100 * zoom);
+  const HEAD_W = Math.round(HEAD_W_100 * zoom);
   const [wb, setWb] = useState<WorkbookModel | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [active, setActive] = useState(0);
@@ -90,8 +93,8 @@ export function SheetViewer({ data, path, reveal, onCite, handle, children }: Vi
   }, [data, path]);
 
   const sheet: SheetModel | undefined = wb?.sheets[active];
-  const colPre = useMemo(() => (sheet ? prefix(sheet.colW, PAD_COLS, 72) : [0]), [sheet]);
-  const rowPre = useMemo(() => (sheet ? prefix(sheet.rowH, PAD_ROWS, 21) : [0]), [sheet]);
+  const colPre = useMemo(() => (sheet ? prefix(sheet.colW, PAD_COLS, 72).map((x) => x * zoom) : [0]), [sheet, zoom]);
+  const rowPre = useMemo(() => (sheet ? prefix(sheet.rowH, PAD_ROWS, 21).map((x) => x * zoom) : [0]), [sheet, zoom]);
   const nCols = colPre.length - 1;
   const nRows = rowPre.length - 1;
 
@@ -356,7 +359,7 @@ export function SheetViewer({ data, path, reveal, onCite, handle, children }: Vi
           onMouseLeave={() => (dragging.current = false)}
         >
           {sheet && (
-            <div className="grid-inner" style={{ width: HEAD_W + colPre[nCols], height: HEAD_H + rowPre[nRows] }}>
+            <div className="grid-inner" style={{ width: HEAD_W + colPre[nCols], height: HEAD_H + rowPre[nRows], ['--sheet-zoom' as string]: zoom }}>
               {cells}
               {heads}
               <div className="corner" style={{ top: scroll.top, left: scroll.left, width: HEAD_W, height: HEAD_H, zIndex: 7 }} />

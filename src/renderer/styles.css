@@ -747,3 +747,27 @@ svg.ico { width: 16px; height: 16px; flex: none; }
 .claude-msg.bad { color: var(--danger); }
 .claude-restart { display: flex; align-items: center; gap: 8px; font-size: 12.5px; flex-wrap: wrap; }
 .claude-restart span { flex: 1 1 260px; color: var(--muted); }
+
+/* Moving within a document: the travel rail (see viewers/travel.ts) */
+.travel-rail { position: absolute; right: 18px; top: 16%; bottom: 14%; width: 4px; border-radius: 2px; background: color-mix(in srgb, var(--text) 14%, transparent); z-index: 15; pointer-events: none; animation: rail-in 0.18s ease-out; transition: opacity 0.4s; }
+.travel-rail.leaving { opacity: 0; }
+@keyframes rail-in { from { opacity: 0; transform: scaleY(0.85); } to { opacity: 1; transform: none; } }
+.travel-from { position: absolute; left: 50%; width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--muted); background: var(--panel); transform: translate(-50%, -50%); }
+.travel-from::after { content: attr(data-label); position: absolute; right: 16px; top: 50%; transform: translateY(-50%); font-size: 11px; color: var(--faint); white-space: nowrap; }
+.travel-dot { position: absolute; left: 50%; width: 12px; height: 12px; border-radius: 50%; background: var(--accent); transform: translate(-50%, -50%); box-shadow: 0 0 0 3px var(--accent-soft); }
+.travel-dot.arrived { animation: dot-arrive 0.55s ease-out; }
+@keyframes dot-arrive { 50% { box-shadow: 0 0 0 9px var(--accent-soft); } }
+.travel-label { position: absolute; right: 18px; top: 50%; transform: translateY(-50%); background: var(--accent); color: var(--accent-text); font-size: 11.5px; font-weight: 600; padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+
+/* Moving to another version of the same document: content zooms in, a chip names the versions */
+.viewer.version-in > :not(.toolbar):not(.vstrip):not(.version-chip):not(.travel-rail) { animation: version-in 0.42s cubic-bezier(0.2, 0.75, 0.25, 1); transform-origin: 50% 35%; }
+@keyframes version-in { 0% { transform: scale(0.94); opacity: 0.15; filter: blur(3px); } 55% { opacity: 1; filter: blur(0); } 100% { transform: scale(1); } }
+.version-chip { position: absolute; top: 80px; left: 50%; z-index: 20; display: flex; align-items: center; gap: 6px; background: var(--panel); border: 1px solid var(--mark); color: var(--mark-text); border-radius: 999px; padding: 3px 12px; font-size: 12.5px; font-weight: 600; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12); pointer-events: none; white-space: nowrap; animation: version-chip 1.8s ease forwards; }
+.version-chip .arrow { color: var(--faint); font-weight: 400; }
+@keyframes version-chip { 0% { opacity: 0; transform: translate(-50%, -6px) scale(0.96); } 12% { opacity: 1; transform: translate(-50%, 0) scale(1); } 78% { opacity: 1; transform: translate(-50%, 0); } 100% { opacity: 0; transform: translate(-50%, 0); } }
+@media (prefers-reduced-motion: reduce) {
+  .viewer.version-in > * { animation: none !important; }
+  .version-chip { animation-name: version-chip-still; }
+  .travel-rail { animation: none; }
+}
+@keyframes version-chip-still { 0%, 100% { opacity: 0; transform: translateX(-50%); } 10%, 80% { opacity: 1; transform: translateX(-50%); } }

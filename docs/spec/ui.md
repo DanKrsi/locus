@@ -165,6 +165,19 @@ per line, so diffs stay readable.
 | Audio / video | Player; Cite time |
 | Compare | Two versions of a file side by side (code: diff view) |
 
+### 5.2 Moving to a citation in the document already open
+
+- **Same document and version** (PDF, code, spreadsheet, slides): the view glides to the new
+  place (ease-in-out; longer jumps take longer, up to about 0.8 s) instead of snapping. A slim
+  **travel rail** at the right edge shows the whole document, a ring where you were and a dot
+  sliding to where you're going, labelled (`p 18` → `p 10`, `L20` → `L15`, `A1` → `B4:D12`,
+  `slide 2` → `slide 6`); the dot pulses on arrival and the rail fades. A wheel turn or click
+  stops the glide. The first jump after a document opens still snaps.
+- **Same document, another version** (switching to its other tab, or changing version on the
+  strip): the content (not the toolbar or strip) zooms in from 94 % with a brief fade, and a chip
+  under the toolbar names the move (`Mar 3 → Latest`).
+- With the system's reduced-motion setting, places change instantly; the rail and chip still show.
+
 ## 6. Settings
 
 ### 6.1 Claude

@@ -4,6 +4,7 @@ import { Icon } from '../icons';
 import { CiteButton } from './CiteButton';
 import { cellKey, loadWorkbook, nameForBox, resolveSheetRef, type CellModel, type SheetModel, type WorkbookModel } from './sheetModel';
 import type { ViewerProps } from './types';
+import { glide, settled, showTravel } from './travel';
 
 /** Header sizes at 100%; the grid scales them (and every row and column) with the zoom. */
 const HEAD_H_100 = 22;
@@ -121,13 +122,37 @@ export function SheetViewer({ data, path, reveal, onCite, handle, zoom = 1, chil
 
   useEffect(() => setNameInput(selRef()), [anchor, focus, active, wb]);
 
-  const scrollIntoView = (box: CellBox) => {
+  // The grid counts as settled once it has been on screen; a new workbook or sheet starts again.
+  useEffect(() => {
+    readySince.current = 0;
+    if (!wb) return;
+    const id = requestAnimationFrame(() => {
+      if ((scrollRef.current?.clientHeight ?? 0) > 0) readySince.current = performance.now();
+    });
+    return () => cancelAnimationFrame(id);
+  }, [wb, active]);
+
+  /** When the grid was first shown (0 until then): later jumps glide instead of snapping. */
+  const readySince = useRef(0);
+  const scrollIntoView = (box: CellBox, toLabel?: string) => {
     const el = scrollRef.current;
     if (!el) return;
     const top = rowPre[Math.min(box.top, nRows) - 1];
     const left = colPre[Math.min(box.left, nCols) - 1];
-    if (top < el.scrollTop || top > el.scrollTop + el.clientHeight - HEAD_H - 40) el.scrollTop = Math.max(0, top - 60);
-    if (left < el.scrollLeft || left > el.scrollLeft + el.clientWidth - HEAD_W - 80) el.scrollLeft = Math.max(0, left - 40);
+    const wantTop = top < el.scrollTop || top > el.scrollTop + el.clientHeight - HEAD_H - 40 ? Math.max(0, top - 60) : el.scrollTop;
+    const wantLeft = left < el.scrollLeft || left > el.scrollLeft + el.clientWidth - HEAD_W - 80 ? Math.max(0, left - 40) : el.scrollLeft;
+    if (toLabel && settled(el, readySince.current)) {
+      // Glide there and show which rows of the sheet that is.
+      const row = locate(rowPre, el.scrollTop + 1);
+      const col = locate(colPre, el.scrollLeft + 1);
+      const mid = el.clientHeight / 2;
+      const ms = glide(el, { top: wantTop, left: wantLeft });
+      showTravel(el.parentElement!, (el.scrollTop + mid) / el.scrollHeight, (wantTop + mid) / el.scrollHeight, `${colLetters(col)}${row}`, toLabel, ms);
+    } else {
+      el.scrollTop = wantTop;
+      el.scrollLeft = wantLeft;
+    }
+    if (!readySince.current && el.clientHeight > 0) readySince.current = performance.now();
   };
 
   const select = (box: CellBox) => {
@@ -139,10 +164,12 @@ export function SheetViewer({ data, path, reveal, onCite, handle, zoom = 1, chil
     if (!wb || !reveal?.loc.sheet) return;
     const hit = resolveSheetRef(wb, reveal.loc.sheet);
     if (!hit) return;
+    // On another sheet the grid is different, so there is nowhere to glide from.
+    if (hit.sheet !== active) readySince.current = 0;
     setActive(hit.sheet);
     setCited(hit);
     select(hit.box);
-    requestAnimationFrame(() => requestAnimationFrame(() => scrollIntoView(hit.box)));
+    requestAnimationFrame(() => requestAnimationFrame(() => scrollIntoView(hit.box, reveal.loc.sheet!.range)));
   }, [reveal, wb]);
 
   useEffect(() => {

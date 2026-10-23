@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { basename, parseDestination, type FileKind } from '../../core/link';
 import type { Citation, Terminology, Version } from '../../shared/api';
 import { api } from '../api';
@@ -47,7 +47,24 @@ interface Props {
 
 const sameRev = (a?: string, b?: string) => (!a && !b) || (!!a && !!b && (a.startsWith(b) || b.startsWith(a)));
 
+/** Moving to another version of the document already in view (another tab or the strip). */
+interface VersionHop {
+  id: string;
+  from?: string;
+  to?: string;
+  key: number;
+}
+
 export function DocsPane(p: Props) {
+  const active = p.tabs.find((t) => t.id === p.activeId);
+  const was = useRef<{ path: string; rev?: string } | null>(null);
+  const [hop, setHop] = useState<VersionHop | null>(null);
+  useEffect(() => {
+    const prev = was.current;
+    if (active && prev && !active.external && !active.compare && active.path === prev.path && !sameRev(active.rev, prev.rev))
+      setHop({ id: active.id, from: prev.rev, to: active.rev, key: Date.now() });
+    was.current = active ? { path: active.path, rev: active.rev } : null;
+  }, [p.activeId, active?.rev, active?.path]);
   return (
     <div className="pane" style={{ flex: 1 }}>
       <div className="tabs">
@@ -81,7 +98,7 @@ export function DocsPane(p: Props) {
         </div>
       )}
       {p.tabs.map((t) => (
-        <DocView key={t.id} tab={t} visible={t.id === p.activeId} {...p} />
+        <DocView key={t.id} tab={t} visible={t.id === p.activeId} hop={hop?.id === t.id ? hop : undefined} {...p} />
       ))}
     </div>
   );
@@ -154,8 +171,27 @@ function ViewerBody({ kind, onZoom, ...props }: BodyProps) {
   }
 }
 
-function DocView({ tab, visible, ...p }: Props & { tab: DocTab; visible: boolean }) {
+function DocView({ tab, visible, hop, ...p }: Props & { tab: DocTab; visible: boolean; hop?: VersionHop }) {
   const main = useBytes(tab.path, tab.external, tab.rev);
+  // A version hop plays once the new version's content is in: the content zooms in from slightly
+  // smaller while a chip says which versions you moved between.
+  const root = useRef<HTMLDivElement>(null);
+  const played = useRef(0);
+  const [chip, setChip] = useState<VersionHop | null>(null);
+  useEffect(() => {
+    const el = root.current;
+    if (!hop || !main.data || !el || played.current === hop.key) return;
+    played.current = hop.key;
+    el.classList.remove('version-in');
+    void el.offsetWidth;
+    el.classList.add('version-in');
+    setChip(hop);
+    const t = setTimeout(() => {
+      el.classList.remove('version-in');
+      setChip(null);
+    }, 1800);
+    return () => clearTimeout(t);
+  }, [hop?.key, !!main.data]);
   const left = useBytes(tab.path, tab.external, tab.compare, !!tab.compare);
   const marks = useMemo(() => marksFor(p.citations, tab.path, tab.rev), [p.citations, tab.path, tab.rev]);
   const allCites = useMemo(() => p.citations.filter((c) => c.path === tab.path), [p.citations, tab.path]);
@@ -256,7 +292,12 @@ function DocView({ tab, visible, ...p }: Props & { tab: DocTab; visible: boolean
   }
 
   return (
-    <div className={'viewer' + (visible ? '' : ' hidden')}>
+    <div ref={root} className={'viewer' + (visible ? '' : ' hidden')}>
+      {chip && (
+        <div key={chip.key} className="version-chip" aria-live="polite">
+          {label(chip.from)} <span className="arrow">→</span> {label(chip.to)}
+        </div>
+      )}
       <CiteModeContext.Provider value={{ mode: p.citeMode, setMode: p.onCiteMode, pinnedOnly: !!tab.rev }}>{body}</CiteModeContext.Provider>
       {strip}
     </div>

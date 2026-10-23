@@ -132,6 +132,17 @@ await step('follow a pinned code reference', async () => {
   await shot('code-pinned');
 });
 
+await step('moving within a document glides; another version zooms in with a chip', async () => {
+  // Back from the pinned version to the latest: the same file in another version.
+  await win.locator('.cm-ref', { hasText: 'the backoff loop' }).click();
+  await win.locator('.viewer:not(.hidden) .version-chip').waitFor({ timeout: 5000 });
+  await win.waitForTimeout(800);
+  // Another place in the same file and version: the travel rail shows where it went.
+  await win.locator('.cm-ref', { hasText: 'backoff()' }).first().click();
+  await win.locator('.viewer:not(.hidden) .travel-rail .travel-label', { hasText: /^L\d+$/ }).waitFor({ timeout: 5000 });
+  await shot('travel');
+});
+
 await step('follow a spreadsheet named range', async () => {
   await win.locator('.cm-ref', { hasText: 'LoadTable' }).click();
   await win.locator('.cited-box').waitFor({ timeout: 15000 });

@@ -22,6 +22,7 @@ async function sanitize(data: Uint8Array): Promise<ArrayBuffer> {
 import { Icon } from '../icons';
 import { CiteButton } from './CiteButton';
 import type { ViewerProps } from './types';
+import { glide, settled, showTravel } from './travel';
 
 /** Slide elements produced by pptx-preview, in order. */
 function slideElements(root: HTMLElement): HTMLElement[] {
@@ -78,6 +79,7 @@ export function SlidesViewer({ data, reveal, onCite, handle, marks, onMark, zoom
         requestAnimationFrame(() => {
           goTo(pending.current ?? keep, false);
           rendering.current = false;
+          if (!readySince.current && (scrollRef.current?.clientHeight ?? 0) > 0) readySince.current = performance.now();
         });
       })
       .catch((e: unknown) => !cancelled && setError(String((e as Error)?.message ?? e)));
@@ -87,7 +89,9 @@ export function SlidesViewer({ data, reveal, onCite, handle, marks, onMark, zoom
     };
   }, [data, width, zoom]);
 
-  const goTo = (n: number, keepPending = true) => {
+  /** When the slides were first shown (0 until then): later jumps glide instead of snapping. */
+  const readySince = useRef(0);
+  const goTo = (n: number, keepPending = true, animate = false) => {
     const host = hostRef.current;
     const scroller = scrollRef.current;
     if (!host || !scroller) return;
@@ -97,16 +101,23 @@ export function SlidesViewer({ data, reveal, onCite, handle, marks, onMark, zoom
       return;
     }
     if (!keepPending) pending.current = null;
-    const target = slides[Math.min(Math.max(1, n), slides.length) - 1];
+    const to = Math.min(Math.max(1, n), slides.length);
+    const target = slides[to - 1];
     // Positions from the screen: slides sit inside pptx-preview's own positioned wrapper.
-    scroller.scrollTop += target.getBoundingClientRect().top - scroller.getBoundingClientRect().top - 12;
-    setSlide(Math.min(Math.max(1, n), slides.length));
+    const top = scroller.scrollTop + target.getBoundingClientRect().top - scroller.getBoundingClientRect().top - 12;
+    if (animate && settled(scroller, readySince.current) && !rendering.current) {
+      const mid = scroller.clientHeight / 2;
+      const ms = glide(scroller, { top });
+      showTravel(scroller.parentElement!, (scroller.scrollTop + mid) / scroller.scrollHeight, (top + mid) / scroller.scrollHeight, `slide ${slideRef.current}`, `slide ${to}`, ms);
+    } else scroller.scrollTop = top;
+    if (!readySince.current && scroller.clientHeight > 0 && !rendering.current) readySince.current = performance.now();
+    setSlide(to);
   };
 
   useEffect(() => {
     if (reveal?.loc.slide) {
       pending.current = reveal.loc.slide;
-      goTo(reveal.loc.slide);
+      goTo(reveal.loc.slide, true, true);
     }
   }, [reveal]);
 

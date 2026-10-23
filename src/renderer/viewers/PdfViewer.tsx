@@ -4,6 +4,7 @@ import type { Rect } from '../../core/link';
 import { Icon } from '../icons';
 import { CiteButton } from './CiteButton';
 import { openPdf, pdfjs } from './pdf';
+import { glide, settled, showTravel } from './travel';
 import type { CiteMark, ViewerProps } from './types';
 
 interface Size {
@@ -29,6 +30,8 @@ export function PdfViewer({ data, reveal, onCite, handle, marks, onMark, childre
   const [cited, setCited] = useState<{ page: number; rect?: Rect } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const pendingScroll = useRef<{ page: number; y?: number; until: number } | null>(null);
+  /** When the pages were first laid out on screen (0 until then): later jumps glide. */
+  const readySince = useRef(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -82,12 +85,15 @@ export function PdfViewer({ data, reveal, onCite, handle, marks, onMark, childre
   const pageRef = useRef(page);
   pageRef.current = page;
 
+  const targetTop = (p: number, y?: number) => {
+    const offs = offsetsRef.current;
+    const idx = Math.min(Math.max(1, p), offs.length) - 1;
+    return offs[idx] + (y !== undefined ? Math.max(0, y * scaleRef.current - 60) : -8);
+  };
   const applyScroll = (p: number, y?: number) => {
     const el = scrollRef.current;
-    const offs = offsetsRef.current;
-    if (!el || !offs.length || el.clientHeight === 0) return;
-    const idx = Math.min(Math.max(1, p), offs.length) - 1;
-    el.scrollTop = offs[idx] + (y !== undefined ? Math.max(0, y * scaleRef.current - 60) : -8);
+    if (!el || !offsetsRef.current.length || el.clientHeight === 0) return;
+    el.scrollTop = targetTop(p, y);
   };
 
   // Hidden tabs lose their scroll position; restore the page when shown again.
@@ -119,7 +125,11 @@ export function PdfViewer({ data, reveal, onCite, handle, marks, onMark, childre
     const pending = pendingScroll.current;
     if (pending && Date.now() < pending.until) applyScroll(pending.page, pending.y);
     else if (doc && offsets.length) applyScroll(page);
+    if (doc && offsets.length && !readySince.current && (scrollRef.current?.clientHeight ?? 0) > 0) readySince.current = performance.now();
   }, [offsets]);
+  useEffect(() => {
+    readySince.current = 0;
+  }, [doc]);
 
   useEffect(() => {
     if (!reveal || !doc) return;
@@ -127,7 +137,16 @@ export function PdfViewer({ data, reveal, onCite, handle, marks, onMark, childre
     if (loc.page) {
       setCited({ page: loc.page, rect: loc.viewrect });
       setArea(null);
-      scrollToPage(loc.page, loc.viewrect?.y);
+      const el = scrollRef.current;
+      if (el && settled(el, readySince.current) && offsetsRef.current.length) {
+        // Already reading this PDF: glide to the new place and show where it is.
+        pendingScroll.current = null;
+        const to = targetTop(loc.page, loc.viewrect?.y);
+        const mid = el.clientHeight / 2;
+        const name = (n: number) => `p ${labels?.[n - 1] ?? n}`;
+        const ms = glide(el, { top: to });
+        showTravel(el.parentElement!, (el.scrollTop + mid) / el.scrollHeight, (to + mid) / el.scrollHeight, name(pageRef.current), name(loc.page), ms);
+      } else scrollToPage(loc.page, loc.viewrect?.y);
     }
   }, [reveal, doc]);
 

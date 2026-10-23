@@ -2,9 +2,9 @@
 // real ones): Claude Code's plugin folder and Claude Desktop's config, keeping other servers.
 // Usage: npm run build && npm run build:plugin && node scripts/test-claude-setup.mjs
 import { _electron as electron } from 'playwright';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
 const repo = resolve(import.meta.dirname, '..');
@@ -76,7 +76,51 @@ await writeFile(deskCfg, JSON.stringify(cfg, null, 2));
 check('startup refreshes an older Claude Code plugin', (await json(join(plugin, '.claude-plugin', 'plugin.json'))).version === manifest.version);
 check('startup repoints the Desktop entry at this install', !(await json(deskCfg)).mcpServers.locus.command.startsWith('C:\\Old'));
 
-// 3. Uninstalling removes only what Locus added.
+// 3. Restart Claude Desktop from the dialog, with a stand-in for Claude Desktop: a copy of node
+// named claude.exe that just waits (so the real Claude is never touched).
+// Start from not connected, as on first setup.
+{
+  const c = await json(deskCfg);
+  delete c.mcpServers.locus;
+  await writeFile(deskCfg, JSON.stringify(c, null, 2));
+}
+const fakeDir = join(out, 'fake-claude-desktop');
+await mkdir(fakeDir, { recursive: true });
+const fakeExe = join(fakeDir, 'claude.exe');
+await copyFile(process.execPath, fakeExe);
+const waitForever = ['-e', 'setInterval(() => {}, 1e9)'];
+const fake = spawn(fakeExe, waitForever, { detached: true, stdio: 'ignore' });
+fake.unref();
+const fakeEnv = {
+  LOCUS_CLAUDE_DESKTOP_PATTERN: String.raw`\\fake-claude-desktop\\claude\.exe$`,
+  LOCUS_CLAUDE_DESKTOP_LAUNCH: JSON.stringify([fakeExe, ...waitForever]),
+};
+const fakePids = () =>
+  execFileSync('powershell.exe', ['-NoProfile', '-Command', "Get-CimInstance Win32_Process -Filter \"Name='claude.exe'\" | Where-Object { $_.ExecutablePath -like '*fake-claude-desktop*' } | ForEach-Object { $_.ProcessId }"], { encoding: 'utf8' })
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(Number);
+let after = [];
+{
+  const { app, win } = await launch(fakeEnv);
+  await win.getByTitle('Settings').waitFor({ timeout: 15000 });
+  await win.getByTitle('Settings').click();
+  await win.getByRole('button', { name: 'Set up Claude…' }).click();
+  const desk = win.locator('.claude-row', { hasText: 'Claude Desktop' });
+  await desk.getByRole('button', { name: 'Connect' }).click();
+  await desk.getByRole('button', { name: 'Restart Claude Desktop' }).click({ timeout: 15000 });
+  await desk.getByText('Chats in progress stop').waitFor();
+  await desk.getByRole('button', { name: 'Restart now' }).click();
+  await desk.getByText('Restarted Claude Desktop').waitFor({ timeout: 20000 });
+  await win.screenshot({ path: join(out, 'restart.png') });
+  // Check and stop the stand-in before closing: it inherited the test harness's pipes to the app.
+  after = fakePids();
+  for (const pid of after) execFileSync('taskkill', ['/PID', String(pid), '/F']);
+  await app.close();
+}
+check('restart closes Claude Desktop and opens it again', after.length === 1 && after[0] !== fake.pid, `before ${fake.pid}, after ${after}`);
+
+// 4. Uninstalling removes only what Locus added.
 execFileSync(join(repo, 'node_modules', 'electron', 'dist', 'electron.exe'), [repo, '--remove-claude'], { env, timeout: 60000 });
 const last = await json(deskCfg);
 check('remove takes out the Claude Code plugin folder', !existsSync(plugin));

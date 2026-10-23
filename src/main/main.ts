@@ -9,7 +9,7 @@ import { parseDestination, resolvePath } from '../core/link';
 import { extractLinks } from '../core/mdlinks';
 import { movedPath, rewriteLinks } from '../core/rewrite';
 import { canvasLinks, isCanvas, rewriteCanvas } from '../core/canvas';
-import { claudeStatus, connectClaude, refreshClaude, removeClaude } from './claude';
+import { claudeStatus, connectClaude, refreshClaude, removeClaude, restartClaudeDesktop } from './claude';
 import { mapLines } from '../core/remap';
 import { fileKind } from '../core/link';
 import type { Citation, GitHubAccount } from '../shared/api';
@@ -249,6 +249,9 @@ const api: Api = {
   },
   async connectClaude(target) {
     return connectClaude(target);
+  },
+  async restartClaudeDesktop() {
+    return restartClaudeDesktop();
   },
   async appVersion() {
     return app.getVersion();

@@ -183,6 +183,10 @@ opens the same dialog any time, with each app's status and a Connect / Update / 
 - **Claude Desktop**: Locus adds a `locus` entry to `mcpServers` in
   `%APPDATA%\Claude\claude_desktop_config.json`, leaving everything else as it was and keeping the
   original as `claude_desktop_config.json.before-locus`; a file that isn't valid JSON is left alone.
+- After connecting Claude Desktop while it is running, **Restart Claude Desktop** appears; it
+  first says that chats in progress stop (they are saved), then ends Claude Desktop's main process
+  (closing its window only hides it in the tray) and opens it again from its Start menu entry.
+  Claude Code's own claude.exe is never touched.
 - On every start, an installed Locus quietly brings its own Claude setup up to date (a newer
   skill, or Locus moved); it never touches anything it didn't write.
 - Uninstalling Locus (not updating it) removes the plugin folder and the Desktop entry.

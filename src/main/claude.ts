@@ -6,7 +6,7 @@
 //   marketplace is updated there instead of adding a second copy).
 // - Claude Desktop: a "locus" entry in claude_desktop_config.json.
 import { app } from 'electron';
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { existsSync, promises as fs } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -103,7 +103,12 @@ export async function claudeStatus(): Promise<ClaudeStatus> {
   const cfg = desktopFound ? await readDesktopConfig() : null;
   const entry = (cfg?.mcpServers as Record<string, unknown> | undefined)?.[NAME];
   // The Desktop entry runs this install's server, so it is as current as Locus itself.
-  const desktop: ClaudeStatus['desktop'] = { found: desktopFound, current, ...(entry ? { installed: { version: sameEntry(entry) ? current : '' } } : {}) };
+  const desktop: ClaudeStatus['desktop'] = {
+    found: desktopFound,
+    current,
+    running: desktopFound ? await desktopRunning() : false,
+    ...(entry ? { installed: { version: sameEntry(entry) ? current : '' } } : {}),
+  };
   return { code, desktop };
 }
 
@@ -165,6 +170,51 @@ export async function refreshClaude(): Promise<void> {
   const cfg = existsSync(desktopConfig()) ? await readDesktopConfig() : null;
   const entry = (cfg?.mcpServers as Record<string, unknown> | undefined)?.[NAME];
   if (entry && !sameEntry(entry)) await writeDesktopEntry();
+}
+
+// ---------- Restarting Claude Desktop ----------
+
+// Claude Desktop's main process: its claude.exe (Store or classic install) without Electron's
+// --type= flag. Claude Code's command-line tool is also claude.exe but lives elsewhere. Tests point
+// this at a stand-in program.
+const DESKTOP_EXE = () => process.env.LOCUS_CLAUDE_DESKTOP_PATTERN || String.raw`\\(WindowsApps\\Claude_[^\\]+\\app|AnthropicClaude\\app-[^\\]+)\\claude\.exe$`;
+
+function powershell(script: string, timeout = 20000): Promise<string> {
+  return run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], timeout).then((r) => r.out.trim());
+}
+
+async function desktopProcess(): Promise<{ pid: number; path: string } | null> {
+  const out = await powershell(
+    `Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -match '${DESKTOP_EXE().replace(/'/g, "''")}' -and $_.CommandLine -notmatch '--type=' } | Select-Object -First 1 ProcessId, ExecutablePath | ConvertTo-Json -Compress`,
+  );
+  try {
+    const p = JSON.parse(out) as { ProcessId: number; ExecutablePath: string };
+    return { pid: p.ProcessId, path: p.ExecutablePath };
+  } catch {
+    return null;
+  }
+}
+
+export async function desktopRunning(): Promise<boolean> {
+  return !!(await desktopProcess());
+}
+
+/** Quits Claude Desktop (it stays in the tray when its window closes, so the process is ended) and opens it again. */
+export async function restartClaudeDesktop(): Promise<{ ok: boolean; message: string }> {
+  const proc = await desktopProcess();
+  if (proc) {
+    await run('taskkill', ['/PID', String(proc.pid), '/T', '/F'], 20000);
+    for (let i = 0; i < 40 && (await desktopProcess()); i++) await new Promise((r) => setTimeout(r, 250));
+    if (await desktopProcess()) return { ok: false, message: "Claude Desktop didn't close. Quit it from the tray icon and open it again." };
+  }
+  // Open it the way the Start menu does (works for the Store version too), else from its program file.
+  const launch = process.env.LOCUS_CLAUDE_DESKTOP_LAUNCH;
+  const appId = launch ? '' : await powershell(`(Get-StartApps | Where-Object { $_.Name -eq 'Claude' } | Select-Object -First 1).AppID`);
+  // (Tests set LOCUS_CLAUDE_DESKTOP_LAUNCH to a JSON [command, ...args] for a stand-in.)
+  const [cmd, args] = launch ? [JSON.parse(launch)[0], JSON.parse(launch).slice(1)] : appId ? ['explorer.exe', [`shell:AppsFolder\\${appId}`]] : proc ? [proc.path, []] : [null, []];
+  if (!cmd) return { ok: false, message: "Couldn't find Claude Desktop to open it. Open it from the Start menu." };
+  spawn(cmd as string, args as string[], { detached: true, stdio: 'ignore', windowsHide: false }).unref();
+  return { ok: true, message: proc ? 'Restarted Claude Desktop. Locus is ready there.' : 'Opened Claude Desktop. Locus is ready there.' };
 }
 
 /** Removes what Locus added to Claude (run by the uninstaller). */

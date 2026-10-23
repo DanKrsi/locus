@@ -100,7 +100,7 @@ export interface Settings {
 /** Claude apps on this computer and the Locus tools installed in them. */
 export interface ClaudeStatus {
   code: { found: boolean; current: string; installed?: { version: string; source: 'app' | 'marketplace' } };
-  desktop: { found: boolean; current: string; installed?: { version: string } };
+  desktop: { found: boolean; current: string; installed?: { version: string }; running?: boolean };
 }
 
 export interface Api {
@@ -115,6 +115,7 @@ export interface Api {
   fileChangedSince(path: string, rev: string): Promise<boolean>;
   claudeStatus(): Promise<ClaudeStatus>;
   connectClaude(target: 'code' | 'desktop'): Promise<{ ok: boolean; message: string }>;
+  restartClaudeDesktop(): Promise<{ ok: boolean; message: string }>;
   appVersion(): Promise<string>;
   head(): Promise<string | null>;
   versions(path?: string): Promise<Version[]>;
@@ -165,7 +166,7 @@ export interface Api {
 }
 
 export const API_METHODS: (keyof Api)[] = [
-  'openWorkspace', 'createWorkspace', 'listFiles', 'readFile', 'readText', 'writeText', 'exists', 'fileChangedSince', 'claudeStatus', 'connectClaude', 'appVersion',
+  'openWorkspace', 'createWorkspace', 'listFiles', 'readFile', 'readText', 'writeText', 'exists', 'fileChangedSince', 'claudeStatus', 'connectClaude', 'restartClaudeDesktop', 'appVersion',
   'head', 'versions', 'changesSince', 'uncommitted', 'saveVersion', 'ensureVersion', 'diffHunks',
   'getSettings', 'setSettings', 'pickExternalFiles', 'readExternal', 'openExternally', 'setTitleBarColors',
   'renameFile', 'findMoved', 'citations', 'versionChanges',

@@ -16,6 +16,18 @@ export function ClaudeDialog({ first, onClose }: { first: boolean; onClose(): vo
   const [status, setStatus] = useState<ClaudeStatus | null>(null);
   const [busy, setBusy] = useState<Target | null>(null);
   const [messages, setMessages] = useState<Partial<Record<Target, { ok: boolean; text: string }>>>({});
+  /** Restarting Claude Desktop: 'ask' shows what will happen before doing it. */
+  const [restart, setRestart] = useState<'ask' | 'busy' | null>(null);
+
+  const restartDesktop = async () => {
+    setRestart('busy');
+    const r = await api.restartClaudeDesktop().catch((e) => ({ ok: false, message: String((e as Error).message) }));
+    setMessages((m) => ({ ...m, desktop: { ok: r.ok, text: r.message } }));
+    setRestart(null);
+    if (r.ok) setRestarted(true);
+    void load();
+  };
+  const [restarted, setRestarted] = useState(false);
 
   const load = () => api.claudeStatus().then(setStatus, () => setStatus(null));
   useEffect(() => {
@@ -63,6 +75,22 @@ export function ClaudeDialog({ first, onClose }: { first: boolean; onClose(): vo
           )}
         </div>
         {msg && <div className={'claude-msg' + (msg.ok ? '' : ' bad')}>{msg.text}</div>}
+        {/* After connecting, Claude Desktop only sees Locus once it starts again. */}
+        {t === 'desktop' && msg?.ok && !restarted && status?.desktop.running && (
+          <div className="claude-restart">
+            {restart === 'ask' ? (
+              <>
+                <span>Claude Desktop will close and open again. Chats in progress stop; they're saved and you can reopen them.</span>
+                <button className="primary" onClick={() => void restartDesktop()}>Restart now</button>
+                <button className="outline" onClick={() => setRestart(null)}>Cancel</button>
+              </>
+            ) : (
+              <button className="outline" disabled={restart === 'busy'} onClick={() => setRestart('ask')}>
+                <Icon name="sync" size={13} /> {restart === 'busy' ? 'Restarting…' : 'Restart Claude Desktop'}
+              </button>
+            )}
+          </div>
+        )}
       </div>
     );
   };

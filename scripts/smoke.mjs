@@ -238,6 +238,27 @@ await step('dark mode', async () => {
   await shot('dark');
 });
 
+await step('restored tabs that no longer exist are dropped', async () => {
+  await win.evaluate(() => {
+    const key = Object.keys(localStorage).find((k) => k.startsWith('session:'));
+    const s = JSON.parse(localStorage.getItem(key));
+    s.docs = [
+      { path: '/data/Gone.xlsx', external: false, rev: '70e39b4' },
+      { path: '/src/solver.py', external: false, rev: 'deadbeef12' },
+      { path: '/src/solver.py', external: false },
+    ];
+    s.activeDoc = 0;
+    s.notes = ['/notes/gone.md', '/notes/review.md'];
+    s.activeNote = '/notes/gone.md';
+    localStorage.setItem(key, JSON.stringify(s));
+  });
+  await win.reload();
+  await win.locator('.pane:has(.tab-add[title^="Open a document"]) .tabs > .tab').first().waitFor({ timeout: 20000 });
+  const tabs = await win.locator('.pane:has(.tab-add[title^="Open a document"]) .tabs > .tab').count();
+  if (tabs !== 1) throw new Error(`expected 1 restored document tab, got ${tabs}`);
+  if (await win.getByText("Couldn't open").count()) throw new Error('a stale tab still shows an error');
+});
+
 const noteText = await win.evaluate(() => window.api.readText('/notes/review.md'));
 const citedLine = noteText.split('\n').find((l) => l.includes('Scope section'));
 console.log('     inserted:', citedLine);

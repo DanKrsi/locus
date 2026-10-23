@@ -209,13 +209,20 @@ export function App() {
     } catch {
       /* ignore */
     }
-    const tabs: DocTab[] = s.docs.map((d) => ({ id: newId(), ...d, kind: fileKind(d.path) }));
+    // Drop tabs that can no longer open, e.g. a different repository now sits in this folder.
+    const openable = await Promise.all(s.docs.map((d) => (d.external ? true : api.exists(d.path, d.rev).catch(() => false))));
+    const restored = s.docs.filter((_, i) => openable[i]);
+    const noteOk = await Promise.all(s.notes.map((n) => api.exists(n).catch(() => false)));
+    s.notes = s.notes.filter((_, i) => noteOk[i]);
+    if (s.activeNote && !s.notes.includes(s.activeNote)) s.activeNote = s.notes[0] ?? null;
+    const activeDoc = restored.indexOf(s.docs[s.activeDoc]);
+    const tabs: DocTab[] = restored.map((d) => ({ id: newId(), ...d, kind: fileKind(d.path) }));
     statusCache.current.clear();
     invalidateLatest();
     setBrowserRev(undefined);
     setNotice(null);
     setDocTabs(tabs);
-    setActiveDoc(tabs[s.activeDoc]?.id ?? tabs[0]?.id ?? null);
+    setActiveDoc(tabs[activeDoc]?.id ?? tabs[0]?.id ?? null);
     setSession(s);
     setWs(info);
     setSettings(await api.getSettings());

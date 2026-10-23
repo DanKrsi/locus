@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import { fileKind } from '../core/link';
+import { isCanvas } from '../core/canvas';
 import skillDoc from '../../plugin/skills/locus/SKILL.md';
 import { renderForClaude, readWorkbook } from './reader';
 import {
@@ -16,7 +17,9 @@ import {
   openWorkspace,
   pdfPages,
   readBytes,
-  validateNote,
+  describeCanvas,
+  validateFile,
+  writeFlowchart,
   writeNote,
   wsPath,
   type LinkCheck,
@@ -92,6 +95,7 @@ server.registerTool(
     const ws = await openWorkspace(a.workspace);
     const path = wsPath(ws, a.path);
     const data = await readBytes(ws, path, a.version);
+    if (isCanvas(path)) return describeCanvas(path, new TextDecoder().decode(data));
     return renderForClaude(path, data, { startLine: a.start_line, endLine: a.end_line, pages: a.pages, sheet: a.sheet });
   }),
 );
@@ -185,7 +189,7 @@ server.registerTool(
   'validate_note',
   {
     title: 'Check a note’s links',
-    description: 'Checks every link in a note: files exist, pages/lines/ranges are valid, quotes are where the link says, and whether code has changed since it was cited. Pass path for a saved note or markdown for a draft.',
+    description: 'Checks every link in a note or flowchart (.canvas): files exist, pages/lines/ranges are valid, quotes are where the link says, and whether code has changed since it was cited. Pass path for a saved file or markdown for a draft note.',
     inputSchema: {
       workspace: workspaceArg,
       path: z.string().describe('Where the note lives (or will live) in the workspace, e.g. "notes/tour.md"'),
@@ -196,7 +200,7 @@ server.registerTool(
     const ws = await openWorkspace(a.workspace);
     const path = wsPath(ws, a.path);
     const md = a.markdown ?? new TextDecoder().decode(await readBytes(ws, path));
-    const checks = await validateNote(ws, path, md);
+    const checks = await validateFile(ws, path, md);
     return formatChecks(checks);
   }),
 );
@@ -231,8 +235,58 @@ server.registerTool(
   wrap(async (a) => {
     const ws = await openWorkspace(a.workspace);
     const path = await writeNote(ws, a.path, a.content);
-    const checks = await validateNote(ws, path, a.content);
+    const checks = await validateFile(ws, path, a.content);
     return `Saved ${path}.\n\n${formatChecks(checks)}`;
+  }),
+);
+
+const citeSchema = z.object({
+  path: z.string(),
+  label: z.string().optional().describe('Link text in the box, e.g. "backoff()" or "client.py L26"'),
+  lines: z.tuple([z.number().int(), z.number().int()]).optional(),
+  quote: z.string().optional().describe('Exact text from the cited spot (code lines are found from it)'),
+  page: z.number().int().optional(),
+  highlight: z.boolean().optional(),
+  range: z.string().optional(),
+  slide: z.number().int().optional(),
+  heading: z.string().optional(),
+  time: z.string().optional(),
+  version: z.string().optional(),
+});
+
+server.registerTool(
+  'write_flowchart',
+  {
+    title: 'Draw a flowchart',
+    description: `Writes a flowchart (.canvas, opens on the left in Locus and in Obsidian) laid out automatically from boxes, loops and arrows. Each box can cite exact places with cite (same options as make_reference: code by quote or lines, PDF quote/page, ranges, slides…); the verified links are added to the box text.
+- List boxes in reading order, one step per box, a few words each (the citation carries the detail).
+- shape: terminal for start/end/return/raise, decision for a yes/no or condition (label its arrows "yes"/"no"), io for reading or writing data, subprocess for a call explained elsewhere, note for a side remark; default process.
+- Loops: define each loop once (label like "for attempt in range(RETRIES)"; parent for a loop inside a loop) and set loop on the boxes of its body (the innermost loop). Draw the loop-back as an arrow from the last box of the body to the first one; arrows that go back up are drawn dashed up the side of the loop. An arrow can start or end at a loop id (e.g. from the loop to what happens when it finishes).
+- The person can rearrange it afterwards; overwriting the path replaces the file.`,
+    inputSchema: {
+      workspace: workspaceArg,
+      path: z.string().describe('e.g. "notes/retry-flow.canvas"'),
+      boxes: z.array(
+        z.object({
+          id: z.string(),
+          text: z.string().optional().describe('Markdown; keep it short'),
+          shape: z.enum(['process', 'decision', 'terminal', 'io', 'subprocess', 'note']).optional(),
+          loop: z.string().optional().describe('Id of the innermost loop this box is inside'),
+          cite: z.array(citeSchema).optional().describe('Places to cite in this box, each made like make_reference'),
+        }),
+      ),
+      loops: z.array(z.object({ id: z.string(), label: z.string(), parent: z.string().optional() })).optional(),
+      arrows: z.array(
+        z.object({ from: z.string(), to: z.string(), label: z.string().optional(), dashed: z.boolean().optional().describe('Loop-backs are dashed by default') }),
+      ),
+    },
+  },
+  wrap(async (a) => {
+    const ws = await openWorkspace(a.workspace);
+    const r = await writeFlowchart(ws, a);
+    const checks = await validateFile(ws, r.path, r.text);
+    const loops = a.loops?.length ?? 0;
+    return `Saved ${r.path}: ${a.boxes.length} boxes, ${loops} loop${loops === 1 ? '' : 's'}, ${a.arrows.length} arrows. Open it in Locus with Open note.\n\n${formatChecks(checks)}`;
   }),
 );
 

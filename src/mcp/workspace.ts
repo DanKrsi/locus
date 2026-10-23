@@ -16,6 +16,8 @@ import {
   type Reference,
 } from '../core/link';
 import { extractLinks } from '../core/mdlinks';
+import { isCanvas, parseCanvas, serializeCanvas, type Shape } from '../core/canvas';
+import { layoutDraft, type DraftArrow, type DraftLoop } from '../core/flowLayout';
 import { findQuote } from '../core/quote';
 import { mapLines } from '../core/remap';
 import * as git from '../main/git';
@@ -431,8 +433,81 @@ function headingExists(md: string, slug: string): boolean {
   });
 }
 
+/** Checks a note or a flowchart; in a flowchart, a link's line is the line of its box. */
+export async function validateFile(ws: Workspace, path: string, text: string): Promise<LinkCheck[]> {
+  if (!isCanvas(path)) return validateNote(ws, path, text);
+  const doc = parseCanvas(text);
+  const lines = text.split(/\r?\n/);
+  const out: LinkCheck[] = [];
+  for (const n of doc.nodes) {
+    if (typeof n.text !== 'string') continue;
+    const line = lines.findIndex((l) => l.includes(`"id":${JSON.stringify(n.id)}`)) + 1;
+    for (const c of await validateNote(ws, path, n.text)) out.push({ ...c, line, label: `box "${n.id}": ${c.label}` });
+  }
+  return out;
+}
+
+export interface FlowchartBox {
+  id: string;
+  text?: string;
+  shape?: Shape;
+  loop?: string;
+  cite?: ReferenceRequest[];
+}
+
+/** Lays out a flowchart from boxes, loops and arrows, with verified citations in the boxes. */
+export async function writeFlowchart(
+  ws: Workspace,
+  req: { path: string; boxes: FlowchartBox[]; loops?: DraftLoop[]; arrows: DraftArrow[] },
+): Promise<{ path: string; text: string }> {
+  const p = wsPath(ws, req.path);
+  if (!isCanvas(p)) throw new Error('Flowcharts must be .canvas files');
+  const boxes = [];
+  for (const b of req.boxes) {
+    const links: string[] = [];
+    for (const c of b.cite ?? []) {
+      try {
+        links.push((await makeReference(ws, { ...c, notePath: p })).markdown);
+      } catch (e) {
+        throw new Error(`Box "${b.id}": ${(e as Error).message}`);
+      }
+    }
+    boxes.push({ id: b.id, shape: b.shape, loop: b.loop, text: [b.text?.trim() ?? '', ...links].filter(Boolean).join('\n') });
+  }
+  const text = serializeCanvas(await layoutDraft({ boxes, loops: req.loops, arrows: req.arrows }));
+  const full = absPath(ws, p);
+  await fs.mkdir(dirname(full), { recursive: true });
+  await fs.writeFile(full, text, 'utf8');
+  return { path: p, text };
+}
+
+/** A flowchart as readable text: loops, boxes (with the loop they sit in) and arrows. */
+export function describeCanvas(path: string, text: string): string {
+  const doc = parseCanvas(text);
+  const groups = doc.nodes.filter((n) => n.type === 'group');
+  const within = (n: { x: number; y: number; width: number; height: number }) =>
+    groups
+      .filter((g) => g !== n && n.x >= g.x && n.y >= g.y && n.x + n.width <= g.x + g.width && n.y + n.height <= g.y + g.height)
+      .sort((a, b) => a.width * a.height - b.width * b.height)[0];
+  const one = (s: string) => s.replace(/\s*\n\s*/g, ' / ');
+  const out = [`Flowchart "${path.split('/').pop()}": ${doc.nodes.length - groups.length} boxes, ${groups.length} loop${groups.length === 1 ? '' : 's'}, ${doc.edges.length} arrows.`];
+  if (groups.length) {
+    out.push('', 'Loops:');
+    for (const g of groups) out.push(`- ${g.id} "${g.label ?? ''}"${within(g) ? ` (in ${within(g)!.id})` : ''}`);
+  }
+  out.push('', 'Boxes:');
+  for (const n of doc.nodes.filter((n) => n.type !== 'group')) {
+    const loop = within(n);
+    out.push(`- ${n.id} [${n.shape ?? 'process'}]${loop ? ` (in ${loop.id})` : ''}: ${one(n.text ?? n.file ?? n.url ?? '')}`);
+  }
+  out.push('', 'Arrows:');
+  for (const e of doc.edges) out.push(`- ${e.fromNode} → ${e.toNode}${e.label ? ` "${e.label}"` : ''}${e.style === 'dashed' ? ' (dashed)' : ''}`);
+  return out.join('\n');
+}
+
 export async function writeNote(ws: Workspace, path: string, content: string): Promise<string> {
   const p = wsPath(ws, path);
+  if (isCanvas(p)) throw new Error('Use write_flowchart for .canvas flowcharts');
   if (!/\.md$/i.test(p)) throw new Error('Notes must be .md files');
   const full = absPath(ws, p);
   await fs.mkdir(dirname(full), { recursive: true });

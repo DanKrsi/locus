@@ -52,6 +52,35 @@ await call(
   /BROKEN[\s\S]*Page 99/,
 );
 
+// Flowcharts: drafted from boxes, loops and arrows, with citations made like make_reference.
+const flow = {
+  path: 'notes/mcp-flow.canvas',
+  loops: [{ id: 'attempts', label: 'for attempt in range(RETRIES)' }],
+  boxes: [
+    { id: 'start', shape: 'terminal', text: 'fetch(url)' },
+    { id: 'open', text: 'Open the URL', loop: 'attempts', cite: [{ path: 'src/net/client.py', label: 'urlopen', quote: 'with urllib.request.urlopen(url, timeout=TIMEOUT_S) as resp:' }] },
+    { id: 'ok', shape: 'decision', text: 'Succeeded?', loop: 'attempts' },
+    { id: 'wait', text: 'Wait with backoff', loop: 'attempts', cite: [{ path: 'src/net/client.py', label: 'backoff()', quote: 'def backoff(attempt):' }] },
+    { id: 'done', shape: 'terminal', text: 'Return the body' },
+  ],
+  arrows: [
+    { from: 'start', to: 'open' },
+    { from: 'open', to: 'ok' },
+    { from: 'ok', to: 'done', label: 'yes' },
+    { from: 'ok', to: 'wait', label: 'no' },
+    { from: 'wait', to: 'open', label: 'next attempt' },
+  ],
+};
+await call('write_flowchart', flow, /Saved \/notes\/mcp-flow\.canvas: 5 boxes, 1 loop, 5 arrows[\s\S]*All 2 references resolve/);
+await call('read_file', { path: 'notes/mcp-flow.canvas' }, /open \[process\] \(in attempts\): Open the URL \/ \[urlopen\]\(\/src\/net\/client\.py#L26[\s\S]*wait → open "next attempt" \(dashed\)/);
+await call('validate_note', { path: 'notes/mcp-flow.canvas' }, /OK\s+line \d+\s+\[box "wait": backoff\(\)\]/);
+const badFlow = await client.callTool({ name: 'write_flowchart', arguments: { ...flow, path: 'notes/bad.canvas', arrows: [{ from: 'start', to: 'nowhere' }] } });
+console.log(`${badFlow.isError ? 'ok  ' : 'FAIL'} write_flowchart rejects an arrow to a missing box`);
+if (!badFlow.isError) failures++;
+const badCite = await client.callTool({ name: 'write_flowchart', arguments: { ...flow, path: 'notes/bad.canvas', boxes: [{ id: 'start', text: 'x', cite: [{ path: 'src/net/client.py', quote: 'not in the file' }] }], loops: [], arrows: [] } });
+console.log(`${badCite.isError && /Box "start"/.test(badCite.content[0].text) ? 'ok  ' : 'FAIL'} write_flowchart names the box with a bad citation`);
+if (!(badCite.isError && /Box "start"/.test(badCite.content[0].text))) failures++;
+
 await client.close();
 console.log(failures ? `\n${failures} failure(s)` : '\nall passed');
 process.exit(failures ? 1 : 0);

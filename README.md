@@ -60,7 +60,8 @@ lines from a quote, and records the version.
 | `read_file` | Code with line numbers, PDFs by page, spreadsheets by cell, at any version |
 | `search_workspace` | Find text across code, PDFs and spreadsheets |
 | `make_reference` | Verified link to lines, a PDF page or quoted passage, a cell range, a heading or a past version |
-| `validate_note` / `write_note` | Check every link in a note (moved, changed, broken) / save a note and check it |
+| `validate_note` / `write_note` | Check every link in a note or flowchart (moved, changed, broken) / save a note and check it |
+| `write_flowchart` | Draw a flowchart from boxes, loops and arrows: laid out automatically, with verified citations in the boxes |
 | `file_history`, `init_workspace` | Versions of a file; set up history for a plain folder |
 
 **Claude Code** (plugin with the MCP server and a skill that teaches how to write a good tour):

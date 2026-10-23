@@ -137,7 +137,10 @@ per line, so diffs stay readable.
   the tab-row zoom control zoom the view.
 - Flowchart citations appear in **Cited in** (picking one shows and flashes the box) and are
   updated when a cited file is renamed in the app.
-- Not yet: tour mode, hover cards and Fix links for flowcharts; Claude drafting flowcharts.
+- Claude drafts flowcharts with the MCP tool `write_flowchart`: boxes in reading order (with `cite`
+  options like `make_reference`), loops and arrows; ELK lays them out (loop-backs routed dashed up
+  the loop side) and every citation is verified.
+- Not yet: tour mode, hover cards and Fix links for flowcharts.
 
 ## 5. Right pane: documents
 

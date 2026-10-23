@@ -1,6 +1,6 @@
 ---
 name: locus
-description: Write Locus notes - markdown whose links jump to exact places in a workspace (code lines, PDF pages and highlighted passages, spreadsheet ranges, note sections, past versions of files). Use when asked for a tour or walkthrough of a codebase or folder of documents, a code review write-up, study or research notes that cite sources, or any note "with links to where things are".
+description: Write Locus notes and flowcharts - markdown notes and .canvas flowcharts whose links jump to exact places in a workspace (code lines, PDF pages and highlighted passages, spreadsheet ranges, note sections, past versions of files). Use when asked for a tour or walkthrough of a codebase or folder of documents, a code review write-up, study or research notes that cite sources, a flowchart or diagram explaining how code or a process works, or any note "with links to where things are".
 ---
 
 # Locus notes
@@ -40,6 +40,32 @@ so explain in your own words and let the links show the source.
    with `read_file` + `version`, and cite it with `make_reference` + `version` (a pinned link).
    Pair it with a live link to the current code so the reader can click between them.
 5. Save with `write_note` (default location `notes/<topic>.md`) and fix anything it flags.
+
+## Flowcharts
+
+Use `write_flowchart` when asked for a flowchart or diagram of how code (or a process) works,
+or when control flow with loops and branches is easier to see than to read. It writes a
+`.canvas` file that opens on the left in Locus (and in Obsidian), laid out automatically; the
+person can rearrange it afterwards.
+
+1. Read the code first (`read_file`). Decide the steps in reading order: entry, the main path,
+   branches, loop bodies, exits.
+2. One step per box, a few words in plain language ("Open the URL", "Wait with backoff").
+   Put the evidence in `cite` on the box (same options as `make_reference`, usually a quote of
+   the code); don't paste code into the box text.
+3. Shapes: `terminal` for start, return and raise; `decision` for conditions (label the two
+   arrows "yes"/"no", or the case names); `io` for reading or writing data; `subprocess` for a
+   call explained elsewhere; `note` for a side remark; otherwise the default process box.
+4. Loops: define each loop once with its header as the label ("for attempt in range(RETRIES)";
+   `parent` for a loop inside another) and set `loop` on the boxes of its body. Add the
+   loop-back arrow from the last box of the body to the first, labelled ("next attempt");
+   it is drawn dashed up the side of the loop. An arrow from the loop id itself shows what
+   happens when the loop finishes ("retries used up").
+5. Keep it to roughly 5–15 boxes; for bigger code, chart the part asked about, or make one
+   flowchart per function and say how they connect.
+6. Read the result of `write_flowchart` (it checks every link) and fix anything flagged. Save
+   flowcharts as `notes/<topic>.canvas`; `read_file` on a .canvas gives an outline of its
+   boxes, loops and arrows.
 
 ## Images and tables
 

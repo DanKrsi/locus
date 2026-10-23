@@ -2,9 +2,9 @@
   "manifest_version": "0.3",
   "name": "locus",
   "display_name": "Locus",
-  "version": "0.1.2",
-  "description": "Write notes and tours whose links jump to exact code lines, PDF passages, spreadsheet ranges and past versions.",
-  "long_description": "Lets Claude read a Locus workspace (code, PDFs, spreadsheets and their version history) and write markdown notes whose links open the exact spot in the Locus app. Use the \"Write a tour\" prompt to get a guided walkthrough of a folder or codebase.",
+  "version": "0.2.1",
+  "description": "Write notes, tours and flowcharts whose links jump to exact code lines, PDF passages, spreadsheet ranges and past versions.",
+  "long_description": "Lets Claude read a Locus workspace (code, PDFs, spreadsheets and their version history) and write markdown notes and flowcharts whose links open the exact spot in the Locus app. Use the \"Write a tour\" prompt to get a guided walkthrough of a folder or codebase.",
   "author": { "name": "Daniel Krsikapa" },
   "repository": { "type": "git", "url": "https://github.com/DanKrsi/locus" },
   "license": "MIT",
@@ -34,6 +34,7 @@
     { "name": "validate_note", "description": "Check every link in a note" },
     { "name": "file_history", "description": "Versions of a file" },
     { "name": "write_note", "description": "Save a note into the workspace" },
+    { "name": "write_flowchart", "description": "Draw a laid-out flowchart (.canvas) with citations in its boxes" },
     { "name": "init_workspace", "description": "Set up version history for a folder" }
   ],
   "prompts": [

@@ -21,6 +21,7 @@ export function HistoryDialog({
   initialSelected,
   onOpenFile,
   onBrowse,
+  onBack,
   onClose,
 }: {
   versions: Version[];
@@ -29,6 +30,8 @@ export function HistoryDialog({
   initialSelected?: string;
   onOpenFile(path: string, sha: string): void;
   onBrowse(sha: string): void;
+  /** Returns to the file browser it was opened from. */
+  onBack(): void;
   onClose(): void;
 }) {
   const [selected, setSelected] = useState<string | null>(initialSelected ?? versions[0]?.sha ?? null);
@@ -110,6 +113,9 @@ export function HistoryDialog({
           </div>
         </div>
         <div className="dialog-foot">
+          <button className="outline" onClick={onBack}>
+            <Icon name="chevLeft" /> Back to files
+          </button>
           <button className="outline" style={{ marginRight: 'auto' }} onClick={onClose}>Close</button>
           {current && (
             <button className="primary" onClick={() => onBrowse(current.sha)}>

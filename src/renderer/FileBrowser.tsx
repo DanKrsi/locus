@@ -26,8 +26,8 @@ interface Props {
   /** "notes" lists notes for the left pane (latest only); "documents" lists everything for the viewer. */
   target: 'notes' | 'documents';
   onNewNote?(): void;
-  /** Set when opened from the history dialog: returns there. */
-  onBack?(): void;
+  /** Opens the version history (documents only). */
+  onHistory?(): void;
 }
 
 export function FileBrowser(p: Props) {
@@ -251,9 +251,9 @@ export function FileBrowser(p: Props) {
           {rows.length ? rows : <div className="muted" style={{ padding: 8 }}>{p.target === 'notes' ? 'No notes match.' : 'No files match.'}</div>}
         </div>
         <div className="dialog-foot">
-          {p.onBack && (
-            <button className="outline" onClick={p.onBack}>
-              <Icon name="chevLeft" /> Back to {term(p.terminology, 'history').toLowerCase()}
+          {p.target === 'documents' && p.onHistory && (
+            <button className="outline" onClick={p.onHistory} title="See what changed in each version">
+              <Icon name="history" /> {term(p.terminology, 'history')}
             </button>
           )}
           {p.target === 'documents' ? (

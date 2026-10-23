@@ -58,8 +58,6 @@ export function App() {
   /** Version the file browser shows; set when browsing from History, reset otherwise. */
   const [browserRev, setBrowserRev] = useState<string | undefined>();
   const [historyOpen, setHistoryOpen] = useState(false);
-  /** The version being browsed from the history dialog, so "Back" returns to it. */
-  const [historyBrowse, setHistoryBrowse] = useState<string | null>(null);
   const [docTabs, setDocTabs] = useState<DocTab[]>([]);
   const [activeDoc, setActiveDoc] = useState<string | null>(null);
   const [browser, setBrowser] = useState(false);
@@ -298,7 +296,6 @@ export function App() {
 
   const [browserTarget, setBrowserTarget] = useState<'notes' | 'documents'>('documents');
   const openBrowser = (rev?: string, target: 'notes' | 'documents' = 'documents') => {
-    setHistoryBrowse(null);
     setBrowserRev(target === 'notes' ? undefined : rev);
     setBrowserTarget(target);
     setBrowser(true);
@@ -674,8 +671,8 @@ export function App() {
             <button className="no-drag ws-name" title={ws.root} onClick={() => void openWorkspace()}>
               <Icon name="folder" /> {ws.name}
             </button>
-            <button className="outline" onClick={() => { setHistoryBrowse(null); setHistoryOpen(true); }} title="See what changed in each version">
-              <Icon name="history" /> {term(terminology, 'historyShort')}
+            <button className="outline" onClick={() => openBrowser()} title="Open a document as it is now, or from any past version (Ctrl+P)">
+              <Icon name="folderOpen" /> Open
             </button>
             <div style={{ position: 'relative' }} className="no-drag">
               <button className="outline" onClick={() => void openSaveVersion()} title={`${term(terminology, 'saveVersionHint')} (Ctrl+Shift+S)`}>
@@ -839,14 +836,10 @@ export function App() {
             for (const p of paths) openDoc(p, true);
           }}
           onClose={() => setBrowser(false)}
-          onBack={
-            historyBrowse
-              ? () => {
-                  setBrowser(false);
-                  setHistoryOpen(true);
-                }
-              : undefined
-          }
+          onHistory={() => {
+            setBrowser(false);
+            setHistoryOpen(true);
+          }}
           onRename={renameFile}
           target={browserTarget}
           onNewNote={() => {
@@ -859,8 +852,12 @@ export function App() {
         <HistoryDialog
           versions={versions}
           terminology={terminology}
-          initialSelected={historyBrowse ?? undefined}
+          initialSelected={browserRev}
           onClose={() => setHistoryOpen(false)}
+          onBack={() => {
+            setHistoryOpen(false);
+            openBrowser(browserRev);
+          }}
           onOpenFile={(path, sha) => {
             setHistoryOpen(false);
             openDoc(path, false, sha);
@@ -868,7 +865,6 @@ export function App() {
           onBrowse={(sha) => {
             setHistoryOpen(false);
             openBrowser(sha);
-            setHistoryBrowse(sha);
           }}
         />
       )}

@@ -11,7 +11,7 @@ version of a file.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│ ◆ Locus  Bracket project  [History] [Save version] [Sync] [Share]  [Go to file…] ⚙ │ header
+│ ◆ Locus  Bracket project  [Open] [Save version] [Sync] [Share]  [Go to file…] ⚙    │ header
 ├──────────────────────────────────────┬───────────────────────────────────────┤
 │ [Review.md ●] [Design.md] [+]        │ [spec.pdf] [solver.py · Mar 3] [+ Open]│ tabs
 │ Heading▾ B I S </> • 1. ☐ ❝ ▦ 🔗  Tour│ ‹ 22 of 36 › − Fit + │ Area │ [Cite page]│ toolbars
@@ -36,12 +36,14 @@ version of a file.
 
 ## 3. Header
 
-Logo + name · workspace name (click → open another workspace) · **History** · **Save version** ·
+Logo + name · workspace name (click → open another workspace) · **Open** · **Save version** ·
 sync pill and **Share** (when shared) · quick open (Ctrl+P) · settings ⚙.
 
-**History** lists the workspace's versions. Selecting one shows what it changed (added, changed,
-moved, deleted files); clicking a file opens it as it was in that version, and **Browse all files
-from this version** opens the file browser at that version. There is no global "viewing an old
+**Open** shows the file browser (the same one as Ctrl+P), with a selector for the version to
+show the folder as it was. Its **Version history** button leads to the history: the workspace's
+versions, and for the selected one what it changed (added, changed, moved, deleted files).
+Clicking a file there opens it as it was in that version; **Browse all files from this version**
+and **Back to files** return to the file browser. There is no global "viewing an old
 version" mode: each document tab carries its own version (badge on the tab, version strip under
 the toolbar), and the file browser's version selector resets to Latest each time it opens.
 

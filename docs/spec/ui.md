@@ -167,6 +167,22 @@ per line, so diffs stay readable.
 
 ## 6. Settings
 
+### 6.1 Claude
+
+Locus looks for Claude Code (the `claude` command, or `~/.claude`) and Claude Desktop
+(`%APPDATA%\Claude`). When one is there and its Locus tools are missing or older than the app's,
+Locus asks once per app version ("Use Locus with Claude?"); **Settings → Claude → Set up Claude…**
+opens the same dialog any time, with each app's status and a Connect / Update / Install button.
+
+- **Claude Code**: a plugin installed from the marketplace is updated with `claude plugin
+  update`. Otherwise Locus writes a plugin folder to `~/.claude/skills/locus` (plugin.json,
+  the skill, and `.mcp.json` running the bundled server with `Locus.exe` as Node via
+  `ELECTRON_RUN_AS_NODE`, using the app's bundled git). Claude Code loads it as
+  `locus@skills-dir` in its next session.
+- **Claude Desktop**: opens the bundled `locus.mcpb`; Claude Desktop shows its install
+  confirmation. Installed status is read from Claude's extension folders.
+- Nothing leaves the computer; no config files are edited by hand.
+
 - **Terminology**: *Simple* (default) or *Git*. Changes words only, never behaviour, except
   that Git mode also shows branches, SHAs and separate Pull/Push buttons.
 

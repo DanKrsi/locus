@@ -93,6 +93,14 @@ export interface Settings {
   /** Zoom of the notes editor and of the document viewers (1 = 100%), set separately. */
   noteZoom: number;
   docZoom: number;
+  /** App version the Claude prompt was last shown for (so it asks once, and again after updates). */
+  claudeOffered?: string;
+}
+
+/** Claude apps on this computer and the Locus tools installed in them. */
+export interface ClaudeStatus {
+  code: { found: boolean; current: string; installed?: { version: string; source: 'app' | 'marketplace' } };
+  desktop: { found: boolean; current: string; installed?: { version: string } };
 }
 
 export interface Api {
@@ -105,6 +113,9 @@ export interface Api {
   exists(path: string, rev?: string): Promise<boolean>;
   /** Whether the file now differs from the file in a version. */
   fileChangedSince(path: string, rev: string): Promise<boolean>;
+  claudeStatus(): Promise<ClaudeStatus>;
+  connectClaude(target: 'code' | 'desktop'): Promise<{ ok: boolean; message: string }>;
+  appVersion(): Promise<string>;
   head(): Promise<string | null>;
   versions(path?: string): Promise<Version[]>;
   changesSince(rev: string): Promise<FileChange[]>;
@@ -154,7 +165,7 @@ export interface Api {
 }
 
 export const API_METHODS: (keyof Api)[] = [
-  'openWorkspace', 'createWorkspace', 'listFiles', 'readFile', 'readText', 'writeText', 'exists', 'fileChangedSince',
+  'openWorkspace', 'createWorkspace', 'listFiles', 'readFile', 'readText', 'writeText', 'exists', 'fileChangedSince', 'claudeStatus', 'connectClaude', 'appVersion',
   'head', 'versions', 'changesSince', 'uncommitted', 'saveVersion', 'ensureVersion', 'diffHunks',
   'getSettings', 'setSettings', 'pickExternalFiles', 'readExternal', 'openExternally', 'setTitleBarColors',
   'renameFile', 'findMoved', 'citations', 'versionChanges',

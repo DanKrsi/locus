@@ -16,7 +16,7 @@ const gitIn = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8
 
 await rm(out, { recursive: true, force: true });
 await mkdir(join(out, 'user-data'), { recursive: true });
-await writeFile(join(out, 'user-data', 'settings.json'), JSON.stringify({ recentWorkspaces: [workspace], dark: 'light' }));
+await writeFile(join(out, 'user-data', 'settings.json'), JSON.stringify({ claudeOffered: 'skip', recentWorkspaces: [workspace], dark: 'light' }));
 
 const app = await electron.launch({ args: [repo], env: { ...process.env, LOCUS_USER_DATA: join(out, 'user-data') } });
 const win = await app.firstWindow();

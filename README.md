@@ -64,7 +64,14 @@ lines from a quote, and records the version.
 | `write_flowchart` | Draw a flowchart from boxes, loops and arrows: laid out automatically, with verified citations in the boxes |
 | `file_history`, `init_workspace` | Versions of a file; set up history for a plain folder |
 
-**Claude Code** (plugin with the MCP server and a skill that teaches how to write a good tour):
+**From the app (easiest):** when Locus finds Claude Code or Claude Desktop on the computer, it
+offers to connect them (and again after an update brings newer Claude tools); it's also in
+**Settings → Claude**. For Claude Code it installs the Locus plugin into `~/.claude/skills/locus`
+with its server running on Locus itself, so neither Node nor git needs installing; a plugin
+installed from the marketplace is updated instead. For Claude Desktop it opens the bundled
+extension and Claude asks you to confirm.
+
+**Claude Code by hand** (plugin with the MCP server and a skill that teaches how to write a good tour):
 
 ```bash
 claude plugin marketplace add DanKrsi/locus

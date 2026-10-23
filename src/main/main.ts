@@ -9,6 +9,7 @@ import { parseDestination, resolvePath } from '../core/link';
 import { extractLinks } from '../core/mdlinks';
 import { movedPath, rewriteLinks } from '../core/rewrite';
 import { canvasLinks, isCanvas, rewriteCanvas } from '../core/canvas';
+import { claudeStatus, connectClaude } from './claude';
 import { mapLines } from '../core/remap';
 import { fileKind } from '../core/link';
 import type { Citation, GitHubAccount } from '../shared/api';
@@ -242,6 +243,15 @@ const api: Api = {
   },
   async exists(path, rev) {
     return rev ? git.blobExists(ws().root, path, rev) : exists(abs(path));
+  },
+  async claudeStatus() {
+    return claudeStatus();
+  },
+  async connectClaude(target) {
+    return connectClaude(target);
+  },
+  async appVersion() {
+    return app.getVersion();
   },
   async fileChangedSince(path, rev) {
     return git.changedSince(ws().root, path, rev);

@@ -739,3 +739,9 @@ svg.ico { width: 16px; height: 16px; flex: none; }
 .flow-bend.add { width: 9px; height: 9px; border: 1.5px dashed var(--accent); opacity: 0.8; }
 .flow-editor .react-flow__edge.selected .react-flow__edge-path { stroke: var(--accent); }
 .flow-editor .react-flow__selection { background: var(--accent-soft); border: 1px solid var(--accent); }
+
+/* Claude setup */
+.claude-row { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; display: grid; gap: 6px; }
+.claude-row-head { display: flex; align-items: center; gap: 10px; }
+.claude-msg { font-size: 12.5px; color: var(--accent); }
+.claude-msg.bad { color: var(--danger); }

@@ -27,6 +27,7 @@ import { longDate, term, versionBadge } from './terms';
 import type { ViewerHandle } from './viewers/types';
 import type { CiteMode } from './viewers/CiteButton';
 import { stepZoom } from './zoom';
+import { ClaudeDialog, claudeNeedsSetup } from './ClaudeDialog';
 import { isCanvas } from '../core/canvas';
 
 interface Session {
@@ -99,6 +100,8 @@ export function App() {
   const terminology = settings?.terminology ?? 'simple';
 
   const showToast = useCallback((text: string) => setToast({ text, id: Date.now() }), []);
+  /** The Claude setup dialog: 'first' when offered on its own, 'settings' when opened from Settings. */
+  const [claudeDialog, setClaudeDialog] = useState<'first' | 'settings' | null>(null);
 
   // ---------- Settings and theme ----------
 
@@ -108,8 +111,19 @@ export function App() {
       setSplit(s.splitRatio);
       const last = s.recentWorkspaces[0];
       if (last) await openWorkspace(last).catch(() => undefined);
+      void offerClaude(s);
     });
   }, []);
+
+  // Offers Claude setup once per app version, and only when Claude is here and its tools are missing or old.
+  const offerClaude = async (s: Settings) => {
+    const version = await api.appVersion().catch(() => '');
+    if (!version || s.claudeOffered === version || s.claudeOffered === 'skip') return;
+    const status = await api.claudeStatus().catch(() => null);
+    if (!status || !claudeNeedsSetup(status)) return;
+    await api.setSettings({ claudeOffered: version });
+    setClaudeDialog('first');
+  };
 
   useEffect(() => {
     if (!settings) return;
@@ -1037,7 +1051,18 @@ export function App() {
           }}
         />
       )}
-      {showSettings && <SettingsDialog settings={settings} onChange={updateSettings} onClose={() => setShowSettings(false)} />}
+      {showSettings && (
+        <SettingsDialog
+          settings={settings}
+          onChange={updateSettings}
+          onClose={() => setShowSettings(false)}
+          onClaude={() => {
+            setShowSettings(false);
+            setClaudeDialog('settings');
+          }}
+        />
+      )}
+      {claudeDialog && <ClaudeDialog first={claudeDialog === 'first'} onClose={() => setClaudeDialog(null)} />}
       {toast && <div key={toast.id} className="toast">{toast.text}</div>}
     </div>
   );
@@ -1179,7 +1204,17 @@ function Welcome({
   );
 }
 
-function SettingsDialog({ settings, onChange, onClose }: { settings: Settings; onChange(p: Partial<Settings>): void; onClose(): void }) {
+function SettingsDialog({
+  settings,
+  onChange,
+  onClose,
+  onClaude,
+}: {
+  settings: Settings;
+  onChange(p: Partial<Settings>): void;
+  onClose(): void;
+  onClaude(): void;
+}) {
   return (
     <div className="backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="locus-dialog" style={{ width: 520 }}>
@@ -1234,6 +1269,13 @@ function SettingsDialog({ settings, onChange, onClose }: { settings: Settings; o
               <input type="checkbox" checked={settings.autosave} onChange={(e) => onChange({ autosave: e.target.checked })} />
               <span>Autosave notes <span className="muted">· saves a moment after you stop typing</span></span>
             </label>
+          </section>
+          <section>
+            <div style={{ fontWeight: 600, marginBottom: 6 }}>Claude</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span className="muted" style={{ flex: 1 }}>Let Claude Code or Claude Desktop write notes, tours and flowcharts in your workspaces.</span>
+              <button className="outline" onClick={onClaude}>Set up Claude…</button>
+            </div>
           </section>
         </div>
         <div className="dialog-foot"><button className="primary" onClick={onClose}>Done</button></div>

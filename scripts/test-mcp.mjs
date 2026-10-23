@@ -7,7 +7,15 @@ import { resolve } from 'node:path';
 const repo = resolve(import.meta.dirname, '..');
 const workspace = resolve(repo, '..', 'locus-test-workspace');
 const client = new Client({ name: 'test', version: '1' });
-await client.connect(new StdioClientTransport({ command: process.execPath, args: [process.env.LOCUS_SERVER ?? resolve(repo, 'dist/mcp/server.mjs'), workspace] }));
+// LOCUS_RUNTIME runs the server the way the app installs it for Claude Code: on Locus itself (Electron as Node).
+const runtime = process.env.LOCUS_RUNTIME;
+await client.connect(
+  new StdioClientTransport({
+    command: runtime ?? process.execPath,
+    args: [process.env.LOCUS_SERVER ?? resolve(repo, 'dist/mcp/server.mjs'), workspace],
+    ...(runtime ? { env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' } } : {}),
+  }),
+);
 
 let failures = 0;
 async function call(name, args, expect) {

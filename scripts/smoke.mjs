@@ -13,7 +13,7 @@ const workspace = resolve(repo, '..', 'locus-test-workspace');
 
 await rm(out, { recursive: true, force: true });
 await mkdir(userData, { recursive: true });
-await writeFile(join(userData, 'settings.json'), JSON.stringify({ recentWorkspaces: [workspace], dark: 'light' }));
+await writeFile(join(userData, 'settings.json'), JSON.stringify({ claudeOffered: 'skip', recentWorkspaces: [workspace], dark: 'light' }));
 
 await writeFile(join(workspace, 'notes', 'retry-flow.canvas'), demoFlowText());
 const app = await electron.launch({ args: [repo], env: { ...process.env, LOCUS_USER_DATA: userData } });

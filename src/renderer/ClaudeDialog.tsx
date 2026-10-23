@@ -115,7 +115,7 @@ export function ClaudeDialog({ first, onClose }: { first: boolean; onClose(): vo
           <span className="muted" style={{ fontSize: 12.5, marginRight: 'auto' }}>
             <Icon name="settings" size={12} /> You can do this later in Settings
           </span>
-          <button className="outline" onClick={onClose}>{first ? 'Not now' : 'Close'}</button>
+          <button className="outline" onClick={onClose}>Close</button>
         </div>
       </div>
     </div>

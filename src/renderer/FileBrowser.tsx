@@ -130,7 +130,10 @@ export function FileBrowser(p: Props) {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  const pool = useMemo(() => (p.target === 'notes' ? files.filter((f) => fileKind(f.path) === 'markdown') : files), [files, p.target]);
+  const pool = useMemo(
+    () => (p.target === 'notes' ? files.filter((f) => fileKind(f.path) === 'markdown' || /\.canvas$/i.test(f.path)) : files),
+    [files, p.target],
+  );
 
   const shown = useMemo(() => {
     const q = filter.trim().toLowerCase();

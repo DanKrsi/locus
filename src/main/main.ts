@@ -8,6 +8,7 @@ import * as git from './git';
 import { parseDestination, resolvePath } from '../core/link';
 import { extractLinks } from '../core/mdlinks';
 import { movedPath, rewriteLinks } from '../core/rewrite';
+import { canvasLinks, isCanvas, rewriteCanvas } from '../core/canvas';
 import { mapLines } from '../core/remap';
 import { fileKind } from '../core/link';
 import type { Citation, GitHubAccount } from '../shared/api';
@@ -126,7 +127,9 @@ async function citationsIn(note: string): Promise<Citation[]> {
   if (cached && cached.mtime === st.mtimeMs) return cached.cites;
   const md = await fs.readFile(full, 'utf8');
   const cites: Citation[] = [];
-  for (const link of extractLinks(md)) {
+  // In a flowchart, a citation's line is the line of the box that holds it.
+  const links = isCanvas(note) ? canvasLinks(md).map((l) => ({ ...l, line: l.nodeLine })) : extractLinks(md);
+  for (const link of links) {
     const ref = parseDestination(link.dest);
     if (!ref || ref.pathKind === 'web' || ref.pathKind === 'external' || !ref.path) continue;
     cites.push({ note, line: link.line, label: link.label, path: resolvePath(ref, note), dest: link.dest, quote: link.title });
@@ -136,7 +139,7 @@ async function citationsIn(note: string): Promise<Citation[]> {
 }
 
 async function workspaceNotes(): Promise<string[]> {
-  return (await git.listWorking(ws().root)).filter((p) => /.md$/i.test(p) && !p.startsWith('/.locus/'));
+  return (await git.listWorking(ws().root)).filter((p) => /\.(md|canvas)$/i.test(p) && !p.startsWith('/.locus/'));
 }
 
 // ---------- GitHub account ----------
@@ -296,7 +299,9 @@ const api: Api = {
       const newNote = movedPath(oldNote, change) ?? oldNote;
       const file = abs(newNote);
       const text = await fs.readFile(file, 'utf8');
-      const r = rewriteLinks(text, oldNote, newNote, change);
+      const r = isCanvas(newNote)
+        ? (rewriteCanvas(text, (md) => rewriteLinks(md, oldNote, newNote, change)) ?? { text, count: 0 })
+        : rewriteLinks(text, oldNote, newNote, change);
       if (!r.count) continue;
       await fs.writeFile(file, r.text, 'utf8');
       updatedNotes.push(newNote);

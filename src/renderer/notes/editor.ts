@@ -111,6 +111,13 @@ export function linkAt(state: EditorState, pos: number): LinkInfo | null {
   return null;
 }
 
+/** Link details for a reference found in markdown text outside an editor (flowchart boxes). */
+export function linkInfoFromMd(link: { from: number; to: number; label: string; dest: string; title?: string; image: boolean }): LinkInfo | null {
+  const ref = parseDestination(link.dest);
+  if (!ref) return null;
+  return { from: link.from, to: link.to, labelFrom: link.from + 1, labelTo: link.from + 1 + link.label.length, label: link.label, dest: link.dest, title: link.title, ref, image: link.image };
+}
+
 export function allLinks(state: EditorState): LinkInfo[] {
   const out: LinkInfo[] = [];
   syntaxTree(state).iterate({
@@ -744,6 +751,9 @@ export function inlineEditorExtensions(opts: NoteEditorOptions): Extension {
   return [
     history(),
     drawSelection(),
+    renameField,
+    renameFilter,
+    renameKeymap,
     markdown({ base: markdownLanguage }),
     syntaxHighlighting(codeHighlight),
     livePreview(opts),

@@ -22,12 +22,19 @@ import {
 } from './editor';
 import { insertTable } from './tables';
 import { setEditorZoom, ZoomControl } from '../zoom';
+import { isCanvas, newCanvas, serializeCanvas } from '../../core/canvas';
+import { FlowEditor, type FlowHandle } from '../flow/FlowEditor';
 
 export interface NotesHandle {
   activeView(): EditorView | null;
+  /** The flowchart in the active tab, if it is one. */
+  activeFlow(): FlowHandle | null;
+  /** Zooms the active flowchart's view; false when the active tab isn't a flowchart. */
+  zoomFlow(dir: 1 | -1 | 0): boolean;
   activePath(): string | null;
   open(path: string): Promise<EditorView | null>;
   newNote(): Promise<EditorView | null>;
+  newFlowchart(): Promise<void>;
   saveAll(): Promise<void>;
   /** Re-render references (after link checks or version changes). */
   refresh(): void;
@@ -61,6 +68,16 @@ interface Props {
   onSaved(path: string): void;
 }
 
+/** An open flowchart (.canvas file); its editor reports changes as file text. */
+interface Flow {
+  path: string;
+  initialText: string;
+  savedText: string;
+  text: string;
+  handle: FlowHandle | null;
+  timer?: number;
+}
+
 interface Doc {
   /** Current path; updated when the note is moved, so callbacks always save to the right file. */
   path: string;
@@ -74,6 +91,8 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
   const [tabs, setTabs] = useState<NoteTab[]>([]);
   const [active, setActive] = useState<string | null>(null);
   const docs = useRef(new Map<string, Doc>());
+  const flows = useRef(new Map<string, Flow>());
+  const [flowZoom, setFlowZoom] = useState(1);
   const hosts = useRef(new Map<string, HTMLDivElement>());
   const pending = useRef(new Map<string, Promise<EditorView | null>>());
   const tabsRef = useRef(tabs);
@@ -85,6 +104,19 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
     setTabs((ts) => ts.map((t) => (t.path === path && t.dirty !== dirty ? { ...t, dirty } : t)));
 
   const save = async (path: string, announce = false) => {
+    const fl = flows.current.get(path);
+    if (fl) {
+      clearTimeout(fl.timer);
+      const text = fl.handle?.text() ?? fl.text;
+      if (text !== fl.savedText) {
+        await api.writeText(path, text);
+        fl.savedText = text;
+        p.onSaved(path);
+      }
+      setDirty(path, false);
+      if (announce) p.toast(`Saved ${basename(path)}`);
+      return;
+    }
     const d = docs.current.get(path);
     if (!d) return;
     clearTimeout(d.timer);
@@ -98,7 +130,25 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
     if (announce) p.toast(`Saved ${basename(path)}`);
   };
 
+  const openFlow = async (path: string) => {
+    if (!flows.current.has(path)) {
+      let text: string;
+      try {
+        text = decodeText(await api.readFile(path)).text;
+      } catch {
+        p.toast(`Couldn't open ${basename(path)}`);
+        return;
+      }
+      flows.current.set(path, { path, initialText: text, savedText: text, text, handle: null });
+    }
+    setTabs((ts) => (ts.some((t) => t.path === path) ? ts : [...ts, { id: newId(), path, dirty: false }]));
+    setActive(path);
+    // Wait for the editor to mount, so callers can cite into it straight away.
+    for (let i = 0; !flows.current.get(path)?.handle && i < 120; i++) await new Promise((r) => requestAnimationFrame(r));
+  };
+
   const open = (path: string): Promise<EditorView | null> => {
+    if (isCanvas(path)) return openFlow(path).then(() => null);
     const existing = docs.current.get(path);
     if (existing) {
       setActive(path);
@@ -150,6 +200,10 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
   };
 
   const close = async (path: string) => {
+    if (flows.current.has(path)) {
+      await save(path);
+      flows.current.delete(path);
+    }
     const d = docs.current.get(path);
     if (d) {
       if (docText(d.view) !== d.savedText) await save(path);
@@ -170,6 +224,15 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
     return open(path);
   };
 
+  const newFlowchart = async () => {
+    const files = new Set(await api.listFiles());
+    let n = 1;
+    let path = '/Untitled flowchart.canvas';
+    while (files.has(path)) path = `/Untitled flowchart ${++n}.canvas`;
+    await api.writeText(path, serializeCanvas(newCanvas()));
+    await openFlow(path);
+  };
+
   const zoomRef = useRef(p.zoom);
   zoomRef.current = p.zoom;
   useEffect(() => {
@@ -178,14 +241,22 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
 
   useImperativeHandle(ref, () => ({
     activeView: () => (active ? docs.current.get(active)?.view ?? null : null),
+    activeFlow: () => (active ? flows.current.get(active)?.handle ?? null : null),
+    zoomFlow: (dir) => {
+      const h = active ? flows.current.get(active)?.handle : null;
+      h?.zoom(dir);
+      return !!h;
+    },
     activePath: () => active,
     open,
     newNote,
+    newFlowchart,
     saveAll: async () => {
-      for (const path of docs.current.keys()) await save(path);
+      for (const path of [...docs.current.keys(), ...flows.current.keys()]) await save(path);
     },
     refresh: () => {
       for (const d of docs.current.values()) d.view.dispatch({ effects: refreshEffect.of(null) });
+      for (const fl of flows.current.values()) fl.handle?.refresh();
     },
     revealHeading: (path, slug) => {
       const d = docs.current.get(path);
@@ -208,6 +279,12 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
         next.set(d.path, d);
       }
       docs.current = next;
+      const nextFlows = new Map<string, Flow>();
+      for (const [p, fl] of flows.current) {
+        fl.path = moved(p);
+        nextFlows.set(fl.path, fl);
+      }
+      flows.current = nextFlows;
       const nextHosts = new Map<string, HTMLDivElement>();
       for (const [p, h] of hosts.current) nextHosts.set(moved(p), h);
       hosts.current = nextHosts;
@@ -215,10 +292,24 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
       setActive((a) => (a ? moved(a) : a));
     },
     revealLine: async (path, line) => {
+      if (isCanvas(path)) {
+        await openFlow(path);
+        flows.current.get(path)?.handle?.revealLine(line);
+        return;
+      }
       const view = await open(path);
       if (view) requestAnimationFrame(() => flashLine(view, line));
     },
     reloadFromDisk: async () => {
+      for (const [path, fl] of flows.current) {
+        if ((fl.handle?.text() ?? fl.text) !== fl.savedText) continue;
+        const bytes = await api.readFile(path).catch(() => null);
+        if (!bytes) continue;
+        const { text } = decodeText(bytes);
+        if (text === fl.savedText) continue;
+        fl.savedText = fl.text = text;
+        fl.handle?.load(text);
+      }
       for (const [path, d] of docs.current) {
         if (docText(d.view) !== d.savedText) continue;
         const bytes = await api.readFile(path).catch(() => null);
@@ -249,11 +340,16 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
   }, [tabs, active]);
 
   useEffect(() => {
+    const fl = active ? flows.current.get(active) : undefined;
+    if (fl?.handle) setFlowZoom(fl.handle.getZoom());
     p.onActiveChange(active);
     if (active) requestAnimationFrame(() => docs.current.get(active)?.view.requestMeasure());
   }, [active]);
 
   const view = () => (active ? docs.current.get(active)?.view ?? null : null);
+  const activeIsFlow = !!active && isCanvas(active);
+  const activeRef = useRef(active);
+  activeRef.current = active;
   const run = (fn: (v: EditorView) => unknown) => () => {
     const v = view();
     if (v) fn(v);
@@ -289,11 +385,16 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
           </div>
         ))}
         <button className="tab-add" title="New note (Ctrl+N)" onClick={() => void newNote()}><Icon name="plus" size={14} /></button>
-        <button className="tab-add" title="Open a note (Ctrl+O)" onClick={p.onOpenNote}><Icon name="folderOpen" size={14} /> Open note</button>
+        <button className="tab-add" title="New flowchart" onClick={() => void newFlowchart()}><Icon name="flow" size={14} /></button>
+        <button className="tab-add" title="Open a note or flowchart (Ctrl+O)" onClick={p.onOpenNote}><Icon name="folderOpen" size={14} /> Open note</button>
         <div className="spacer" />
-        <ZoomControl zoom={p.zoom} onZoom={p.onZoom} label="Notes" />
+        {activeIsFlow ? (
+          <ZoomControl zoom={flowZoom} onZoom={(z) => flows.current.get(active!)?.handle?.setZoom(z)} label="Flowchart" />
+        ) : (
+          <ZoomControl zoom={p.zoom} onZoom={p.onZoom} label="Notes" />
+        )}
       </div>
-      <div className="toolbar">
+      <div className="toolbar" style={{ display: activeIsFlow ? 'none' : undefined }}>
         <select
           title="Paragraph style"
           value=""
@@ -335,11 +436,33 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
           <div style={{ display: 'flex', gap: 8 }}>
             <button className="primary" onClick={p.onOpenNote}><Icon name="folderOpen" /> Open note</button>
             <button className="outline" onClick={() => void newNote()}><Icon name="plus" /> New note</button>
+            <button className="outline" onClick={() => void newFlowchart()}><Icon name="flow" /> New flowchart</button>
           </div>
           <div className="muted" style={{ fontSize: 12 }}>Ctrl+O to find a note by name</div>
         </div>
       )}
-      {tabs.map((t) => (
+      {tabs.map((t) => {
+        const fl = flows.current.get(t.path);
+        if (!fl) return null;
+        return (
+          <div key={t.id} className="flow-wrap" style={{ display: t.path === active ? 'flex' : 'none' }}>
+            <FlowEditor
+              initialText={fl.initialText}
+              callbacks={p.callbacks(() => fl.path)}
+              onChange={(text) => {
+                fl.text = text;
+                setDirty(fl.path, text !== fl.savedText);
+                clearTimeout(fl.timer);
+                if (autosaveRef.current) fl.timer = window.setTimeout(() => void save(fl.path), 900);
+              }}
+              onSave={() => void save(fl.path, true)}
+              register={(h) => (fl.handle = h)}
+              onZoomChange={(z) => fl.path === activeRef.current && setFlowZoom(z)}
+            />
+          </div>
+        );
+      })}
+      {tabs.filter((t) => !isCanvas(t.path)).map((t) => (
         <div
           key={t.id}
           className="editor-wrap"

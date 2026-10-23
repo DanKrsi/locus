@@ -27,6 +27,7 @@ import { longDate, term, versionBadge } from './terms';
 import type { ViewerHandle } from './viewers/types';
 import type { CiteMode } from './viewers/CiteButton';
 import { stepZoom } from './zoom';
+import { isCanvas } from '../core/canvas';
 
 interface Session {
   notes: string[];
@@ -144,7 +145,11 @@ export function App() {
   const zoomPane = (pane: 'notes' | 'docs', dir: 1 | -1 | 0) => {
     const s = live.current.settings;
     if (!s) return;
-    if (pane === 'notes') return setZoom('noteZoom', stepZoom(s.noteZoom ?? 1, dir));
+    if (pane === 'notes') {
+      // A flowchart zooms its own view.
+      if (notes.current?.zoomFlow(dir)) return;
+      return setZoom('noteZoom', stepZoom(s.noteZoom ?? 1, dir));
+    }
     // A PDF zooms itself; every other viewer follows the documents zoom.
     const own = handles.current.get(live.current.activeDoc ?? '')?.zoom;
     if (own) own(dir);
@@ -159,7 +164,8 @@ export function App() {
     // Ctrl+wheel (and touchpad pinch) zooms the pane under the pointer, never the whole window.
     let acc = 0;
     const onWheel = (e: WheelEvent) => {
-      if (!e.ctrlKey) return;
+      // Flowcharts handle Ctrl+wheel (and pinch) themselves.
+      if (!e.ctrlKey || (e.target instanceof Element && e.target.closest('.react-flow'))) return;
       e.preventDefault();
       const pane = paneOf(e.target);
       if (!pane) return;
@@ -443,7 +449,7 @@ export function App() {
     const external = ref.pathKind === 'external';
     const path = external ? ref.path : resolvePath(ref, notePath);
     const kind = fileKind(path);
-    if (kind === 'markdown' && !ref.rev && !external) {
+    if ((kind === 'markdown' || isCanvas(path)) && !ref.rev && !external) {
       await notes.current?.open(path);
       if (ref.loc.heading) setTimeout(() => notes.current?.revealHeading(path, ref.loc.heading!), 50);
       return;
@@ -669,9 +675,11 @@ export function App() {
     if (!tab) return showToast('Open a document on the right first');
     const target = handles.current.get(tab.id)?.citeTarget();
     if (!target) return showToast('Nothing to cite yet');
-    let view = notes.current?.activeView() ?? null;
-    if (!view) view = (await notes.current?.newNote()) ?? null;
-    if (!view) return;
+    // A flowchart takes the citation into a box; otherwise it goes into the active note.
+    const flow = notes.current?.activeFlow() ?? null;
+    let view = flow ? null : (notes.current?.activeView() ?? null);
+    if (!flow && !view) view = (await notes.current?.newNote()) ?? null;
+    if (!flow && !view) return;
     let ref: Reference;
     if (tab.external) {
       ref = { path: tab.path, pathKind: 'external', loc: target.loc, extra: [] };
@@ -688,7 +696,8 @@ export function App() {
       ref = { path: tab.path, pathKind: 'root', loc: target.loc, rev, at, extra: [] };
     }
     const label = defaultLabel(tab.path, target.loc, target.pageLabel);
-    insertReference(view, (l) => formatReference(l, ref, target.quote), label);
+    if (flow) flow.insertCitation((l) => formatReference(l, ref, target.quote), label);
+    else insertReference(view!, (l) => formatReference(l, ref, target.quote), label);
     if (!tab.external && !tab.rev) void refreshVersions();
     setTimeout(recomputeCited, 0);
   };

@@ -4,6 +4,7 @@ import { _electron as electron } from 'playwright';
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { PDFDocument } from 'pdf-lib';
+import { demoFlowText } from './flow-demo.mjs';
 
 const repo = resolve(import.meta.dirname, '..');
 const out = join(repo, 'test-output');
@@ -14,6 +15,7 @@ await rm(out, { recursive: true, force: true });
 await mkdir(userData, { recursive: true });
 await writeFile(join(userData, 'settings.json'), JSON.stringify({ recentWorkspaces: [workspace], dark: 'light' }));
 
+await writeFile(join(workspace, 'notes', 'retry-flow.canvas'), demoFlowText());
 const app = await electron.launch({ args: [repo], env: { ...process.env, LOCUS_USER_DATA: userData } });
 const win = await app.firstWindow();
 await win.setViewportSize({ width: 1500, height: 900 });
@@ -283,7 +285,7 @@ await step('cited-in markers and list', async () => {
   await win.locator('.viewer:not(.hidden) .strip-btn', { hasText: 'Cited in' }).click();
   await win.locator('.cite-list .menu-item').first().waitFor({ timeout: 5000 });
   await shot('cited-in');
-  await win.locator('.cite-list .menu-item', { hasText: 'backoff()' }).click();
+  await win.locator('.cite-list .menu-item', { hasText: 'backoff()' }).filter({ hasText: 'review.md' }).click();
   await win.locator('.cm-flash').first().waitFor({ timeout: 5000 });
 });
 
@@ -317,6 +319,83 @@ await step('tour mode', async () => {
   await win.locator('.tour-bar').waitFor({ state: 'detached', timeout: 5000 });
 });
 
+const flowText = () => win.evaluate(() => window.api.readText('/notes/retry-flow.canvas'));
+const until = async (what, test, ms = 8000) => {
+  // A read can catch the file mid-save; that just means "not yet".
+  for (const end = Date.now() + ms; Date.now() < end; await win.waitForTimeout(150)) if (await test().catch(() => false)) return;
+  throw new Error('timed out waiting for ' + what);
+};
+
+await step('flowchart: open, add a box, connect it, cite into it', async () => {
+  await win.keyboard.press('Control+O');
+  await win.getByPlaceholder(/Find a note/).fill('retry-flow');
+  await win.locator('.tree-row', { hasText: 'retry-flow' }).first().waitFor();
+  await win.keyboard.press('Enter');
+  await win.locator('.flow-box', { hasText: 'wait backoff' }).waitFor({ timeout: 10000 });
+  if ((await win.locator('.flow-frame').count()) !== 2) throw new Error('loop frames missing');
+  const edges0 = await win.locator('.flow-editor .react-flow__edge').count();
+  // A new decision box starts with its text selected, so typing replaces it.
+  await win.locator('.flow-toolbar').getByTitle('Add a decision box').click();
+  await win.locator('.flow-box-editor .cm-content').waitFor({ timeout: 5000 });
+  await win.keyboard.type('Done?');
+  await win.keyboard.press('Escape');
+  const added = win.locator('.flow-box.shape-decision', { hasText: 'Done?' });
+  await added.waitFor({ timeout: 5000 });
+  // Drag the new box clear of the others, then connect "return results" to it.
+  const box = await added.boundingBox();
+  await win.mouse.move(box.x + box.width / 2, box.y + 12);
+  await win.mouse.down();
+  await win.mouse.move(box.x + box.width / 2 + 260, box.y + 12, { steps: 8 });
+  await win.mouse.up();
+  const end = win.locator('.react-flow__node', { hasText: 'return results' });
+  await end.hover();
+  const a = await end.locator('.react-flow__handle-right').boundingBox();
+  await added.hover();
+  const b = await added.locator('.react-flow__handle-left').boundingBox();
+  await win.mouse.move(a.x + a.width / 2, a.y + a.height / 2);
+  await win.mouse.down();
+  await win.mouse.move(b.x + b.width / 2, b.y + b.height / 2, { steps: 12 });
+  await win.mouse.up();
+  await until('the new arrow', async () => (await win.locator('.flow-editor .react-flow__edge').count()) === edges0 + 1);
+  // Cite code lines into the selected box.
+  await win.locator('[data-pane="docs"] .tab:not(:has(.badge))', { hasText: 'client.py' }).first().click();
+  await win.locator('.viewer:not(.hidden) .code-viewer .cm-line').nth(30).click();
+  await added.click();
+  await win.locator('.viewer:not(.hidden) .cite-split > button.cite').first().click();
+  await win.locator('.flow-box .cm-renaming').waitFor({ timeout: 5000 });
+  await win.keyboard.type('the sleep');
+  await win.keyboard.press('Enter');
+  await win.keyboard.press('Escape');
+  await win.locator('.flow-box.shape-decision .cm-ref', { hasText: 'the sleep' }).waitFor({ timeout: 5000 });
+  await until('the flowchart to save', async () => /Done\?\\n\[the sleep\]\(\/src\/net\/client\.py#L31/.test(await flowText()));
+  const saved = JSON.parse(await flowText());
+  const node = saved.nodes.find((n) => n.text?.startsWith('Done?'));
+  if (node?.shape !== 'decision') throw new Error('decision box not saved: ' + JSON.stringify(node));
+  if (!saved.edges.some((e) => e.toNode === node.id && e.fromNode === 'end')) throw new Error('arrow not saved');
+  await shot('flowchart');
+});
+
+await step('flowchart: arrow style, undo, and Cited in', async () => {
+  try {
+    // Select the "no" arrow and make it curved; undo puts it back.
+    await win.locator('.flow-toolbar').getByTitle('Fit the flowchart in view').click();
+    await win.waitForTimeout(500);
+    const arrow = await win.locator('[data-testid="rf__edge-e4"] .react-flow__edge-interaction').boundingBox();
+    await win.mouse.click(arrow.x + arrow.width * 0.25, arrow.y + arrow.height / 2);
+    await win.locator('.flow-toolbar').getByTitle('Curve arrow').click();
+    await until('the curved arrow to save', async () => JSON.parse(await flowText()).edges.find((e) => e.id === 'e4').route === 'curve');
+    await win.locator('.flow-toolbar').getByTitle('Undo (Ctrl+Z)').click();
+    await until('undo to save', async () => JSON.parse(await flowText()).edges.find((e) => e.id === 'e4').route === 'elbow');
+    // The code file lists the flowchart under "Cited in"; picking it shows the box.
+    await win.locator('.viewer:not(.hidden) .strip-btn', { hasText: 'Cited in' }).click();
+    await win.locator('.cite-list .menu-item', { hasText: 'retry-flow.canvas' }).first().click();
+    await win.locator('.flow-box.selected').first().waitFor({ timeout: 5000 });
+  } finally {
+    // Back to the note for the steps that follow.
+    await win.locator('[data-pane="notes"] .tab', { hasText: 'review.md' }).click();
+  }
+});
+
 await step('rename a file in the app updates live links only', async () => {
   await win.keyboard.press('Control+P');
   await win.getByPlaceholder('Find a file by name').fill('client.py');
@@ -330,6 +409,8 @@ await step('rename a file in the app updates live links only', async () => {
   const text = await win.evaluate(() => window.api.readText('/notes/review.md'));
   if (!text.includes('[the backoff loop](/src/http/client.py#')) throw new Error('live link not updated');
   if (!text.includes('[a fixed sleep](/src/net/client.py#')) throw new Error('pinned link should keep its path');
+  const flow = await flowText();
+  if (!flow.includes('[client.py L26](/src/http/client.py#L26') || flow.includes('/src/net/client.py')) throw new Error('flowchart links not updated');
 });
 
 await step('file moved outside the app offers Fix links', async () => {

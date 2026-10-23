@@ -35,6 +35,8 @@ Early development (milestones 1–3 done). Windows first. Working today:
   outside the app are detected and offered a one-click **Fix links**
 - **Cited in**: see which notes cite a document, with bookmarks in PDF margins and code gutters
 - **Tour mode** (Ctrl+Shift+T): step through a note's references with the arrow keys
+- **Flowcharts** on the left (`.canvas`, Obsidian-compatible): shaped boxes, nested loop frames,
+  arrows with elbow, straight or curved routes through draggable bends — and citations inside boxes
 - **Share** as a single `.locus` file (with full history), or sync through a private GitHub
   repository with invites and friendly conflict handling
 - Simple / Git terminology setting, five themes, dark mode

@@ -11,6 +11,7 @@ Short record of the choices made while planning, and why.
 | Link format = plain markdown links | Notes stay readable and portable; works on GitHub. Borrows GitHub `#L`, PDF `page=`/`viewrect=`, Excel references. Compatible with Folio notes. |
 | Root-relative paths (`/docs/x.pdf`) | Moving a note never breaks its links. |
 | Every reference records a version (`at=` or `rev=`) | Lets the app follow renames, map shifted lines, and recover deleted files. |
+| Flowcharts are JSON Canvas files | An open format Obsidian already reads; Locus's extra fields (shapes, arrow routes, bends) are ignored there. Box text is markdown, so citations in boxes are ordinary links and every citation feature applies. Built on React Flow (MIT). |
 | Live or pinned is the citer's choice | Viewing an older version writes a pinned link. On the latest version the Cite button offers Live (default) or Pinned, and the hover card switches a link later. Live links flag content that changed since citing instead of silently showing it. |
 | Workspace = one folder with one history | Notes and cited files live together; keeps links stable and sharing simple. Multiple repos per workspace is a later feature. |
 | Simple vs Git terminology setting | Non-technical users see "versions" and "sync"; developers see commits, pull and push. |

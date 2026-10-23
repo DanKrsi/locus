@@ -110,6 +110,35 @@ the toolbar), and the file browser's version selector resets to Latest each time
 Steps through the note's references in order with ←/→ (or PageUp/PageDown); the viewer
 follows and the current reference is highlighted in the note. Esc exits.
 
+### 4.4 Flowcharts
+
+The left pane also opens flowcharts: `.canvas` files in the open JSON Canvas format (the one
+Obsidian's Canvas uses), so they open in Obsidian too. Locus adds fields Obsidian ignores: box
+`shape`, and for arrows `route`, `style` and bend `points`. Files are written one box or arrow
+per line, so diffs stay readable.
+
+- **New flowchart** (flowchart icon in the tab row, or the empty pane). **Open note** lists
+  flowcharts with notes; links to a `.canvas` file open it on the left.
+- **Boxes**: process, decision, start/end, input/output, sub-process, note. Add from the
+  toolbar (the new box's text is selected, so typing replaces it); change the shape of a selected
+  box from the toolbar; drag to move (snaps to an 8 px grid), drag the corners to resize.
+- **Box text** is markdown with citations, edited in place with the notes editor (double-click or
+  Enter; Esc or clicking away finishes). Citations show as in notes, with version and **changed**
+  badges; clicking one opens what it cites.
+- **Cite** on the right puts the citation in the box being edited, else the selected box (on a new
+  line), else a new box — with the usual rename box.
+- **Loop frames** (groups) carry the boxes and frames inside them when moved; frames nest.
+  Double-click the title to rename. Arrows can start or end on a frame.
+- **Arrows**: drag from a side dot of one box to a side dot of another. Select an arrow to set
+  straight / elbow / curve, dashed, arrowheads, and a label (or double-click it). A selected arrow
+  shows its bend points (drag to move, double-click to remove) and dashed "+" handles that add a
+  bend where dragged.
+- Undo / redo (Ctrl+Z / Ctrl+Y), Delete, Fit to view, autosave. Wheel pans; Ctrl+wheel, pinch or
+  the tab-row zoom control zoom the view.
+- Flowchart citations appear in **Cited in** (picking one shows and flashes the box) and are
+  updated when a cited file is renamed in the app.
+- Not yet: tour mode, hover cards and Fix links for flowcharts; Claude drafting flowcharts.
+
 ## 5. Right pane: documents
 
 - Document tabs show a version badge when not on the latest version. **+ Open** opens the

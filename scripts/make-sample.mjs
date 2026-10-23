@@ -6,6 +6,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { exec } from 'dugite';
 import { existsSync } from 'node:fs';
+import { marginCheckFlow } from './sample/flow.mjs';
 import { copyFile, mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import * as A from './sample/assets.mjs';
@@ -225,6 +226,7 @@ Notes open on the **left** (Open note, Ctrl+O). Documents open on the **right** 
 | [Test plan](${n('test-plan', 'protoflight-vibration-test')}) | CSV data, a plot image, and timestamps in a meeting recording |
 | [Decisions](${n('decisions', 'decision-log')}) | A decision log with links inside table cells |
 | [Playground](${n('playground', 'try-it-yourself')}) | Somewhere to try citing, renaming and breaking things |
+| [Margin check](/notes/margin-check.canvas) | A flowchart: loops, a decision, and citations inside boxes |
 
 ## Try these
 
@@ -395,6 +397,7 @@ Web links work too: [NASA Technical Standards System](https://standards.nasa.gov
 };
 
 for (const [path, text] of Object.entries(notes)) await put(path, text);
+await put('notes/margin-check.canvas', marginCheckFlow(R));
 const v8 = await commit('Design review notes', '2026-04-20T09:10:00', 'sam');
 
 // After the notes: lines move in margins.py, so live links have to follow them.

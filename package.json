@@ -1,7 +1,7 @@
 {
   "name": "locus",
   "productName": "Locus",
-  "version": "0.1.11",
+  "version": "0.2.0",
   "description": "Write markdown notes that link to exact places in PDFs, code, spreadsheets and their versions.",
   "license": "MIT",
   "private": true,
@@ -26,6 +26,7 @@
     "sample": "npm run build && npm run build:mcp && node scripts/make-sample.mjs"
   },
   "dependencies": {
+    "@xyflow/react": "^12.12.0",
     "dugite": "^3.3.0"
   },
   "devDependencies": {

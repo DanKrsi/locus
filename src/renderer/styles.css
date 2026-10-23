@@ -386,6 +386,11 @@ svg.ico { width: 16px; height: 16px; flex: none; }
 .cm-ref.broken { color: var(--danger); text-decoration: underline wavy var(--danger); }
 .cm-ref.active { background: var(--mark-soft); outline: 2px solid var(--mark); }
 .cm-ref .badge { margin-left: 4px; font-weight: 500; vertical-align: 1px; }
+/* A reference in a note: icon widget, editable label text, then the version badge. */
+.cm-ref.cm-ref-icon { padding-right: 0; border-radius: 4px 0 0 4px; }
+.cm-ref.cm-ref-icon svg { margin-right: 1px; }
+.cm-ref.cm-link-label { padding-left: 0; border-radius: 0 4px 4px 0; white-space: normal; }
+.cm-ref-badge { margin-left: 4px; font-weight: 500; vertical-align: 1px; }
 .cm-renaming { outline: 2px solid var(--accent); border-radius: 3px; background: var(--panel); color: var(--accent); font-weight: 600; }
 .cm-rename-hint { font-size: 12px; color: var(--faint); margin-left: 8px; font-weight: 400; }
 .cm-image { display: block; max-width: 100%; max-height: 360px; border-radius: 6px; margin: 4px 0; }

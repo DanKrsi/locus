@@ -117,6 +117,30 @@ await step('cite a PDF page with the rename box', async () => {
   await shot('cited');
 });
 
+await step('editing keeps the formatted view: link labels edit as text', async () => {
+  const line = win.locator('.cm-line', { hasText: 'New citation:' });
+  // The cursor is after the new link: Backspace edits its label instead of exposing the markdown.
+  await win.keyboard.press('Backspace');
+  await win.keyboard.press('Backspace');
+  await win.keyboard.press('Backspace');
+  await win.locator('.cm-ref', { hasText: /^Scope sect$/ }).waitFor({ timeout: 5000 });
+  if ((await line.textContent()).includes('](')) throw new Error('link markdown showed while editing');
+  await win.keyboard.type('ion');
+  await win.locator('.cm-ref', { hasText: /^Scope section$/ }).waitFor({ timeout: 5000 });
+  await win.keyboard.press('Control+S');
+  const saved = await win.evaluate(() => window.api.readText('/notes/review.md'));
+  if (!/New citation: \[Scope section\]\(/.test(saved)) throw new Error('label edit not saved as a link');
+  // Clicking a heading keeps it formatted; Backspace at its start turns it into plain text.
+  const heading = win.locator('.cm-line.cm-h2', { hasText: 'Loads' });
+  await heading.click();
+  if ((await heading.textContent()).trim() !== 'Loads') throw new Error('heading markup showed while editing');
+  await win.keyboard.press('Home');
+  await win.keyboard.press('Backspace');
+  await win.locator('.cm-line:not(.cm-h2)', { hasText: /^Loads$/ }).waitFor({ timeout: 5000 });
+  await win.keyboard.press('Control+Z');
+  await win.locator('.cm-line.cm-h2', { hasText: 'Loads' }).waitFor({ timeout: 5000 });
+});
+
 await step('cited-in markers and list', async () => {
   await win.locator('.cm-ref', { hasText: 'the backoff loop' }).click();
   await win.locator('.code-viewer .cm-cite-mark').first().waitFor({ timeout: 10000 });
@@ -163,7 +187,7 @@ await step('tour mode', async () => {
   await win.keyboard.press('ArrowRight');
   await win.keyboard.press('ArrowRight');
   await win.locator('.tour-bar', { hasText: 'stop 3 of' }).waitFor({ timeout: 5000 });
-  await win.locator('.cm-ref.active').waitFor({ timeout: 5000 });
+  await win.locator('.cm-link-label.active').waitFor({ timeout: 5000 });
   await shot('tour');
   await win.keyboard.press('Escape');
   await win.locator('.tour-bar').waitFor({ state: 'detached', timeout: 5000 });

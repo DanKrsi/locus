@@ -54,8 +54,12 @@ the toolbar), and the file browser's version selector resets to Latest each time
 - Formatting toolbar: paragraph/heading dropdown, bold, italic, strikethrough, inline code,
   code block, bullet/numbered/task list, quote, table, horizontal rule, link, undo/redo;
   right side: **Link to section** and **Tour**.
-- Editor: Obsidian-style **live preview** (CodeMirror 6). Markdown renders in place; the raw
-  syntax of the line you're on is revealed. Markdown shortcuts work as you type.
+- Editor: a **formatted view** (CodeMirror 6). Markdown renders in place and its markup stays
+  hidden while editing; the cursor steps over hidden markup. Markdown shortcuts work as you type.
+  A link's label is ordinary text: typing and Backspace edit it, and deleting its last letter
+  removes the link. Backspace at the start of a heading, bullet, task or quote removes that
+  formatting. Tables open as markdown on double-click; **Edit target** in a link's hover card
+  shows that link's markdown until the cursor leaves it.
 - The file on disk is the source of truth: only edited lines change; line endings and
   encoding are preserved. Autosave after a pause, with a small "Saved" toast.
 

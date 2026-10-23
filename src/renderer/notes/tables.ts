@@ -108,10 +108,12 @@ class TableWidget extends WidgetType {
       });
       table.append(tr);
     });
-    // Clicking the table (not a link) puts the cursor in it to edit the markdown.
+    // Double-clicking the table (not a link) puts the cursor in it to edit the markdown.
+    wrap.title = 'Double-click to edit the table';
     wrap.addEventListener('mousedown', (e) => {
       if ((e.target as HTMLElement).closest('.cm-ref, a')) return;
       e.preventDefault();
+      if (e.detail < 2) return;
       view.dispatch({ selection: { anchor: this.from } });
       view.focus();
     });

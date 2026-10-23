@@ -22,6 +22,14 @@ await win.keyboard.press('Enter');
 await win.locator('.cm-ref:visible').first().waitFor({ timeout: 10000 });
 await win.waitForTimeout(800);
 await win.screenshot({ path: join(out, '0-note.png') });
+if (process.env.EDIT) {
+  // Puts the cursor at the end of the first line with a link and screenshots the editor while editing.
+  const line = win.locator('.cm-line:visible:has(.cm-link-label)').first();
+  const box = await line.boundingBox();
+  await win.mouse.click(box.x + box.width - 4, box.y + box.height / 2);
+  await win.waitForTimeout(300);
+  await win.screenshot({ path: join(out, 'edit-cursor.png'), clip: { x: 0, y: Math.max(0, box.y - 120), width: 750, height: 300 } });
+}
 let i = 1;
 for (const label of labels) {
   await win.locator('.cm-ref:visible', { hasText: label }).first().click();

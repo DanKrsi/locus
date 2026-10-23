@@ -1,6 +1,17 @@
 // Markdown note editor: CodeMirror 6 with Obsidian-style live preview, reference widgets,
 // the inline rename box used when citing, and hover cards (UI spec §4).
-import { EditorSelection, EditorState, Prec, StateEffect, StateField, type Extension, type Range } from '@codemirror/state';
+import {
+  EditorSelection,
+  EditorState,
+  Prec,
+  RangeSet,
+  StateEffect,
+  StateField,
+  findClusterBreak,
+  type ChangeSpec,
+  type Extension,
+  type Range,
+} from '@codemirror/state';
 import {
   Decoration,
   EditorView,
@@ -214,9 +225,26 @@ export function removeLink(view: EditorView, info: LinkInfo) {
   view.dispatch({ changes: { from: info.from, to: info.to, insert: escapeLabel(info.label) } });
 }
 
+/** The one link shown as raw markdown ("Edit target"), until the cursor leaves it. */
+const revealEffect = StateEffect.define<{ from: number; to: number } | null>();
+const revealField = StateField.define<{ from: number; to: number } | null>({
+  create: () => null,
+  update(value, tr) {
+    for (const e of tr.effects) if (e.is(revealEffect)) return e.value;
+    if (!value) return value;
+    if (tr.docChanged) value = { from: tr.changes.mapPos(value.from, -1), to: tr.changes.mapPos(value.to, 1) };
+    const head = tr.state.selection.main.head;
+    return tr.selection && (head < value.from || head > value.to) ? null : value;
+  },
+});
+
 /** Shows the raw markdown of a link so its target can be edited by hand. */
 export function revealLink(view: EditorView, info: LinkInfo) {
-  view.dispatch({ selection: { anchor: info.labelTo + 2 }, scrollIntoView: true });
+  view.dispatch({
+    selection: { anchor: info.labelTo + 2 },
+    effects: revealEffect.of({ from: info.from, to: info.to }),
+    scrollIntoView: true,
+  });
   view.focus();
 }
 
@@ -334,6 +362,58 @@ class WebLinkWidget extends WidgetType {
   }
 }
 
+/** Follows the link at a position: web links open in the browser, references in the viewer. */
+function followAt(view: EditorView, pos: number, onFollow: (info: LinkInfo) => void) {
+  const info = linkAt(view.state, pos);
+  if (!info) return;
+  if (info.ref.pathKind === 'web') window.open(info.dest, '_blank');
+  else onFollow(info);
+}
+
+/** Stands in for a reference's hidden "[": its file-type icon. */
+class LinkIconWidget extends WidgetType {
+  constructor(
+    readonly icon: ReturnType<typeof kindIcon>,
+    readonly cls: string,
+    readonly onFollow: (info: LinkInfo) => void,
+  ) {
+    super();
+  }
+  eq(o: LinkIconWidget) {
+    return o.icon === this.icon && o.cls === this.cls;
+  }
+  toDOM(view: EditorView) {
+    const span = document.createElement('span');
+    span.className = this.cls + ' cm-ref-icon';
+    span.innerHTML = iconSvg(this.icon);
+    span.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      followAt(view, view.posAtDOM(span) + 1, this.onFollow);
+    });
+    return span;
+  }
+  ignoreEvent() {
+    return true;
+  }
+}
+
+/** Stands in for a reference's hidden "](target)": its version badge. */
+class LinkBadgeWidget extends WidgetType {
+  constructor(readonly badge: string) {
+    super();
+  }
+  eq(o: LinkBadgeWidget) {
+    return o.badge === this.badge;
+  }
+  toDOM() {
+    const b = document.createElement('span');
+    b.className = 'badge mark cm-ref-badge';
+    b.textContent = this.badge;
+    return b;
+  }
+}
+
 class ImageWidget extends WidgetType {
   constructor(readonly src: string, readonly alt: string) {
     super();
@@ -411,19 +491,31 @@ class HintWidget extends WidgetType {
 const hide = Decoration.replace({});
 const markCls = (cls: string) => Decoration.mark({ class: cls });
 
-function buildDecorations(view: EditorView, opts: NoteEditorOptions): DecorationSet {
+interface Preview {
+  decorations: DecorationSet;
+  /** Hidden markup: the cursor steps over it and deleting skips past it. */
+  hidden: RangeSet<Decoration>;
+  /** Widgets standing for content (images, rules): deleted as one piece. */
+  objects: RangeSet<Decoration>;
+}
+
+// Markup stays hidden while editing, so the note always looks formatted (no raw markdown).
+function buildDecorations(view: EditorView, opts: NoteEditorOptions): Preview {
   const { state } = view;
   const decos: Range<Decoration>[] = [];
-  const sel = state.selection;
+  const hidden: Range<Decoration>[] = [];
+  const objects: Range<Decoration>[] = [];
   const rename = state.field(renameField, false);
-  const activeLines = new Set<number>();
-  for (const r of sel.ranges) {
-    for (let l = state.doc.lineAt(r.from).number; l <= state.doc.lineAt(r.to).number; l++) activeLines.add(l);
-  }
-  const lineActive = (pos: number) => activeLines.has(state.doc.lineAt(pos).number);
-  // A construct is "being edited" when the cursor is strictly inside it or a selection overlaps it.
-  const editing = (from: number, to: number) =>
-    sel.ranges.some((r) => (r.empty ? r.head > from && r.head < to : r.from < to && r.to > from));
+  const revealed = state.field(revealField, false);
+  const conceal = (deco: Decoration, from: number, to: number) => {
+    if (to <= from) return;
+    decos.push(deco.range(from, to));
+    hidden.push(hide.range(from, to));
+  };
+  const object = (deco: Decoration, from: number, to: number) => {
+    decos.push(deco.range(from, to));
+    objects.push(hide.range(from, to));
+  };
   const lineDecos = new Set<string>();
   const lineDeco = (pos: number, cls: string) => {
     const line = state.doc.lineAt(pos);
@@ -439,10 +531,8 @@ function buildDecorations(view: EditorView, opts: NoteEditorOptions): Decoration
       pos = line.to + 1;
     }
   };
-  const hideMarks = (node: SyntaxNode, markName: string, active: boolean) => {
-    for (const m of node.getChildren(markName)) {
-      decos.push((active ? markCls('cm-mdmark') : hide).range(m.from, m.to));
-    }
+  const hideMarks = (node: SyntaxNode, markName: string) => {
+    for (const m of node.getChildren(markName)) conceal(hide, m.from, m.to);
   };
 
   for (const { from, to } of view.visibleRanges) {
@@ -456,13 +546,7 @@ function buildDecorations(view: EditorView, opts: NoteEditorOptions): Decoration
         if (heading) {
           lineDeco(node.from, `cm-h${heading[1]}`);
           const mark = node.getChild('HeaderMark');
-          if (mark) {
-            if (lineActive(node.from)) decos.push(markCls('cm-hmark').range(mark.from, mark.to));
-            else {
-              const end = state.sliceDoc(mark.to, mark.to + 1) === ' ' ? mark.to + 1 : mark.to;
-              decos.push(hide.range(mark.from, end));
-            }
-          }
+          if (mark) conceal(hide, mark.from, state.sliceDoc(mark.to, mark.to + 1) === ' ' ? mark.to + 1 : mark.to);
           return;
         }
         switch (name) {
@@ -471,12 +555,12 @@ function buildDecorations(view: EditorView, opts: NoteEditorOptions): Decoration
           case 'Strikethrough': {
             const cls = name === 'StrongEmphasis' ? 'cm-strong' : name === 'Emphasis' ? 'cm-em' : 'cm-strike';
             decos.push(markCls(cls).range(node.from, node.to));
-            hideMarks(node, name === 'Strikethrough' ? 'StrikethroughMark' : 'EmphasisMark', editing(node.from, node.to) || lineActive(node.from));
+            hideMarks(node, name === 'Strikethrough' ? 'StrikethroughMark' : 'EmphasisMark');
             return;
           }
           case 'InlineCode': {
             decos.push(markCls('cm-inline-code').range(node.from, node.to));
-            hideMarks(node, 'CodeMark', editing(node.from, node.to));
+            hideMarks(node, 'CodeMark');
             return false;
           }
           case 'Link':
@@ -492,21 +576,35 @@ function buildDecorations(view: EditorView, opts: NoteEditorOptions): Decoration
               );
               return false;
             }
-            if (editing(info.from, info.to)) {
+            if (revealed && revealed.from === info.from) {
               const paren = state.sliceDoc(info.labelTo, info.labelTo + 2) === '](' ? info.labelTo : -1;
               if (paren >= 0) decos.push(markCls('cm-mdmark').range(paren, info.to));
               return false;
             }
             if (info.image) {
               const src = opts.imageUrl(info);
-              if (src) decos.push(Decoration.replace({ widget: new ImageWidget(src, info.label) }).range(info.from, info.to));
+              if (src) object(Decoration.replace({ widget: new ImageWidget(src, info.label) }), info.from, info.to);
               return false;
             }
-            const widget =
-              info.ref.pathKind === 'web'
-                ? new WebLinkWidget(info.label, info.dest)
-                : new RefWidget(info, opts.refStatus(info), opts.onFollow, state.field(activeLinkField, false) === info.from);
-            decos.push(Decoration.replace({ widget }).range(info.from, info.to));
+            const web = info.ref.pathKind === 'web';
+            const status = web ? null : opts.refStatus(info);
+            const active = state.field(activeLinkField, false) === info.from;
+            if (info.labelTo === info.labelFrom) {
+              // No label to edit as text: show the whole link as one piece.
+              const widget = web ? new WebLinkWidget(info.dest, info.dest) : new RefWidget(info, status!, opts.onFollow, active);
+              object(Decoration.replace({ widget }), info.from, info.to);
+              return false;
+            }
+            // The label is ordinary text; only "[" and "](target)" are hidden.
+            const cls = web ? 'cm-weblink' : 'cm-ref' + (status!.state === 'broken' ? ' broken' : '') + (active ? ' active' : '');
+            conceal(
+              web ? hide : Decoration.replace({ widget: new LinkIconWidget(kindIcon(fileKind(info.ref.path)), cls, opts.onFollow) }),
+              info.from,
+              info.labelFrom,
+            );
+            const title = web ? info.dest : status!.state === 'broken' ? status!.reason : undefined;
+            decos.push(Decoration.mark({ class: cls + ' cm-link-label', attributes: title ? { title } : undefined }).range(info.labelFrom, info.labelTo));
+            conceal(status?.badge ? Decoration.replace({ widget: new LinkBadgeWidget(status.badge) }) : hide, info.labelTo, info.to);
             return false;
           }
           case 'Blockquote': {
@@ -514,10 +612,7 @@ function buildDecorations(view: EditorView, opts: NoteEditorOptions): Decoration
             return;
           }
           case 'QuoteMark': {
-            if (!lineActive(node.from)) {
-              const end = state.sliceDoc(node.to, node.to + 1) === ' ' ? node.to + 1 : node.to;
-              decos.push(hide.range(node.from, end));
-            }
+            conceal(hide, node.from, state.sliceDoc(node.to, node.to + 1) === ' ' ? node.to + 1 : node.to);
             return;
           }
           case 'FencedCode': {
@@ -529,41 +624,39 @@ function buildDecorations(view: EditorView, opts: NoteEditorOptions): Decoration
             return false;
           }
           case 'HorizontalRule': {
-            if (!lineActive(node.from)) decos.push(Decoration.replace({ widget: new HrWidget() }).range(node.from, node.to));
+            object(Decoration.replace({ widget: new HrWidget() }), node.from, node.to);
             return;
           }
           case 'ListMark': {
             const text = state.sliceDoc(node.from, node.to);
-            if (lineActive(node.from) || !/^[-*+]$/.test(text)) {
+            if (!/^[-*+]$/.test(text)) {
               decos.push(markCls('cm-listmark').range(node.from, node.to));
               return;
             }
             // Task items show only their checkbox; plain items get a bullet.
             const isTask = /^\s?\[[ xX]\]/.test(state.sliceDoc(node.to, node.to + 5));
             const end = isTask && state.sliceDoc(node.to, node.to + 1) === ' ' ? node.to + 1 : node.to;
-            decos.push((isTask ? hide : Decoration.replace({ widget: new BulletWidget() })).range(node.from, end));
+            conceal(isTask ? hide : Decoration.replace({ widget: new BulletWidget() }), node.from, end);
             return;
           }
           case 'TaskMarker': {
-            if (!editing(node.from - 1, node.to + 1)) {
-              const done = /x/i.test(state.sliceDoc(node.from, node.to));
-              decos.push(Decoration.replace({ widget: new TaskWidget(done, node.from) }).range(node.from, node.to));
-            }
+            const done = /x/i.test(state.sliceDoc(node.from, node.to));
+            conceal(Decoration.replace({ widget: new TaskWidget(done, node.from) }), node.from, node.to);
             return;
           }
         }
       },
     });
   }
-  return Decoration.set(decos, true);
+  return { decorations: Decoration.set(decos, true), hidden: Decoration.set(hidden, true), objects: Decoration.set(objects, true) };
 }
 
 function livePreview(opts: NoteEditorOptions): Extension {
-  return ViewPlugin.fromClass(
+  const plugin = ViewPlugin.fromClass(
     class {
-      decorations: DecorationSet;
+      preview: Preview;
       constructor(view: EditorView) {
-        this.decorations = buildDecorations(view, opts);
+        this.preview = buildDecorations(view, opts);
       }
       update(u: ViewUpdate) {
         if (
@@ -574,12 +667,151 @@ function livePreview(opts: NoteEditorOptions): Extension {
           syntaxTree(u.startState) !== syntaxTree(u.state) ||
           u.transactions.some((t) => t.effects.some((e) => e.is(refreshEffect) || e.is(startRename) || e.is(endRename) || e.is(setActiveEffect)))
         ) {
-          this.decorations = buildDecorations(u.view, opts);
+          this.preview = buildDecorations(u.view, opts);
         }
       }
     },
-    { decorations: (v) => v.decorations },
+    { decorations: (v) => v.preview.decorations },
   );
+  const preview = (view: EditorView) => view.plugin(plugin)?.preview;
+  return [
+    plugin,
+    EditorView.atomicRanges.of((view) => preview(view)?.hidden ?? Decoration.none),
+    EditorView.atomicRanges.of((view) => preview(view)?.objects ?? Decoration.none),
+    // Clicking a link's label follows it.
+    EditorView.domEventHandlers({
+      mousedown(e, view) {
+        const label = (e.target as HTMLElement).closest?.('.cm-link-label');
+        if (!label || e.button !== 0 || e.shiftKey) return false;
+        e.preventDefault();
+        followAt(view, view.posAtDOM(label), opts.onFollow);
+        return true;
+      },
+    }),
+    Prec.high(
+      keymap.of([
+        { key: 'Backspace', run: (v) => deleteSmart(v, preview(v), -1) },
+        { key: 'Delete', run: (v) => deleteSmart(v, preview(v), 1) },
+      ]),
+    ),
+  ];
+}
+
+// ---------- Deleting in the formatted view ----------
+
+const WRAPPED: Record<string, string> = {
+  StrongEmphasis: 'EmphasisMark',
+  Emphasis: 'EmphasisMark',
+  Strikethrough: 'StrikethroughMark',
+  InlineCode: 'CodeMark',
+};
+
+/**
+ * The changes that delete [from, to) without breaking the formatting around it: hidden markup of
+ * links, bold, italic and code that is only partly selected is kept, and a construct whose text
+ * would be emptied goes entirely (deleting a link's last letter deletes the link).
+ */
+function safeDeletion(state: EditorState, from: number, to: number): { from: number; to: number }[] {
+  let ranges = [{ from, to }];
+  const cut = (a: number, b: number) => {
+    ranges = ranges.flatMap((r) =>
+      b <= r.from || a >= r.to ? [r] : [...(r.from < a ? [{ from: r.from, to: a }] : []), ...(b < r.to ? [{ from: b, to: r.to }] : [])],
+    );
+  };
+  const revealed = state.field(revealField, false);
+  syntaxTree(state).iterate({
+    from,
+    to,
+    enter: (n) => {
+      if (n.from >= from && n.to <= to) return false;
+      let markup: [number, number][];
+      let text: [number, number];
+      if (n.name === 'Link') {
+        const info = linkFromNode(state, n.node);
+        if (!info || revealed?.from === info.from) return false;
+        markup = [
+          [info.from, info.labelFrom],
+          [info.labelTo, info.to],
+        ];
+        text = [info.labelFrom, info.labelTo];
+      } else if (WRAPPED[n.name]) {
+        const marks = n.node.getChildren(WRAPPED[n.name]);
+        if (marks.length < 2) return;
+        const [first, last] = [marks[0], marks[marks.length - 1]];
+        markup = [
+          [first.from, first.to],
+          [last.from, last.to],
+        ];
+        text = [first.to, last.from];
+      } else return;
+      if (from <= text[0] && to >= text[1]) ranges.push({ from: n.from, to: n.to });
+      else for (const [a, b] of markup) cut(a, b);
+      return n.name === 'Link' ? false : undefined;
+    },
+  });
+  ranges.sort((a, b) => a.from - b.from);
+  const merged: { from: number; to: number }[] = [];
+  for (const r of ranges) {
+    const last = merged[merged.length - 1];
+    if (last && r.from <= last.to) last.to = Math.max(last.to, r.to);
+    else if (r.to > r.from) merged.push({ ...r });
+  }
+  return merged;
+}
+
+/** Line formatting that Backspace at the start of the text removes (heading, bullet, task, quote). */
+const LINE_FORMAT = /^\s*(#{1,6} |[-*+] \[[ xX]\] |[-*+] |> ?)$/;
+
+/** Backspace (dir -1) and Delete (dir 1) that treat the formatted text as the text. */
+function deleteSmart(view: EditorView, preview: Preview | undefined, dir: -1 | 1): boolean {
+  const { state } = view;
+  if (!preview || state.readOnly || state.field(renameField, false) || state.selection.ranges.length > 1) return false;
+  const sel = state.selection.main;
+  let changes: { from: number; to: number }[];
+  if (!sel.empty) {
+    changes = safeDeletion(state, sel.from, sel.to);
+  } else {
+    let pos = sel.head;
+    const line = state.doc.lineAt(pos);
+    if (dir < 0 && pos > line.from && LINE_FORMAT.test(state.sliceDoc(line.from, pos))) {
+      changes = [{ from: line.from, to: pos }];
+    } else {
+      // Step over hidden markup; a widget standing for content is deleted whole.
+      let object: { from: number; to: number } | null = null;
+      for (let moved = true; moved && !object; ) {
+        moved = false;
+        preview.hidden.between(pos, pos, (a, b) => {
+          if (dir < 0 ? b === pos && a < pos : a === pos && b > pos) {
+            pos = dir < 0 ? a : b;
+            moved = true;
+            return false;
+          }
+        });
+        preview.objects.between(pos, pos, (a, b) => {
+          if (dir < 0 ? b === pos && a < pos : a === pos && b > pos) object = { from: a, to: b };
+        });
+      }
+      if (object) changes = [object];
+      else {
+        if (dir < 0 ? pos === 0 : pos === state.doc.length) return true;
+        const l = state.doc.lineAt(pos);
+        const other =
+          dir < 0
+            ? pos === l.from
+              ? pos - 1
+              : l.from + findClusterBreak(l.text, pos - l.from, false)
+            : pos === l.to
+              ? pos + 1
+              : l.from + findClusterBreak(l.text, pos - l.from, true);
+        changes = safeDeletion(state, Math.min(pos, other), Math.max(pos, other));
+      }
+    }
+  }
+  if (!changes.length) return true;
+  const set = state.changes(changes as ChangeSpec[]);
+  const anchor = set.mapPos(sel.empty ? Math.min(...changes.map((c) => c.from)) : sel.from, -1);
+  view.dispatch({ changes: set, selection: { anchor }, scrollIntoView: true, userEvent: dir < 0 ? 'delete.backward' : 'delete.forward' });
+  return true;
 }
 
 // ---------- Formatting commands ----------
@@ -710,6 +942,7 @@ export function createNoteEditor(parent: HTMLElement, opts: NoteEditorOptions): 
       renameKeymap,
       flashField,
       activeLinkField,
+      revealField,
       livePreview(opts),
       renderedTables(opts),
       hoverTooltip(

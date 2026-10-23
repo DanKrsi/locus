@@ -59,6 +59,7 @@
 }
 
 [data-mode='dark'] {
+  color-scheme: dark;
   --page: #16191b;
   --panel: #1e2225;
   --panel-2: #23282b;

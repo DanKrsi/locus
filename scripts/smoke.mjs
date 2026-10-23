@@ -210,6 +210,11 @@ await step('history: what changed, open a file as it was, browse a version', asy
   await win.getByRole('button', { name: 'Browse all files from this version' }).click();
   await win.getByText('deleted later').first().waitFor({ timeout: 10000 });
   await shot('browser-old-version');
+  // Back returns to the history dialog on the same version.
+  await win.getByRole('button', { name: 'Back to version history' }).click();
+  await win.locator('.history-item.selected', { hasText: 'Before retry refactor' }).waitFor({ timeout: 5000 });
+  await win.getByRole('button', { name: 'Browse all files from this version' }).click();
+  await win.getByText('deleted later').first().waitFor({ timeout: 10000 });
   await win.keyboard.press('Escape');
   // Opening the browser again starts at the latest version.
   await win.keyboard.press('Control+P');

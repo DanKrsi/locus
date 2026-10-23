@@ -18,17 +18,20 @@ const KIND_LABEL: Record<FileChange['kind'], [string, string]> = {
 export function HistoryDialog({
   versions,
   terminology,
+  initialSelected,
   onOpenFile,
   onBrowse,
   onClose,
 }: {
   versions: Version[];
   terminology: Terminology;
+  /** Version to show first (default: the latest). */
+  initialSelected?: string;
   onOpenFile(path: string, sha: string): void;
   onBrowse(sha: string): void;
   onClose(): void;
 }) {
-  const [selected, setSelected] = useState<string | null>(versions[0]?.sha ?? null);
+  const [selected, setSelected] = useState<string | null>(initialSelected ?? versions[0]?.sha ?? null);
   const [changes, setChanges] = useState<FileChange[] | null>(null);
 
   useEffect(() => {

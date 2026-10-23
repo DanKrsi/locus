@@ -66,10 +66,12 @@ lines from a quote, and records the version.
 
 **From the app (easiest):** when Locus finds Claude Code or Claude Desktop on the computer, it
 offers to connect them (and again after an update brings newer Claude tools); it's also in
-**Settings → Claude**. For Claude Code it installs the Locus plugin into `~/.claude/skills/locus`
-with its server running on Locus itself, so neither Node nor git needs installing; a plugin
-installed from the marketplace is updated instead. For Claude Desktop it opens the bundled
-extension and Claude asks you to confirm.
+**Settings → Claude**. Both run the MCP server inside Locus, on Locus itself, so neither Node nor
+git needs installing and updating Locus updates what Claude uses (restart Claude Desktop, or open
+a new Claude Code session). For Claude Code it installs the Locus plugin into
+`~/.claude/skills/locus` (a plugin installed from the marketplace is updated instead); for
+Claude Desktop it adds a `locus` entry to `claude_desktop_config.json`, keeping a backup of the
+original. Uninstalling Locus removes both.
 
 **Claude Code by hand** (plugin with the MCP server and a skill that teaches how to write a good tour):
 
@@ -80,9 +82,9 @@ claude plugin install locus@locus
 
 Then, in a workspace folder: "give me a tour of this codebase as a Locus note".
 
-**Claude Desktop**: build the extension with `npm run build:extension` and double-click
-`release/locus.mcpb`. It bundles its own git, so nothing else needs installing. Use the
-"Write a tour" prompt from the + menu.
+**Claude Desktop as an extension** (optional, instead of the app's setup): build it with
+`npm run build:extension` and double-click `release/locus.mcpb`. It bundles its own git and
+doesn't update with the app. Use the "Write a tour" prompt from the + menu.
 
 ## Install (Windows)
 

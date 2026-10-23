@@ -65,7 +65,7 @@ await app.close();
 // The Claude Code setup runs the bundled MCP server on Locus itself, with only the bundled git.
 const unpacked = join(repo, 'release', 'win-unpacked', 'resources');
 await step('Claude files are packaged', async () => {
-  for (const p of ['app.asar.unpacked/plugin/server/server.mjs', 'app.asar.unpacked/plugin/skills/locus/SKILL.md', 'claude/locus.mcpb'])
+  for (const p of ['app.asar.unpacked/plugin/server/server.mjs', 'app.asar.unpacked/plugin/skills/locus/SKILL.md'])
     if (!existsSync(join(unpacked, p))) throw new Error(`missing ${p}`);
 });
 await step('MCP server runs on Locus.exe without system git', async () => {

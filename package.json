@@ -1,7 +1,7 @@
 {
   "name": "locus",
   "productName": "Locus",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Write markdown notes that link to exact places in PDFs, code, spreadsheets and their versions.",
   "license": "MIT",
   "private": true,
@@ -22,8 +22,9 @@
     "build:extension": "node scripts/build-extension.mjs",
     "test:isolated": "npm run build:plugin && npm run build:extension && node scripts/test-isolated.mjs",
     "test:sharing": "npm run build && node scripts/make-test-workspace.mjs && node scripts/test-sharing.mjs",
-    "dist": "npm run build && npm run build:plugin && npm run build:extension && electron-builder --win nsis",
-    "sample": "npm run build && npm run build:mcp && node scripts/make-sample.mjs"
+    "dist": "npm run build && npm run build:plugin && electron-builder --win nsis",
+    "sample": "npm run build && npm run build:mcp && node scripts/make-sample.mjs",
+    "test:claude": "npm run build && npm run build:plugin && node scripts/test-claude-setup.mjs"
   },
   "dependencies": {
     "dugite": "^3.3.0"
@@ -118,12 +119,6 @@
         "schemes": [
           "locus"
         ]
-      }
-    ],
-    "extraResources": [
-      {
-        "from": "release/locus.mcpb",
-        "to": "claude/locus.mcpb"
       }
     ]
   }

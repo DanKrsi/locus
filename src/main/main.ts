@@ -9,7 +9,7 @@ import { parseDestination, resolvePath } from '../core/link';
 import { extractLinks } from '../core/mdlinks';
 import { movedPath, rewriteLinks } from '../core/rewrite';
 import { canvasLinks, isCanvas, rewriteCanvas } from '../core/canvas';
-import { claudeStatus, connectClaude } from './claude';
+import { claudeStatus, connectClaude, refreshClaude, removeClaude } from './claude';
 import { mapLines } from '../core/remap';
 import { fileKind } from '../core/link';
 import type { Citation, GitHubAccount } from '../shared/api';
@@ -510,7 +510,13 @@ function deliverOpen(req: string | null) {
   else pendingOpen = req;
 }
 
-if (!process.env.LOCUS_USER_DATA && !app.requestSingleInstanceLock()) {
+// The uninstaller runs Locus with --remove-claude to take out what Locus added to Claude.
+const removingClaude = process.argv.includes('--remove-claude');
+if (removingClaude) {
+  void removeClaude()
+    .catch(() => undefined)
+    .finally(() => app.exit(0));
+} else if (!process.env.LOCUS_USER_DATA && !app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   app.on('second-instance', (_e, argv) => {
@@ -530,6 +536,7 @@ ipcMain.handle('pending-open', () => {
 });
 
 app.whenReady().then(() => {
+  if (removingClaude) return;
   protocol.handle('app', (req) => {
     const { pathname } = new URL(req.url);
     const file = join(RENDERER_DIR, decodeURIComponent(pathname));
@@ -537,6 +544,9 @@ app.whenReady().then(() => {
     return net.fetch(pathToFileURL(file).toString());
   });
   createWindow();
+  // Keep the Claude setup Locus made pointing at this install (installed builds only, so a
+  // development run never repoints someone's Claude at it).
+  if (app.isPackaged || process.env.LOCUS_CLAUDE_REFRESH) void refreshClaude().catch(() => undefined);
 });
 
 app.on('window-all-closed', () => app.quit());

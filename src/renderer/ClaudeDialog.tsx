@@ -58,7 +58,7 @@ export function ClaudeDialog({ first, onClose }: { first: boolean; onClose(): vo
           <span className={'badge ' + (upToDate ? 'accent' : s?.found ? 'mark' : 'muted')}>{state}</span>
           {s?.found && !upToDate && (
             <button className="primary" disabled={busy !== null} onClick={() => void connect(t)}>
-              {busy === t ? 'Working…' : installed ? 'Update' : t === 'desktop' ? 'Install' : 'Connect'}
+              {busy === t ? 'Working…' : installed ? 'Update' : 'Connect'}
             </button>
           )}
         </div>
@@ -80,7 +80,7 @@ export function ClaudeDialog({ first, onClose }: { first: boolean; onClose(): vo
             you; nothing is sent anywhere.
           </div>
           {row('code', 'Claude Code', 'Adds the Locus tools and skill to Claude Code')}
-          {row('desktop', 'Claude Desktop', 'Installs the Locus extension; Claude asks you to confirm')}
+          {row('desktop', 'Claude Desktop', 'Adds Locus to Claude Desktop; reopen Claude Desktop afterwards')}
           {none && <div className="muted">Neither Claude Code nor Claude Desktop is installed on this computer. Install one, then come back here from Settings.</div>}
         </div>
         <div className="dialog-foot">

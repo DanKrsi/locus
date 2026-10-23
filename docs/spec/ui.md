@@ -174,13 +174,18 @@ Locus looks for Claude Code (the `claude` command, or `~/.claude`) and Claude De
 Locus asks once per app version ("Use Locus with Claude?"); **Settings → Claude → Set up Claude…**
 opens the same dialog any time, with each app's status and a Connect / Update / Install button.
 
+- Both run the MCP server that ships inside Locus, with `Locus.exe` as Node
+  (`ELECTRON_RUN_AS_NODE`) and the app's bundled git, so updating Locus updates what Claude uses
+  (after restarting Claude Desktop or starting a new Claude Code session).
 - **Claude Code**: a plugin installed from the marketplace is updated with `claude plugin
-  update`. Otherwise Locus writes a plugin folder to `~/.claude/skills/locus` (plugin.json,
-  the skill, and `.mcp.json` running the bundled server with `Locus.exe` as Node via
-  `ELECTRON_RUN_AS_NODE`, using the app's bundled git). Claude Code loads it as
-  `locus@skills-dir` in its next session.
-- **Claude Desktop**: opens the bundled `locus.mcpb`; Claude Desktop shows its install
-  confirmation. Installed status is read from Claude's extension folders.
+  update`. Otherwise Locus writes a plugin folder to `~/.claude/skills/locus` (plugin.json, the
+  skill, and `.mcp.json`); Claude Code loads it as `locus@skills-dir` in its next session.
+- **Claude Desktop**: Locus adds a `locus` entry to `mcpServers` in
+  `%APPDATA%\Claude\claude_desktop_config.json`, leaving everything else as it was and keeping the
+  original as `claude_desktop_config.json.before-locus`; a file that isn't valid JSON is left alone.
+- On every start, an installed Locus quietly brings its own Claude setup up to date (a newer
+  skill, or Locus moved); it never touches anything it didn't write.
+- Uninstalling Locus (not updating it) removes the plugin folder and the Desktop entry.
 - Nothing leaves the computer; no config files are edited by hand.
 
 - **Terminology**: *Simple* (default) or *Git*. Changes words only, never behaviour, except

@@ -56,10 +56,14 @@ the toolbar), and the file browser's version selector resets to Latest each time
   right side: **Link to section** and **Tour**.
 - Editor: a **formatted view** (CodeMirror 6). Markdown renders in place and its markup stays
   hidden while editing; the cursor steps over hidden markup. Markdown shortcuts work as you type.
-  A link's label is ordinary text: typing and Backspace edit it, and deleting its last letter
-  removes the link. Backspace at the start of a heading, bullet, task or quote removes that
-  formatting. Tables open as markdown on double-click; **Edit target** in a link's hover card
-  shows that link's markdown until the cursor leaves it.
+  A link's label is ordinary text: Backspace and typing inside it edit it, deleting its last
+  letter removes the link, and typing at its end writes after the link. Backspace at the start
+  of a heading, bullet, task or quote removes that formatting. **Edit target** in a link's hover
+  card shows that link's markdown until the cursor leaves it.
+- Tables are always shown as tables, including straight after **Table** inserts one. Clicking a
+  cell edits it in place (same formatted view); Tab / Shift+Tab and Enter move between cells,
+  Tab from the last cell adds a row, Esc finishes. While a cell is edited, buttons under the
+  table insert a row above or below, a column left or right, or delete the row, column or table.
 - The file on disk is the source of truth: only edited lines change; line endings and
   encoding are preserved. Autosave after a pause, with a small "Saved" toast.
 

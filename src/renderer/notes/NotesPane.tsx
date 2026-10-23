@@ -20,6 +20,7 @@ import {
   toggleWrap,
   type NoteEditorOptions,
 } from './editor';
+import { insertTable } from './tables';
 
 export interface NotesHandle {
   activeView(): EditorView | null;
@@ -303,7 +304,7 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
         {tool('numList', 'Numbered list', (v) => toggleLinePrefix(v, '1. '))}
         {tool('task', 'Task list', (v) => toggleLinePrefix(v, '- [ ] '))}
         {tool('quote', 'Quote', (v) => toggleLinePrefix(v, '> '))}
-        {tool('table', 'Table', (v) => insertBlock(v, '| Column | Column |\n| --- | --- |\n|  |  |', 2))}
+        {tool('table', 'Table', (v) => insertTable(v))}
         {tool('hr', 'Horizontal rule', (v) => insertBlock(v, '---'))}
         {tool('link', 'Web link (Ctrl+K)', insertLink)}
         <div className="sep" />

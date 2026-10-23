@@ -622,6 +622,20 @@ svg.ico { width: 16px; height: 16px; flex: none; }
 .slides-host .pptx-preview-wrapper { background: transparent !important; height: auto !important; overflow: visible !important; }
 .cm-md-table th, .cm-md-table td { overflow-wrap: normal; word-break: normal; min-width: 3em; }
 .cm-md-table th { white-space: nowrap; }
+.cm-md-table td, .cm-md-table th { cursor: text; }
+.cm-md-table .editing-cell { outline: 2px solid var(--accent); outline-offset: -2px; background: var(--panel) !important; }
+.cm-md-table .editing-cell .cm-editor { outline: none; background: transparent; }
+.cm-md-table .editing-cell .cm-scroller { font-family: inherit; line-height: inherit; overflow: visible; }
+.cm-md-table .editing-cell .cm-content { padding: 0; min-width: 2em; }
+.cm-md-table .editing-cell .cm-line { padding: 0; }
+/* Row and column buttons under the table while a cell is being edited */
+.cm-table-tools { display: none; gap: 4px; margin-top: 6px; flex-wrap: wrap; }
+.cm-md-table.editing .cm-table-tools { display: flex; }
+.cm-table-tools button { font-size: 12.5px; padding: 3px 9px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--text); cursor: pointer; }
+.cm-table-tools button:hover:not(:disabled) { background: var(--accent-soft); border-color: var(--accent); }
+.cm-table-tools button.danger { color: var(--danger); }
+.cm-table-tools button.danger:hover:not(:disabled) { background: color-mix(in srgb, var(--danger) 12%, transparent); border-color: var(--danger); }
+.cm-table-tools button:disabled { opacity: 0.45; cursor: default; }
 
 /* Light / dark switch in Settings */
 .segmented { display: inline-flex; border: 1px solid var(--border-strong); border-radius: 8px; padding: 2px; gap: 2px; background: var(--panel-2); }

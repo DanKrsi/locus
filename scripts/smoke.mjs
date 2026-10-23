@@ -53,6 +53,54 @@ await step('markdown tables render as tables', async () => {
   await win.locator('.cm-md-table table').waitFor({ timeout: 5000 });
 });
 
+const reviewText = () => win.evaluate(() => window.api.readText('/notes/review.md'));
+const rawTableShown = () => win.locator('.cm-line', { hasText: '| ---' }).count();
+
+await step('edit a table cell in place, add a row and a column', async () => {
+  const table = win.locator('.cm-md-table', { hasText: 'Retry cap' });
+  await table.locator('td', { hasText: 'TBD' }).click();
+  await table.locator('.editing-cell .cm-content').waitFor({ timeout: 5000 });
+  if (await rawTableShown()) throw new Error('table markdown shown while editing a cell');
+  await win.keyboard.press('Control+A');
+  await win.keyboard.type('Ana');
+  // Tab saves the cell and moves on; Tab from the last cell adds a row.
+  await win.keyboard.press('Tab');
+  await win.keyboard.type('Backoff');
+  await win.keyboard.press('Escape');
+  await table.locator('td', { hasText: 'Backoff' }).waitFor({ timeout: 5000 });
+  await table.locator('td', { hasText: 'Ana' }).click();
+  await table.getByRole('button', { name: '→ Column' }).click();
+  await table.locator('.editing-cell').waitFor({ timeout: 5000 });
+  await win.keyboard.type('Due');
+  await table.getByRole('button', { name: '↑ Row' }).click();
+  await win.keyboard.press('Escape');
+  await win.keyboard.press('Control+S');
+  const text = await reviewText();
+  const rows = text.split('\n').filter((l) => l.startsWith('|') && !l.startsWith('| ---'));
+  const want = ['| Item | Owner |  |', '| Retry cap | Dan |  |', '|  |  |  |', '| Jitter | Ana | Due |', '| Backoff |  |  |'];
+  const got = rows.slice(0, 5).map((r) => r.trim());
+  if (JSON.stringify(got) !== JSON.stringify(want)) throw new Error('table is now:\n' + got.join('\n'));
+  if (await rawTableShown()) throw new Error('table markdown shown after editing');
+  await shot('table-edited');
+});
+
+await step('insert a table: it is a table straight away', async () => {
+  await win.locator('.editor-wrap .cm-line').first().click();
+  await win.keyboard.press('Control+End');
+  await win.getByTitle('Table', { exact: true }).click();
+  await win.locator('.cm-md-table .editing-cell').waitFor({ timeout: 5000 });
+  if (await rawTableShown()) throw new Error('new table shown as markdown');
+  await win.keyboard.type('Name');
+  await win.keyboard.press('Tab');
+  await win.keyboard.type('Value');
+  await win.keyboard.press('Enter');
+  await win.keyboard.type('42');
+  await win.keyboard.press('Escape');
+  await win.keyboard.press('Control+S');
+  const text = await reviewText();
+  if (!text.includes('| Name | Value |\n| --- | --- |\n|  | 42 |')) throw new Error('new table saved as:\n' + text.slice(text.lastIndexOf('| Name') - 2));
+});
+
 await step('Open note lists notes only and opens on the left', async () => {
   await win.getByRole('button', { name: 'Open note' }).first().click();
   await win.locator('.locus-dialog h2', { hasText: 'Open note' }).waitFor();
@@ -87,12 +135,25 @@ await step('follow a spreadsheet named range', async () => {
   await shot('sheet-named');
 });
 
+// CodeMirror opens hover cards on mouse movement, so move onto the link in a few steps; a quick
+// pass sometimes doesn't settle, so move off and back once if no card shows.
+const hoverLink = async (label) => {
+  for (let attempt = 0; ; attempt++) {
+    const box = await win.locator('.cm-ref', { hasText: label }).boundingBox();
+    await win.mouse.move(box.x - 40, box.y + box.height / 2);
+    await win.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 5 });
+    try {
+      await win.locator('.hover-card').waitFor({ timeout: 3000 });
+      return;
+    } catch (e) {
+      if (attempt) throw e;
+      await win.mouse.move(5, 500);
+    }
+  }
+};
+
 await step('hover card', async () => {
-  // CodeMirror opens hover cards on mouse movement, so move onto the link in a few steps.
-  const box = await win.locator('.cm-ref', { hasText: 'BDS-100 p5' }).boundingBox();
-  await win.mouse.move(box.x - 40, box.y + box.height / 2);
-  await win.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 5 });
-  await win.locator('.hover-card').waitFor({ timeout: 5000 });
+  await hoverLink('BDS-100 p5');
   await win.waitForTimeout(800);
   await shot('hover-card');
   await win.mouse.move(5, 500);
@@ -105,7 +166,7 @@ await step('broken link is marked', async () => {
 await step('cite a PDF page with the rename box', async () => {
   await win.locator('.tab', { hasText: 'BDS-100' }).click();
   // Put the cursor at the end of the note.
-  await win.locator('.editor-wrap .cm-content').click();
+  await win.locator('.editor-wrap .cm-line').first().click();
   await win.keyboard.press('Control+End');
   await win.keyboard.type('\n\nNew citation: ');
   await win.getByRole('button', { name: /Cite (page|area)/ }).click();
@@ -125,11 +186,11 @@ await step('editing keeps the formatted view: link labels edit as text', async (
   await win.keyboard.press('Backspace');
   await win.locator('.cm-ref', { hasText: /^Scope sect$/ }).waitFor({ timeout: 5000 });
   if ((await line.textContent()).includes('](')) throw new Error('link markdown showed while editing');
-  await win.keyboard.type('ion');
-  await win.locator('.cm-ref', { hasText: /^Scope section$/ }).waitFor({ timeout: 5000 });
+  // Typing at the end of the label writes after the link, not into it.
+  await win.keyboard.type(' and more');
   await win.keyboard.press('Control+S');
   const saved = await win.evaluate(() => window.api.readText('/notes/review.md'));
-  if (!/New citation: \[Scope section\]\(/.test(saved)) throw new Error('label edit not saved as a link');
+  if (!/New citation: \[Scope sect\]\([^)]*\) and more/.test(saved)) throw new Error('typing after a link changed the link: ' + saved.split('\n').find((l) => l.includes('New citation')));
   // Clicking a heading keeps it formatted; Backspace at its start turns it into plain text.
   const heading = win.locator('.cm-line.cm-h2', { hasText: 'Loads' });
   await heading.click();
@@ -162,9 +223,7 @@ await step('cited-in markers and list', async () => {
 });
 
 await step('compare a pinned reference with latest (code diff)', async () => {
-  const box = await win.locator('.cm-ref', { hasText: 'a fixed sleep' }).boundingBox();
-  await win.mouse.move(box.x - 40, box.y + box.height / 2);
-  await win.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 5 });
+  await hoverLink('a fixed sleep');
   await win.getByRole('button', { name: 'Compare with latest' }).click();
   await win.locator('.cm-mergeView').waitFor({ timeout: 10000 });
   await win.locator('.cm-changedLine').first().waitFor({ timeout: 5000 });
@@ -291,7 +350,7 @@ await step('restored tabs that no longer exist are dropped', async () => {
 });
 
 const noteText = await win.evaluate(() => window.api.readText('/notes/review.md'));
-const citedLine = noteText.split('\n').find((l) => l.includes('Scope section'));
+const citedLine = noteText.split('\n').find((l) => l.includes('New citation'));
 console.log('     inserted:', citedLine);
 if (errors.length) console.log('Console errors:\n  ' + errors.slice(0, 10).join('\n  '));
 await app.close();

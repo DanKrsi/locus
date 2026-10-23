@@ -362,6 +362,14 @@ class WebLinkWidget extends WidgetType {
   }
 }
 
+/** The link whose label ends exactly at pos, when its target is hidden after it. */
+function labelEndingAt(state: EditorState, pos: number): LinkInfo | null {
+  const info = linkAt(state, pos);
+  if (!info || info.image || info.labelTo !== pos || info.labelTo === info.labelFrom) return null;
+  if (state.field(renameField, false) || state.field(revealField, false)?.from === info.from) return null;
+  return info;
+}
+
 /** Follows the link at a position: web links open in the browser, references in the viewer. */
 function followAt(view: EditorView, pos: number, onFollow: (info: LinkInfo) => void) {
   const info = linkAt(view.state, pos);
@@ -688,13 +696,54 @@ function livePreview(opts: NoteEditorOptions): Extension {
         return true;
       },
     }),
+    // Typing at the end of a link's label writes after the link, not into it.
+    EditorView.inputHandler.of((view, from, to, text) => {
+      const info = from === to ? labelEndingAt(view.state, from) : null;
+      if (!info) return false;
+      view.dispatch({ changes: { from: info.to, insert: text }, selection: { anchor: info.to + text.length }, userEvent: 'input.type' });
+      return true;
+    }),
     Prec.high(
       keymap.of([
         { key: 'Backspace', run: (v) => deleteSmart(v, preview(v), -1) },
         { key: 'Delete', run: (v) => deleteSmart(v, preview(v), 1) },
+        {
+          // A new line from the end of a label starts after the link (then Enter runs as usual).
+          key: 'Enter',
+          run: (v) => {
+            const info = v.state.selection.ranges.length === 1 && v.state.selection.main.empty ? labelEndingAt(v.state, v.state.selection.main.head) : null;
+            if (info) v.dispatch({ selection: { anchor: info.to } });
+            return false;
+          },
+        },
       ]),
     ),
   ];
+}
+
+/** Extensions for a small editor of one table cell: the same formatted view, on one line. */
+export function inlineEditorExtensions(opts: NoteEditorOptions): Extension {
+  return [
+    history(),
+    drawSelection(),
+    markdown({ base: markdownLanguage }),
+    syntaxHighlighting(codeHighlight),
+    livePreview(opts),
+    keymap.of([
+      { key: 'Mod-b', run: (v) => (toggleWrap(v, '**'), true) },
+      { key: 'Mod-i', run: (v) => (toggleWrap(v, '*'), true) },
+      { key: 'Mod-e', run: (v) => (toggleWrap(v, '`'), true) },
+      ...historyKeymap,
+      ...defaultKeymap,
+    ]),
+  ];
+}
+
+/** Whether the line holding pos is part of a markdown table (tables are edited cell by cell). */
+function inTable(state: EditorState, pos: number): boolean {
+  for (let n: SyntaxNode | null = syntaxTree(state).resolveInner(pos, 1); n; n = n.parent) if (n.name === 'Table') return true;
+  for (let n: SyntaxNode | null = syntaxTree(state).resolveInner(pos, -1); n; n = n.parent) if (n.name === 'Table') return true;
+  return false;
 }
 
 // ---------- Deleting in the formatted view ----------
@@ -795,6 +844,7 @@ function deleteSmart(view: EditorView, preview: Preview | undefined, dir: -1 | 1
       else {
         if (dir < 0 ? pos === 0 : pos === state.doc.length) return true;
         const l = state.doc.lineAt(pos);
+        if (dir < 0 ? pos === l.from && inTable(state, pos - 1) : pos === l.to && inTable(state, pos + 1)) return true;
         const other =
           dir < 0
             ? pos === l.from

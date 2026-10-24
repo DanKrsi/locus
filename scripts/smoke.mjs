@@ -339,7 +339,27 @@ await step('compare two PDF versions side by side', async () => {
   await win.locator('.tab.active', { hasText: 'BDS-100' }).waitFor({ timeout: 10000 });
   await win.locator('.viewer:not(.hidden) .strip-btn', { hasText: 'Compare' }).filter({ visible: true }).click();
   await win.locator('.compare-split .pdf-page').first().waitFor({ timeout: 15000 });
+  // Both sides open at the same page as the citation (page 5).
+  const pages = () => win.locator('.viewer:not(.hidden) .compare-split .side .toolbar input').evaluateAll((els) => els.map((e) => e.value));
+  await win.waitForFunction(() => [...document.querySelectorAll('.viewer:not(.hidden) .compare-split .side .toolbar input')].every((e) => e.value === '5'), null, { timeout: 10000 }).catch(() => undefined);
+  if ((await pages()).join() !== '5,5') throw new Error('sides not on the same page: ' + (await pages()).join());
   await shot('compare-pdf');
+  await win.getByRole('button', { name: 'Stop comparing' }).click();
+});
+
+await step('compare a spreadsheet: both sides open at the same cells', async () => {
+  await win.locator('.cm-ref', { hasText: 'Load cases (Mar 3)' }).click();
+  await win.locator('.viewer:not(.hidden) .cited-box').waitFor({ timeout: 15000 });
+  await win.waitForTimeout(400);
+  // Scroll away from the citation: the comparison should open where the reader is now.
+  await win.locator('.viewer:not(.hidden) .grid-scroll').evaluate((el) => (el.scrollTop = 200));
+  await win.waitForTimeout(400);
+  await win.locator('.viewer:not(.hidden) .strip-btn', { hasText: 'Compare' }).filter({ visible: true }).click();
+  await win.locator('.viewer:not(.hidden) .compare-split .grid-scroll').nth(1).waitFor({ timeout: 15000 });
+  const tops = () => win.locator('.viewer:not(.hidden) .compare-split .grid-scroll').evaluateAll((els) => els.map((e) => `${e.scrollTop},${e.scrollLeft}`));
+  await win.waitForTimeout(800);
+  const [l, r] = await tops();
+  if (l !== r || l.startsWith('0,')) throw new Error(`grids not at the reader's place: ${l} vs ${r}`);
   await win.getByRole('button', { name: 'Stop comparing' }).click();
 });
 

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { basename, parseDestination, type FileKind } from '../../core/link';
+import { basename, parseDestination, type FileKind, type Location } from '../../core/link';
 import type { Citation, Terminology, Version } from '../../shared/api';
 import { api } from '../api';
 import { loadBytes } from '../files';
@@ -146,6 +146,7 @@ interface BodyProps {
   handle(h: ViewerHandle | null): void;
   zoom: number;
   onZoom(z: number): void;
+  onPlace?(loc: Location): void;
   children?: React.ReactNode;
 }
 
@@ -200,6 +201,26 @@ function DocView({ tab, visible, hop, ...p }: Props & { tab: DocTab; visible: bo
   const onMark = (m: CiteMark) => p.onOpenCitation(m);
   const leftTab: DocTab = { ...tab, id: `${tab.id}:left`, rev: leftRev, compare: undefined, reveal: undefined };
 
+  // Where the reader is in this document (the right side when comparing), kept as they scroll.
+  // A comparison opens both sides there, and picking another version for a side keeps the place.
+  const place = useRef<Location | null>(null);
+  const onPlace = (loc: Location) => (place.current = loc);
+  const [sides, setSides] = useState<{ left?: RevealRequest; right?: RevealRequest }>({});
+  useEffect(() => {
+    if (!tab.compare) return setSides({});
+    const loc = place.current ?? tab.reveal?.loc;
+    if (!loc) return;
+    const r = { loc, nonce: Date.now(), follow: true };
+    setSides({ left: r, right: r });
+  }, [tab.compare, tab.rev]);
+  // Following a citation while comparing: the right side shows it, the left goes to the same place.
+  const lastReveal = useRef(tab.reveal?.nonce);
+  useEffect(() => {
+    if (!tab.reveal || tab.reveal.nonce === lastReveal.current) return;
+    lastReveal.current = tab.reveal.nonce;
+    if (tab.compare) setSides({ left: { loc: tab.reveal.loc, nonce: Date.now(), follow: true }, right: tab.reveal });
+  }, [tab.reveal?.nonce]);
+
   const strip = !tab.external && (
     <VersionStrip
       tab={tab}
@@ -245,7 +266,7 @@ function DocView({ tab, visible, hop, ...p }: Props & { tab: DocTab; visible: bo
       tab.kind === 'code' || tab.kind === 'markdown' ? (
         <div className="compare-wrap">
           {head}
-          <DiffViewer left={left.data} right={main.data} path={tab.path} />
+          <DiffViewer left={left.data} right={main.data} path={tab.path} reveal={sides.right} />
         </div>
       ) : (
         <div className="compare-wrap">
@@ -262,6 +283,7 @@ function DocView({ tab, visible, hop, ...p }: Props & { tab: DocTab; visible: bo
                 onCite={() => p.onCite(leftTab)}
                 zoom={p.docZoom}
                 onZoom={p.onDocZoom}
+                reveal={sides.left}
                 handle={(h) => p.registerHandle(leftTab.id, h)}
               />
               </CiteModeContext.Provider>
@@ -273,7 +295,8 @@ function DocView({ tab, visible, hop, ...p }: Props & { tab: DocTab; visible: bo
                 data={main.data}
                 marks={marks}
                 onMark={onMark}
-                reveal={tab.reveal}
+                reveal={sides.right ?? tab.reveal}
+                onPlace={onPlace}
                 onCite={() => p.onCite(tab)}
                 handle={(h) => p.registerHandle(tab.id, h)}
                 zoom={p.docZoom}
@@ -290,6 +313,7 @@ function DocView({ tab, visible, hop, ...p }: Props & { tab: DocTab; visible: bo
         path={tab.path}
         data={main.data}
         reveal={tab.reveal}
+        onPlace={onPlace}
         marks={marks}
         onMark={onMark}
         onCite={() => p.onCite(tab)}

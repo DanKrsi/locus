@@ -68,7 +68,7 @@ const boxOf = (a: Pt, b: Pt): CellBox => ({
   right: Math.max(a.c, b.c),
 });
 
-export function SheetViewer({ data, path, reveal, onCite, handle, zoom = 1, children }: ViewerProps) {
+export function SheetViewer({ data, path, reveal, onCite, handle, onPlace, zoom = 1, children }: ViewerProps) {
   const HEAD_H = Math.round(HEAD_H_100 * zoom);
   const HEAD_W = Math.round(HEAD_W_100 * zoom);
   const [wb, setWb] = useState<WorkbookModel | null>(null);
@@ -134,6 +134,7 @@ export function SheetViewer({ data, path, reveal, onCite, handle, zoom = 1, chil
 
   /** When the grid was first shown (0 until then): later jumps glide instead of snapping. */
   const readySince = useRef(0);
+  const placeTimer = useRef<number | undefined>(undefined);
   const scrollIntoView = (box: CellBox, toLabel?: string) => {
     const el = scrollRef.current;
     if (!el) return;
@@ -164,6 +165,19 @@ export function SheetViewer({ data, path, reveal, onCite, handle, zoom = 1, chil
     if (!wb || !reveal?.loc.sheet) return;
     const hit = resolveSheetRef(wb, reveal.loc.sheet);
     if (!hit) return;
+    if (reveal.follow) {
+      // Keeping the sides of a comparison together: the same sheet and top-left cell, nothing marked.
+      setActive(hit.sheet);
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => {
+          const el = scrollRef.current;
+          if (!el) return;
+          el.scrollTop = rowPre[Math.min(hit.box.top, nRows) - 1] ?? 0;
+          el.scrollLeft = colPre[Math.min(hit.box.left, nCols) - 1] ?? 0;
+        }),
+      );
+      return;
+    }
     // On another sheet the grid is different, so there is nowhere to glide from.
     if (hit.sheet !== active) readySince.current = 0;
     setActive(hit.sheet);
@@ -365,6 +379,14 @@ export function SheetViewer({ data, path, reveal, onCite, handle, zoom = 1, chil
           onScroll={(e) => {
             const el = e.currentTarget;
             setScroll({ top: el.scrollTop, left: el.scrollLeft, w: el.clientWidth, h: el.clientHeight });
+            if (onPlace && sheet) {
+              // Report the top-left cell in view.
+              clearTimeout(placeTimer.current);
+              placeTimer.current = window.setTimeout(() => {
+                const cell = `${colLetters(locate(colPre, el.scrollLeft + 1))}${locate(rowPre, el.scrollTop + 1)}`;
+                onPlace({ sheet: { sheet: sheet.name, range: cell } });
+              }, 120);
+            }
           }}
           onMouseDown={(e) => {
             const p = cellAt(e);

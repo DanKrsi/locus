@@ -31,7 +31,7 @@ function slideElements(root: HTMLElement): HTMLElement[] {
   return direct.length ? direct : ([...wrapper.children] as HTMLElement[]).filter((c) => c.offsetHeight > 50);
 }
 
-export function SlidesViewer({ data, reveal, onCite, handle, marks, onMark, zoom = 1, children }: ViewerProps) {
+export function SlidesViewer({ data, reveal, onCite, handle, marks, onMark, onPlace, zoom = 1, children }: ViewerProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
   const [count, setCount] = useState(0);
@@ -117,9 +117,14 @@ export function SlidesViewer({ data, reveal, onCite, handle, marks, onMark, zoom
   useEffect(() => {
     if (reveal?.loc.slide) {
       pending.current = reveal.loc.slide;
-      goTo(reveal.loc.slide, true, true);
+      goTo(reveal.loc.slide, true, !reveal.follow);
     }
   }, [reveal]);
+
+  // Report the slide in view (keeps the sides of a comparison together).
+  useEffect(() => {
+    onPlace?.({ slide });
+  }, [slide]);
 
   useEffect(() => setInput(String(slide)), [slide]);
 

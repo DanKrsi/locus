@@ -17,6 +17,8 @@ export interface ViewerHandle {
 export interface RevealRequest {
   loc: Location;
   nonce: number;
+  /** Just show this place (keeping the sides of a comparison together): no citation highlight, no glide. */
+  follow?: boolean;
 }
 
 /** A place in this document that some note cites ("Cited in" markers). */
@@ -37,6 +39,8 @@ export interface ViewerProps {
   /** Places other notes cite, for margin/gutter markers. */
   marks?: CiteMark[];
   onMark?(mark: CiteMark): void;
+  /** Reports where the reader is as they scroll (page and position, top line, top-left cell, slide). */
+  onPlace?(loc: Location): void;
   /** Documents zoom (1 = 100%); PDFs use their own zoom instead. */
   zoom?: number;
   /** Rendered at the left of the viewer's toolbar (shared controls). */

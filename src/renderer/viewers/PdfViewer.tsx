@@ -16,7 +16,7 @@ const GAP = 14;
 const PAD = 16;
 const ZOOMS = [0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
 
-export function PdfViewer({ data, reveal, onCite, handle, marks, onMark, children }: ViewerProps) {
+export function PdfViewer({ data, reveal, onCite, handle, marks, onMark, onPlace, children }: ViewerProps) {
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sizes, setSizes] = useState<Size[]>([]);
@@ -134,7 +134,10 @@ export function PdfViewer({ data, reveal, onCite, handle, marks, onMark, childre
   useEffect(() => {
     if (!reveal || !doc) return;
     const { loc } = reveal;
-    if (loc.page) {
+    if (loc.page && reveal.follow) {
+      // Keeping the sides of a comparison together: the same page and position, nothing marked.
+      scrollToPage(loc.page, loc.viewrect?.y);
+    } else if (loc.page) {
       setCited({ page: loc.page, rect: loc.viewrect });
       setArea(null);
       const el = scrollRef.current;
@@ -152,9 +155,21 @@ export function PdfViewer({ data, reveal, onCite, handle, marks, onMark, childre
 
   useEffect(() => setPageInput(labels?.[page - 1] ?? String(page)), [page, labels]);
 
+  const placeTimer = useRef<number | undefined>(undefined);
   const onScroll = () => {
     const el = scrollRef.current;
     if (!el || el.clientHeight === 0) return;
+    if (onPlace) {
+      clearTimeout(placeTimer.current);
+      placeTimer.current = window.setTimeout(() => {
+        // The page at the top of the view, and how far down it is (in the units links use).
+        const offs = offsetsRef.current;
+        let i = 0;
+        while (i + 1 < offs.length && offs[i + 1] <= el.scrollTop) i++;
+        const y = Math.max(0, (el.scrollTop - offs[i] + 60) / scaleRef.current);
+        onPlace({ page: i + 1, viewrect: { x: 0, y: Math.round(y), w: 0, h: 0 } });
+      }, 120);
+    }
     const mark = el.scrollTop + el.clientHeight * 0.3;
     let p = 1;
     for (let i = 0; i < offsets.length; i++) if (offsets[i] <= mark) p = i + 1;

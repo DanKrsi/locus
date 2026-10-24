@@ -163,7 +163,7 @@ per line, so diffs stay readable.
 | Markdown | Rendered; headings can be cited |
 | Image | Fit / zoom; Area tool |
 | Audio / video | Player; Cite time |
-| Compare | Two versions of a file side by side (code: diff view). A bar above the halves has a **Left** and a **Right** dropdown (Latest or any version of the file), a ⇄ swap button and **Stop comparing**. Starting Compare on the latest file with no unsaved edits puts the version before its last one on the left, so there is something to see. |
+| Compare | Two versions of a file side by side (code: diff view). A bar above the halves has a **Left** and a **Right** dropdown (Latest or any version of the file), a ⇄ swap button and **Stop comparing**. Starting Compare on the latest file with no unsaved edits puts the version before its last one on the left, so there is something to see. Both sides open where you were reading (page and position, top line, top-left cell or slide) and stay together when you pick another version for a side; following a citation while comparing brings the left side to the same place. |
 
 ### 5.2 Moving to a citation in the document already open
 

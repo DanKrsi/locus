@@ -65,7 +65,9 @@ const style = HighlightStyle.define([
   { tag: tags.heading, fontWeight: 'bold' },
 ]);
 
-export function CodeViewer({ data, path, reveal, onCite, handle, marks, onMark, zoom = 1, children }: ViewerProps) {
+export function CodeViewer({ data, path, reveal, onCite, handle, marks, onMark, onPlace, zoom = 1, children }: ViewerProps) {
+  const onPlaceRef = useRef(onPlace);
+  onPlaceRef.current = onPlace;
   const zoomRef = useRef(zoom);
   zoomRef.current = zoom;
   const marksRef = useRef<CiteMark[]>([]);
@@ -129,6 +131,15 @@ export function CodeViewer({ data, path, reveal, onCite, handle, marks, onMark, 
     });
     viewRef.current = view;
     readySince.current = 0;
+    // Report the line at the top of the view as the reader scrolls.
+    let placeTimer: number | undefined;
+    view.scrollDOM.addEventListener('scroll', () => {
+      clearTimeout(placeTimer);
+      placeTimer = window.setTimeout(() => {
+        const n = view.state.doc.lineAt(view.lineBlockAtHeight(view.scrollDOM.scrollTop).from).number;
+        onPlaceRef.current?.({ lines: { start: n, end: n } });
+      }, 120);
+    });
     requestAnimationFrame(() => {
       if (view.scrollDOM.clientHeight > 0) readySince.current = performance.now();
     });
@@ -177,7 +188,16 @@ export function CodeViewer({ data, path, reveal, onCite, handle, marks, onMark, 
   };
 
   useEffect(() => {
-    if (reveal?.loc.lines) {
+    if (reveal?.loc.lines && reveal.follow) {
+      // Keeping the sides of a comparison together: the same top line, nothing marked.
+      requestAnimationFrame(() => {
+        const view = viewRef.current;
+        if (!view) return;
+        const doc = view.state.doc;
+        const line = doc.line(Math.min(Math.max(1, reveal.loc.lines!.start), doc.lines));
+        view.dispatch({ effects: EditorView.scrollIntoView(line.from, { y: 'start' }) });
+      });
+    } else if (reveal?.loc.lines) {
       // Wait a frame so a freshly created view has measured itself.
       requestAnimationFrame(() => goToLine(reveal.loc.lines!.start, reveal.loc.lines!.end));
     }

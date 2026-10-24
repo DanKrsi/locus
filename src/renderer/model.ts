@@ -10,7 +10,7 @@ export interface DocTab {
   rev?: string;
   kind: FileKind;
   reveal?: RevealRequest;
-  /** When set, the tab compares this version (left) with rev/latest (right). */
+  /** When set, the tab compares this version (left; LATEST for the current file) with rev/latest (right). */
   compare?: string;
 }
 
@@ -26,3 +26,6 @@ export const newId = () => `t${nextId++}`;
 
 let nonce = 1;
 export const revealOf = (loc: Location): RevealRequest => ({ loc, nonce: nonce++ });
+
+/** DocTab.compare value for the current file on the left side of a comparison. */
+export const LATEST = 'latest';

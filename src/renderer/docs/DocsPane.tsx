@@ -4,7 +4,7 @@ import type { Citation, Terminology, Version } from '../../shared/api';
 import { api } from '../api';
 import { loadBytes } from '../files';
 import { Icon, kindIcon } from '../icons';
-import type { DocTab } from '../model';
+import { LATEST, type DocTab } from '../model';
 import { term, versionBadge, longDate } from '../terms';
 import { CodeViewer } from '../viewers/CodeViewer';
 import { DiffViewer } from '../viewers/DiffViewer';
@@ -192,11 +192,13 @@ function DocView({ tab, visible, hop, ...p }: Props & { tab: DocTab; visible: bo
     }, 1800);
     return () => clearTimeout(t);
   }, [hop?.key, !!main.data]);
-  const left = useBytes(tab.path, tab.external, tab.compare, !!tab.compare);
+  // The left side of a comparison: a past version, or the current file (LATEST).
+  const leftRev = tab.compare === LATEST ? undefined : tab.compare;
+  const left = useBytes(tab.path, tab.external, leftRev, !!tab.compare);
   const marks = useMemo(() => marksFor(p.citations, tab.path, tab.rev), [p.citations, tab.path, tab.rev]);
   const allCites = useMemo(() => p.citations.filter((c) => c.path === tab.path), [p.citations, tab.path]);
   const onMark = (m: CiteMark) => p.onOpenCitation(m);
-  const leftTab: DocTab = { ...tab, id: `${tab.id}:left`, rev: tab.compare, compare: undefined, reveal: undefined };
+  const leftTab: DocTab = { ...tab, id: `${tab.id}:left`, rev: leftRev, compare: undefined, reveal: undefined };
 
   const strip = !tab.external && (
     <VersionStrip
@@ -226,11 +228,18 @@ function DocView({ tab, visible, hop, ...p }: Props & { tab: DocTab; visible: bo
     body = <div className="empty">Loading {basename(tab.path)}…</div>;
   } else if (tab.compare && left.data) {
     const head = (
-      <div className="compare-head">
-        <Icon name="compare" /> Comparing {label(tab.compare)} with {label(tab.rev)}
-        <div className="spacer" />
-        <button className="outline" onClick={() => p.onCompare(tab, undefined)}>Stop comparing</button>
-      </div>
+      <CompareBar
+        tab={tab}
+        terminology={p.terminology}
+        versionsKey={p.versionsKey}
+        onLeft={(rev) => p.onCompare(tab, rev ?? LATEST)}
+        onRight={(rev) => p.onChangeRev(tab, rev)}
+        onSwap={() => {
+          p.onCompare(tab, tab.rev ?? LATEST);
+          p.onChangeRev(tab, leftRev);
+        }}
+        onStop={() => p.onCompare(tab, undefined)}
+      />
     );
     body =
       tab.kind === 'code' || tab.kind === 'markdown' ? (
@@ -248,7 +257,7 @@ function DocView({ tab, visible, hop, ...p }: Props & { tab: DocTab; visible: bo
                 kind={tab.kind}
                 path={tab.path}
                 data={left.data}
-                marks={marksFor(p.citations, tab.path, tab.compare)}
+                marks={marksFor(p.citations, tab.path, leftRev)}
                 onMark={onMark}
                 onCite={() => p.onCite(leftTab)}
                 zoom={p.docZoom}
@@ -304,6 +313,57 @@ function DocView({ tab, visible, hop, ...p }: Props & { tab: DocTab; visible: bo
   );
 }
 
+/** Over a comparison: which version each side shows, each picked from the file's versions. */
+function CompareBar({
+  tab,
+  terminology,
+  versionsKey,
+  onLeft,
+  onRight,
+  onSwap,
+  onStop,
+}: {
+  tab: DocTab;
+  terminology: Terminology;
+  versionsKey: number;
+  onLeft(rev: string | undefined): void;
+  onRight(rev: string | undefined): void;
+  onSwap(): void;
+  onStop(): void;
+}) {
+  const [versions, setVersions] = useState<Version[]>([]);
+  useEffect(() => {
+    api.versions(tab.path).then(setVersions, () => setVersions([]));
+  }, [tab.path, versionsKey]);
+  const git = terminology === 'git';
+  const name = (v: Version) => `${git ? v.sha.slice(0, 7) : longDate(v.date)} · ${v.message}`;
+  // Links can carry short SHAs; show them as the full version they stand for.
+  const full = (rev?: string) => (rev ? (versions.find((v) => v.sha.startsWith(rev))?.sha ?? rev) : '');
+  const picker = (side: 'left' | 'right', rev: string | undefined, onPick: (rev: string | undefined) => void) => {
+    const value = full(rev);
+    return (
+      <label className="compare-pick">
+        <span className="compare-side">{side === 'left' ? 'Left' : 'Right'}</span>
+        <select aria-label={`Version on the ${side}`} value={value} onChange={(e) => onPick(e.target.value || undefined)}>
+          <option value="">{term(terminology, 'latest')}</option>
+          {value && !versions.some((v) => v.sha === value) && <option value={value}>{value.slice(0, 7)}</option>}
+          {versions.map((v) => (
+            <option key={v.sha} value={v.sha}>{name(v)}</option>
+          ))}
+        </select>
+      </label>
+    );
+  };
+  return (
+    <div className="compare-head">
+      {picker('left', tab.compare === LATEST ? undefined : tab.compare, onLeft)}
+      <button className="icon" title="Swap sides" aria-label="Swap sides" onClick={onSwap}>⇄</button>
+      {picker('right', tab.rev, onRight)}
+      <button className="outline" onClick={onStop}>Stop comparing</button>
+    </div>
+  );
+}
+
 function VersionStrip({
   tab,
   terminology,
@@ -341,8 +401,10 @@ function VersionStrip({
   const pos = (i: number) => (n === 0 ? 100 : (i / n) * 100);
   const isCited = (sha: string) => [...(cited ?? [])].some((c) => sha.startsWith(c));
   // When comparing, the strip edits the left side; otherwise it switches the shown version.
-  const startCompare = () => {
-    const current = tab.rev ? versions.findIndex((v) => v.sha.startsWith(tab.rev!)) : versions.length;
+  const startCompare = async () => {
+    let current = tab.rev ? versions.findIndex((v) => v.sha.startsWith(tab.rev!)) : versions.length;
+    // The latest file with no unsaved edits is the same as its last version: start one further back.
+    if (!tab.rev && current > 1 && !(await api.fileChangedSince(tab.path, versions[current - 1].sha).catch(() => true))) current--;
     const before = versions[Math.max(0, current - 1)];
     if (before) onCompare(before.sha);
   };
@@ -359,7 +421,7 @@ function VersionStrip({
               'vdot' +
               (isCited(v.sha) ? ' cited' : '') +
               (tab.rev && v.sha.startsWith(tab.rev) ? ' current' : '') +
-              (tab.compare && v.sha.startsWith(tab.compare) ? ' compare' : '')
+              (tab.compare && tab.compare !== LATEST && v.sha.startsWith(tab.compare) ? ' compare' : '')
             }
             style={{ left: `${pos(i)}%` }}
             title={`${terminology === 'git' ? v.sha.slice(0, 7) + ' · ' : ''}${longDate(v.date)}\n${v.message}${tab.compare ? '\nClick to compare against this version' : ''}`}
@@ -373,7 +435,7 @@ function VersionStrip({
         <button
           className={'strip-btn' + (tab.compare ? ' on' : '')}
           title="Compare two versions side by side"
-          onClick={() => (tab.compare ? onCompare(undefined) : startCompare())}
+          onClick={() => (tab.compare ? onCompare(undefined) : void startCompare())}
         >
           <Icon name="compare" size={12} /> Compare
         </button>

@@ -557,7 +557,10 @@ svg.ico { width: 16px; height: 16px; flex: none; }
 .diff-viewer .cm-gutters { background: var(--panel-2); color: var(--faint); border-right: 1px solid var(--border); }
 .compare-split { flex: 1; min-height: 0; display: flex; gap: 2px; background: var(--border); }
 .compare-split > .side { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--panel); }
-.compare-head { display: flex; align-items: center; gap: 8px; padding: 4px 10px; border-bottom: 1px solid var(--border); background: var(--mark-soft); color: var(--mark-text); font-size: 12.5px; flex: none; }
+.compare-head { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 5px 10px; border-bottom: 1px solid var(--border); background: var(--mark-soft); color: var(--mark-text); font-size: 12.5px; flex: none; }
+.compare-pick { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.compare-pick select { flex: 1; min-width: 0; font-size: 12.5px; }
+.compare-side { font-weight: 600; flex: none; }
 .vstrip .vdot.compare { top: 1px; width: 13px; height: 13px; margin-left: -6px; background: var(--panel); border: 3px solid var(--mark); }
 .vstrip .strip-btn { font-size: 11.5px; padding: 1px 8px; border: 1px solid var(--border); border-radius: 10px; }
 .vstrip .strip-btn.on { border-color: var(--mark); background: var(--mark-soft); color: var(--mark-text); }

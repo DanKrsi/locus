@@ -309,6 +309,31 @@ await step('compare a pinned reference with latest (code diff)', async () => {
   await win.mouse.move(5, 500);
 });
 
+await step('compare: pick the version on each side, and swap', async () => {
+  const bar = win.locator('.viewer:not(.hidden) .compare-head');
+  const left = bar.getByLabel('Version on the left');
+  const right = bar.getByLabel('Version on the right');
+  if ((await right.inputValue()) !== '') throw new Error('right side should start on Latest');
+  // The oldest version on the left, then the current file on both sides: no differences.
+  await win.waitForFunction(() => document.querySelectorAll('.viewer:not(.hidden) .compare-head select')[0]?.options.length > 3, null, { timeout: 10000 });
+  const options = await left.locator('option').evaluateAll((os) => os.map((o) => o.value).filter(Boolean));
+  await left.selectOption(options[options.length - 1]);
+  await win.locator('.cm-changedLine').first().waitFor({ timeout: 10000 });
+  await left.selectOption('');
+  await win.waitForFunction(() => !document.querySelector('.viewer:not(.hidden) .cm-changedLine'), null, { timeout: 10000 });
+  // A past version on the right, then swap the sides.
+  await right.selectOption(options[options.length - 1]);
+  await win.locator('.cm-changedLine').first().waitFor({ timeout: 10000 });
+  await bar.getByRole('button', { name: 'Swap sides' }).click();
+  await win.waitForFunction(() => {
+    const s = [...document.querySelectorAll('.viewer:not(.hidden) .compare-head select')];
+    return s.length === 2 && s[0].value !== '' && s[1].value === '';
+  }, null, { timeout: 5000 });
+  if ((await left.inputValue()) !== options[options.length - 1]) throw new Error('swap did not move the right version to the left');
+  await shot('compare-pickers');
+  await bar.getByRole('button', { name: 'Stop comparing' }).click();
+});
+
 await step('compare two PDF versions side by side', async () => {
   await win.locator('.cm-ref', { hasText: 'Table 5' }).click();
   await win.locator('.tab.active', { hasText: 'BDS-100' }).waitFor({ timeout: 10000 });

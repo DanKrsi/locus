@@ -1,10 +1,9 @@
-// Binary assets for the Aurora-3 sample: drawings (SVG → PNG), workbooks, decks and audio.
+// Binary assets for the Locus demo: a drawing (SVG → PNG), a workbook, a slide deck and audio.
 import ExcelJS from 'exceljs';
 import pptxgen from 'pptxgenjs';
 import { execFileSync } from 'node:child_process';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { meetingSegments } from './content.mjs';
 
 const GREEN = '1F5C45';
 const GOLD = 'C9A227';
@@ -41,47 +40,6 @@ export function bracketSvg(flangeMm) {
 </svg>`;
 }
 
-export function vibePlotSvg() {
-  // Log-log axes: 20–2000 Hz, 0.001–1 g²/Hz.
-  const X = (f) => 90 + ((Math.log10(f) - Math.log10(20)) / 2) * 720;
-  const Y = (a) => 440 - ((Math.log10(a) + 3) / 3) * 380;
-  const profile = [
-    [20, 0.026],
-    [50, 0.16],
-    [800, 0.16],
-    [2000, 0.026],
-  ];
-  const resp = [];
-  for (let f = 20; f <= 2000; f *= 1.04) {
-    const r = f / 312;
-    const h = 1 / Math.sqrt((1 - r * r) ** 2 + (r / 12) ** 2); // SDOF, Q = 12
-    const base = f < 50 ? 0.026 * (f / 20) ** 2 : f < 800 ? 0.16 : 0.16 * (800 / f) ** 2;
-    resp.push([f, Math.min(0.9, base * h * h * 0.35)]);
-  }
-  const path = (pts) => pts.map(([f, a], i) => `${i ? 'L' : 'M'}${X(f).toFixed(1)},${Y(a).toFixed(1)}`).join(' ');
-  const grid = [20, 50, 100, 200, 500, 1000, 2000]
-    .map((f) => `<line x1="${X(f)}" y1="60" x2="${X(f)}" y2="440" stroke="#e3e6e3"/><text x="${X(f)}" y="462" font-size="13" text-anchor="middle" fill="#66706a">${f}</text>`)
-    .join('');
-  const ygrid = [0.001, 0.01, 0.1, 1]
-    .map((a) => `<line x1="90" y1="${Y(a)}" x2="810" y2="${Y(a)}" stroke="#e3e6e3"/><text x="82" y="${Y(a) + 4}" font-size="13" text-anchor="end" fill="#66706a">${a}</text>`)
-    .join('');
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="900" height="520" viewBox="0 0 900 520" font-family="Segoe UI, Arial, sans-serif">
-  <rect width="900" height="520" fill="#ffffff"/>
-  <text x="90" y="40" font-size="22" font-weight="700" fill="#${GREEN}">Protoflight random vibration, Z axis (run 6)</text>
-  ${grid}${ygrid}
-  <rect x="90" y="60" width="720" height="380" fill="none" stroke="#98a19b"/>
-  <path d="${path(profile)}" fill="none" stroke="#${GREEN}" stroke-width="3"/>
-  <path d="${path(resp)}" fill="none" stroke="#${GOLD}" stroke-width="2.5"/>
-  <line x1="${X(312)}" y1="60" x2="${X(312)}" y2="440" stroke="#${GOLD}" stroke-dasharray="5 5"/>
-  <text x="${X(312) + 8}" y="80" font-size="15" fill="#7a5e10">first mode 312 Hz</text>
-  <text x="450" y="500" font-size="15" text-anchor="middle" fill="#444">Frequency (Hz)</text>
-  <text x="26" y="250" font-size="15" fill="#444" transform="rotate(-90 26 250)" text-anchor="middle">ASD (g²/Hz)</text>
-  <rect x="600" y="380" width="14" height="4" fill="#${GREEN}"/><text x="620" y="386" font-size="13" fill="#444">input (10 grms)</text>
-  <rect x="600" y="400" width="14" height="4" fill="#${GOLD}"/><text x="620" y="406" font-size="13" fill="#444">box response</text>
-</svg>`;
-}
-
-/** Renders SVGs to PNG files using the app's Electron (Chromium) as a renderer. */
 export async function renderPngs(repo, items) {
   const { _electron: electron } = await import('playwright');
   const userData = join(repo, 'test-output', 'sample-render');
@@ -177,59 +135,6 @@ export async function loadsWorkbook(version) {
 }
 
 /** margins.xlsx: version 1 (PDR) and 2 (after PDR: thicker flange, fitting factor, separation). */
-export async function marginsWorkbook(version) {
-  const wb = new ExcelJS.Workbook();
-  const f = wb.addWorksheet('Factors', { properties: { tabColor: { argb: 'FF1F5C45' } } });
-  f.columns = [{ width: 18 }, { width: 10 }, { width: 46 }];
-  title(f, 'Design factors (protoflight)');
-  f.getRow(3).values = ['Factor', 'Value', 'Source'];
-  head(f.getRow(3));
-  const factors = [
-    ['Ultimate', 1.4, 'NASA-STD-5001B Table 1'],
-    ['Yield', 1.25, 'NASA-STD-5001B Table 1'],
-    ...(version === 2
-      ? [
-          ['Fitting', 1.15, 'NASA-STD-5020B 4.2.2'],
-          ['Separation', 1.2, 'NASA-STD-5020B 4.2.3, Figure 1'],
-        ]
-      : []),
-  ];
-  factors.forEach((r, i) => (f.getRow(4 + i).values = r));
-  wb.definedNames.add(`'Factors'!$A$3:$C$${3 + factors.length}`, 'DesignFactors');
-
-  const m = wb.addWorksheet('Margins', { properties: { tabColor: { argb: 'FFC9A227' } } });
-  m.columns = [{ width: 16 }, { width: 22 }, { width: 14 }, { width: 12 }, { width: 10 }, { width: 10 }, { width: 10 }];
-  title(m, version === 1 ? 'Margins of safety — PDR (2.0 mm flange)' : 'Margins of safety — CDR (3.0 mm flange)');
-  m.getRow(3).values = ['Part', 'Failure mode', 'Allowable', 'Limit', 'Factor', 'MS', 'Status'];
-  head(m.getRow(3));
-  const rows =
-    version === 1
-      ? [
-          ['Flange', 'Bending, ultimate', 290, 168, 1.4],
-          ['Flange', 'Bending, yield', 241, 168, 1.25],
-          ['Bolt', 'Tension, ultimate', 5600, 2000, 1.4],
-        ]
-      : [
-          ['Flange', 'Bending, ultimate', 290, 98, 1.4],
-          ['Flange', 'Bending, yield', 241, 98, 1.25],
-          ['Bolt', 'Tension, ultimate', 5600, 2000, 1.61],
-          ['Joint', 'Separation', 3500, 1800, 1.38],
-        ];
-  rows.forEach((r, i) => {
-    const n = 4 + i;
-    m.getRow(n).values = r;
-    const ms = r[2] / (r[3] * r[4]) - 1;
-    m.getCell(`F${n}`).value = { formula: `C${n}/(D${n}*E${n})-1`, result: ms };
-    m.getCell(`F${n}`).numFmt = '0.00';
-    m.getCell(`G${n}`).value = { formula: `IF(F${n}<0.15,"Low","OK")`, result: ms < 0.15 ? 'Low' : 'OK' };
-    if (ms < 0.15) m.getCell(`G${n}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFBF5E2' } };
-  });
-  wb.definedNames.add(`'Margins'!$A$3:$G$${3 + rows.length}`, 'MarginSummary');
-  return Buffer.from(await wb.xlsx.writeBuffer());
-}
-
-// ---------- Decks ----------
-
 function deckBase() {
   const pptx = new pptxgen();
   pptx.layout = 'LAYOUT_16x9';
@@ -280,42 +185,11 @@ export async function pdrDeck(file, conceptPng) {
   await pptx.writeFile({ fileName: file });
 }
 
-export async function cdrDeck(file, conceptPng, plotPng) {
-  const pptx = deckBase();
-  titleSlide(pptx, 'Aurora-3 Avionics Bracket — CDR', 'Critical design review · April 14, 2026');
-  let s = contentSlide(pptx, 'Changes since PDR');
-  bullets(s, ['PDR-1 closed: flange 2.0 → 3.0 mm', 'PDR-2 closed: fitting factor 1.15 applied to bolts', 'Separation check added for the connector-side joint', 'Factors now come from config/factors.yaml']);
-  s = contentSlide(pptx, 'Configuration');
-  bullets(s, ['6061-T6 aluminium L-bracket', 'Mounting flange 3.0 mm thick', '4 × #8-32 A286 fasteners to deck', 'Bracket mass 0.19 kg (+0.05 kg)'], { w: 4.2 });
-  s.addImage({ path: conceptPng, x: 4.8, y: 1.2, w: 4.9, h: 2.83 });
-  s = contentSlide(pptx, 'Requirements: factors of safety');
-  table(s, [['Factor', 'Value', 'Source'], ['Ultimate design', '1.4', 'NASA-STD-5001B Table 1'], ['Yield design', '1.25', 'NASA-STD-5001B Table 1'], ['Fitting', '1.15', 'NASA-STD-5020B 4.2.2'], ['Separation', '1.2', 'NASA-STD-5020B Figure 1']]);
-  s = contentSlide(pptx, 'Quasi-static loads');
-  table(s, [['Axis', 'Load factor', 'Limit force'], ['X', '12 g', '225 N'], ['Y', '12 g', '225 N'], ['Z', '18 g', '337 N']]);
-  s = contentSlide(pptx, 'Margins of safety');
-  table(s, [['Part', 'Mode', 'MS', 'Status'], ['Flange', 'Bending, ultimate', '1.11', 'OK'], ['Flange', 'Bending, yield', '0.97', 'OK'], ['Bolt', 'Tension, ultimate (×1.15)', '0.74', 'OK'], ['Joint', 'Separation', '0.41', 'OK']]);
-  s = contentSlide(pptx, 'Protoflight vibration test');
-  s.addImage({ path: plotPng, x: 0.5, y: 1.1, w: 5.4, h: 3.12 });
-  s.addText(
-    [
-      { text: 'All 7 runs passed', options: { bullet: true } },
-      { text: 'First mode 312 Hz (Z)', options: { bullet: true } },
-      { text: 'Post-test frequency shift < 5%', options: { bullet: true } },
-    ],
-    { x: 6.1, y: 1.3, w: 3.6, h: 2.5, fontSize: 16, color: INK, valign: 'top' },
-  );
-  s = contentSlide(pptx, 'Open items');
-  bullets(s, ['CDR-1: confirm separation factor for the connector-side joint', 'CDR-2: update harness clamp mass after routing review']);
-  await pptx.writeFile({ fileName: file });
-}
-
-// ---------- Audio ----------
-
-/** Speaks each segment with Windows text-to-speech, joins them, and returns segment start times. */
-export async function meetingAudio(file, tmp) {
+/** Speaks the lines into one WAV with short gaps; returns the second each line starts at. */
+export async function meetingAudio(file, tmp, lines) {
   await mkdir(tmp, { recursive: true });
   const parts = [];
-  meetingSegments.forEach((text, i) => parts.push({ text, wav: join(tmp, `seg${i}.wav`) }));
+  lines.forEach((text, i) => parts.push({ text, wav: join(tmp, `seg${i}.wav`) }));
   const ps = `Add-Type -AssemblyName System.Speech
 $fmt = New-Object System.Speech.AudioFormat.SpeechAudioFormatInfo 16000, ([System.Speech.AudioFormat.AudioBitsPerSample]::Sixteen), ([System.Speech.AudioFormat.AudioChannel]::Mono)
 $s = New-Object System.Speech.Synthesis.SpeechSynthesizer

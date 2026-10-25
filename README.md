@@ -43,10 +43,11 @@ Early development (milestones 1–3 done). Windows first. Working today:
 
 ## Sample project
 
-`npm run sample` builds `../locus-sample`: a small CubeSat bracket project with real NASA
-standards (NASA-STD-5001B in two editions, NASA-STD-5020B), Python code, Excel workbooks, a
-PowerPoint deck, images, a spoken meeting recording and a version history from January to
-April. Its notes use every kind of link; start with `notes/00 Start here.md`.
+`npm run sample` builds `../locus-sample`: the fewest files that show every feature. One note
+(`notes/Start here.md`, also the tour) and one flowchart (`notes/flow.canvas`), over a NASA
+standard in two editions, a small Python file in three versions, a workbook, a slide deck, an
+image and a short recording. Its links are made with Locus's own MCP tools (the flowchart with
+`write_flowchart`).
 
 ## Claude integration
 

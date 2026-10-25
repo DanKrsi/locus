@@ -374,21 +374,19 @@ export function App() {
     handles.current.delete(id);
   };
 
-  const [browserTarget, setBrowserTarget] = useState<'notes' | 'documents'>('documents');
-  const openBrowser = (rev?: string, target: 'notes' | 'documents' = 'documents') => {
-    setBrowserRev(target === 'notes' ? undefined : rev);
-    setBrowserTarget(target);
+  /** A note or flowchart picked in Open: edit it on the left or view it on the right. */
+  const [openChoice, setOpenChoice] = useState<string | null>(null);
+  const openBrowser = (rev?: string) => {
+    setBrowserRev(rev);
     setBrowser(true);
   };
 
-  const openFromBrowser = async (path: string, rev: string | undefined) => {
+  const openFromBrowser = (path: string, rev: string | undefined) => {
     setBrowser(false);
-    // Notes open on the left; anything picked through "Open document" opens in the viewer.
-    if (browserTarget === 'notes') {
-      await notes.current?.open(path);
-      return;
-    }
-    openDoc(path, false, rev);
+    // A note or flowchart (latest version) can be edited on the left or viewed on the right; a
+    // past version can only be viewed, and everything else opens in the viewer.
+    if (!rev && (fileKind(path) === 'markdown' || isCanvas(path))) setOpenChoice(path);
+    else openDoc(path, false, rev);
   };
 
   // ---------- References ----------
@@ -755,7 +753,7 @@ export function App() {
         openBrowser();
       } else if (e.ctrlKey && !e.shiftKey && k === 'o') {
         e.preventDefault();
-        openBrowser(undefined, 'notes');
+        openBrowser();
       } else if (e.ctrlKey && !e.shiftKey && k === 'n') {
         e.preventDefault();
         void notes.current?.newNote();
@@ -912,7 +910,6 @@ export function App() {
               }}
               toast={showToast}
               onTour={toggleTour}
-              onOpenNote={() => openBrowser(undefined, 'notes')}
               touring={!!tour}
               zoom={settings.noteZoom ?? 1}
               onZoom={(z) => setZoom('noteZoom', z)}
@@ -947,8 +944,9 @@ export function App() {
               onOpenCitation={openCitation}
               onActivate={setActiveDoc}
               onClose={closeDoc}
-              onOpen={() => openBrowser()}
               onCite={(t) => void cite(t)}
+              noteCallbacks={(path) => editorCallbacks(() => path)}
+              onEditInNotes={(path) => void notes.current?.open(path)}
               citeMode={citeMode}
               onCiteMode={(m) => {
                 setCiteMode(m);
@@ -989,11 +987,20 @@ export function App() {
             setHistoryOpen(true);
           }}
           onRename={renameFile}
-          target={browserTarget}
-          onNewNote={() => {
-            setBrowser(false);
-            void notes.current?.newNote();
+        />
+      )}
+      {openChoice && (
+        <OpenChoiceDialog
+          path={openChoice}
+          onEdit={() => {
+            setOpenChoice(null);
+            void notes.current?.open(openChoice);
           }}
+          onView={() => {
+            setOpenChoice(null);
+            openDoc(openChoice, false);
+          }}
+          onClose={() => setOpenChoice(null)}
         />
       )}
       {historyOpen && ws && (
@@ -1198,6 +1205,49 @@ function Welcome({
               <div className="muted" style={{ fontSize: 12 }}>{r}</div>
             </div>
           ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Notes and flowcharts picked in Open: edit on the left, or view (read-only) on the right. */
+function OpenChoiceDialog({ path, onEdit, onView, onClose }: { path: string; onEdit(): void; onView(): void; onClose(): void }) {
+  const flow = isCanvas(path);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+      else if (e.key === 'Enter' || e.key.toLowerCase() === 'e') (e.preventDefault(), onEdit());
+      else if (e.key.toLowerCase() === 'v') (e.preventDefault(), onView());
+    };
+    // Start listening after this turn: the Enter that picked the file is still on its way up.
+    const t = setTimeout(() => window.addEventListener('keydown', onKey));
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, []);
+  return (
+    <div className="backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="locus-dialog open-choice" style={{ width: 460 }}>
+        <div className="dialog-head">
+          <h2>
+            <Icon name={flow ? 'flow' : 'note'} /> {basename(path)}
+          </h2>
+        </div>
+        <div className="dialog-body open-choice-body">
+          <button className="open-choice-option primary-choice" onClick={onEdit}>
+            <span className="title"><Icon name="edit" /> Edit</span>
+            <span className="muted">Opens on the left, where you write and cite. <kbd>E</kbd></span>
+          </button>
+          <button className="open-choice-option" onClick={onView}>
+            <span className="title"><Icon name="file" /> View</span>
+            <span className="muted">Opens read-only on the right, beside your notes. <kbd>V</kbd></span>
+          </button>
+        </div>
+        <div className="dialog-foot">
+          <div className="spacer" />
+          <button className="outline" onClick={onClose}>Cancel</button>
         </div>
       </div>
     </div>

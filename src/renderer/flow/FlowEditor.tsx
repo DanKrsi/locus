@@ -64,6 +64,8 @@ interface Props {
   onSave(): void;
   register(h: FlowHandle | null): void;
   onZoomChange(z: number): void;
+  /** Viewing on the right: no toolbar, nothing moves or changes; citations still open. */
+  readOnly?: boolean;
 }
 
 type BoxNode = Node<{ raw: CanvasNode }>;
@@ -547,6 +549,7 @@ function Editor(p: Props) {
   };
 
   const startEdit = (id: string, all = false) => {
+    if (p.readOnly) return;
     selectAll.current = all;
     setEditingLabel(null);
     setEditing(id);
@@ -624,7 +627,7 @@ function Editor(p: Props) {
       }
     },
     editingLabel,
-    setEditingLabel,
+    setEditingLabel: (id) => (p.readOnly ? undefined : setEditingLabel(id)),
     setEdgeData,
     commit,
     toFlowPos: (x, y) => rf.screenToFlowPosition({ x, y }),
@@ -693,7 +696,7 @@ function Editor(p: Props) {
 
   return (
     <FlowCtx.Provider value={ctx}>
-      <div className="toolbar flow-toolbar">
+      {!p.readOnly && <div className="toolbar flow-toolbar">
         <span className="flow-tb-label">Add</span>
         {SHAPES.map((s) => (
           <button key={s.shape} className="icon" title={`Add a ${s.name.toLowerCase()} box`} onClick={() => startEdit(addBox(s.shape), true)}>
@@ -752,12 +755,12 @@ function Editor(p: Props) {
         <button className="icon" title="Redo (Ctrl+Y)" onClick={() => undo(1)}><Icon name="redo" /></button>
         <div className="spacer" />
         <button className="icon" title="Fit the flowchart in view" onClick={() => void rf.fitView({ padding: 0.2, duration: 300 })}><Icon name="fit" /></button>
-      </div>
+      </div>}
       <div
         className="flow-editor"
         ref={wrap}
         onKeyDown={(e) => {
-          if (editing || editingLabel || (e.target as HTMLElement).closest('input, select, .cm-editor')) return;
+          if (p.readOnly || editing || editingLabel || (e.target as HTMLElement).closest('input, select, .cm-editor')) return;
           const mod = e.ctrlKey || e.metaKey;
           const k = e.key.toLowerCase();
           if (mod && k === 'z' && !e.shiftKey) (e.preventDefault(), undo(-1));
@@ -820,7 +823,7 @@ function Editor(p: Props) {
             carried.current = [];
             commit();
           }}
-          onEdgeDoubleClick={(_, e) => setEditingLabel(e.id)}
+          onEdgeDoubleClick={(_, e) => !p.readOnly && setEditingLabel(e.id)}
           onPaneClick={() => setEditingLabel(null)}
           onMove={(_, vp) => p.onZoomChange(vp.zoom)}
           onInit={(inst) => p.onZoomChange(inst.getZoom())}
@@ -830,7 +833,10 @@ function Editor(p: Props) {
           snapGrid={[8, 8]}
           elevateNodesOnSelect={false}
           elevateEdgesOnSelect
-          deleteKeyCode={['Delete', 'Backspace']}
+          deleteKeyCode={p.readOnly ? null : ['Delete', 'Backspace']}
+          nodesDraggable={!p.readOnly}
+          nodesConnectable={!p.readOnly}
+          elementsSelectable={!p.readOnly}
           panOnScroll
           zoomOnScroll={false}
           zoomOnPinch

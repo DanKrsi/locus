@@ -191,6 +191,7 @@ class TableWidget extends WidgetType {
         td.addEventListener('mousedown', (e) => {
           if ((e.target as HTMLElement).closest('.cm-ref, .cm-weblink, a, .editing-cell')) return;
           e.preventDefault();
+          if (view.state.readOnly) return;
           startEdit(view, wrap, r, c, opts);
         });
         tr.append(td);

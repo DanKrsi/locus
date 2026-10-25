@@ -14,6 +14,8 @@ import { SheetViewer } from '../viewers/SheetViewer';
 import { SlidesViewer } from '../viewers/SlidesViewer';
 import { CiteModeContext, type CiteMode } from '../viewers/CiteButton';
 import { ZoomControl } from '../zoom';
+import { FlowViewer, NoteViewer, type NoteCallbacks } from '../viewers/NoteViewer';
+import { isCanvas } from '../../core/canvas';
 import type { CiteMark, RevealRequest, ViewerHandle } from '../viewers/types';
 
 interface Props {
@@ -28,11 +30,14 @@ interface Props {
   citations: Citation[];
   onActivate(id: string): void;
   onClose(id: string): void;
-  onOpen(): void;
   onCite(tab: DocTab): void;
   /** Kind of link the Cite buttons insert when viewing the latest version. */
   citeMode: CiteMode;
   onCiteMode(mode: CiteMode): void;
+  /** Link behaviour for notes and flowcharts viewed here. */
+  noteCallbacks(path: string): NoteCallbacks;
+  /** Opens a note or flowchart for editing on the left. */
+  onEditInNotes(path: string): void;
   /** Zoom of the document viewers (PDFs keep their own). */
   docZoom: number;
   onDocZoom(z: number): void;
@@ -87,13 +92,12 @@ export function DocsPane(p: Props) {
             <span className="close" onMouseDown={(e) => { e.stopPropagation(); p.onClose(t.id); }}><Icon name="x" size={12} /></span>
           </div>
         ))}
-        <button className="tab-add" title="Open a document in the viewer (Ctrl+P)" onClick={p.onOpen}><Icon name="plus" size={14} /> Open document</button>
+
       </div>
       {p.tabs.length === 0 && (
         <div className="empty">
           <h3>No document open</h3>
-          <div>Open PDFs, code, spreadsheets, images or recordings to cite them in your notes.</div>
-          <button className="primary" onClick={p.onOpen}><Icon name="folderOpen" /> Open document</button>
+          <div>Use <b>Open</b> at the top for PDFs, code, spreadsheets, slides, images or recordings, to cite them in your notes.</div>
           <div className="muted" style={{ fontSize: 12 }}>Ctrl+P to find a file by name</div>
         </div>
       )}
@@ -147,10 +151,14 @@ interface BodyProps {
   zoom: number;
   onZoom(z: number): void;
   onPlace?(loc: Location): void;
+  noteCallbacks: NoteCallbacks;
+  onEdit?(): void;
   children?: React.ReactNode;
 }
 
-function ViewerBody({ kind, onZoom, ...props }: BodyProps) {
+function ViewerBody({ kind, onZoom, noteCallbacks, onEdit, ...props }: BodyProps) {
+  // Flowcharts zoom like a map, in their own view.
+  if (isCanvas(props.path)) return <FlowViewer {...props} callbacks={noteCallbacks} onEdit={onEdit} />;
   // PDFs have their own zoom in their toolbar; recordings have nothing to zoom.
   if (kind !== 'pdf' && kind !== 'media') props = { ...props, children: <ZoomControl zoom={props.zoom} onZoom={onZoom} label="Document" /> };
   switch (kind) {
@@ -164,8 +172,9 @@ function ViewerBody({ kind, onZoom, ...props }: BodyProps) {
       return <MediaViewer {...props} />;
     case 'slides':
       return <SlidesViewer {...props} />;
-    case 'code':
     case 'markdown':
+      return <NoteViewer {...props} callbacks={noteCallbacks} onEdit={onEdit} />;
+    case 'code':
       return <CodeViewer {...props} />;
     default:
       return <UnsupportedViewer path={props.path} onOpenExternally={() => api.openExternally(props.path)} />;
@@ -284,6 +293,7 @@ function DocView({ tab, visible, hop, ...p }: Props & { tab: DocTab; visible: bo
                 zoom={p.docZoom}
                 onZoom={p.onDocZoom}
                 reveal={sides.left}
+                noteCallbacks={p.noteCallbacks(tab.path)}
                 handle={(h) => p.registerHandle(leftTab.id, h)}
               />
               </CiteModeContext.Provider>
@@ -297,6 +307,7 @@ function DocView({ tab, visible, hop, ...p }: Props & { tab: DocTab; visible: bo
                 onMark={onMark}
                 reveal={sides.right ?? tab.reveal}
                 onPlace={onPlace}
+                noteCallbacks={p.noteCallbacks(tab.path)}
                 onCite={() => p.onCite(tab)}
                 handle={(h) => p.registerHandle(tab.id, h)}
                 zoom={p.docZoom}
@@ -314,6 +325,8 @@ function DocView({ tab, visible, hop, ...p }: Props & { tab: DocTab; visible: bo
         data={main.data}
         reveal={tab.reveal}
         onPlace={onPlace}
+        noteCallbacks={p.noteCallbacks(tab.path)}
+        onEdit={!tab.rev && !tab.external ? () => p.onEditInNotes(tab.path) : undefined}
         marks={marks}
         onMark={onMark}
         onCite={() => p.onCite(tab)}

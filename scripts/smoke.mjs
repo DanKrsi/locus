@@ -45,10 +45,13 @@ await step('workspace opens', async () => {
 
 await step('quick open a note', async () => {
   await win.keyboard.press('Control+O');
-  await win.getByPlaceholder('Find a note by name').fill('review');
+  await win.getByPlaceholder('Find a file by name').fill('review');
   await win.locator('.tree-row', { hasText: 'review.md' }).waitFor();
   await win.keyboard.press('Enter');
-  await win.locator('.cm-ref').first().waitFor({ timeout: 10000 });
+  // A note asks whether to edit it (left) or view it (right).
+  await win.locator('.open-choice').waitFor({ timeout: 5000 });
+  await win.keyboard.press('e');
+  await win.locator('.editor-wrap .cm-ref').first().waitFor({ timeout: 10000 });
   await shot('note');
 });
 
@@ -104,11 +107,28 @@ await step('insert a table: it is a table straight away', async () => {
   if (!text.includes('| Name | Value |\n| --- | --- |\n|  | 42 |')) throw new Error('new table saved as:\n' + text.slice(text.lastIndexOf('| Name') - 2));
 });
 
-await step('Open note lists notes only and opens on the left', async () => {
-  await win.getByRole('button', { name: 'Open note' }).first().click();
-  await win.locator('.locus-dialog h2', { hasText: 'Open note' }).waitFor();
-  if (await win.locator('.tree-row', { hasText: '.pdf' }).count()) throw new Error('PDFs listed in Open note');
-  await win.keyboard.press('Escape');
+await step('one Open: a note can be viewed read-only on the right, then edited on the left', async () => {
+  if (await win.locator('.tab-add', { hasText: /Open (note|document)/ }).count()) throw new Error('a pane still has its own Open button');
+  await win.locator('.header').getByRole('button', { name: 'Open', exact: true }).click();
+  await win.getByPlaceholder('Find a file by name').fill('design-basis');
+  await win.locator('.tree-row', { hasText: 'design-basis.md' }).first().click();
+  await win.locator('.open-choice').getByRole('button', { name: /View/ }).click();
+  const view = win.locator('[data-pane="docs"] .viewer:not(.hidden)');
+  await view.locator('.note-view .cm-line').first().waitFor({ timeout: 10000 });
+  if (!(await view.locator('.note-view .cm-content').evaluate((el) => el.closest('.cm-editor').querySelector('.cm-content').getAttribute('contenteditable') !== null)))
+    throw new Error('no note view');
+  // Read-only: typing changes nothing.
+  const before = await view.locator('.note-view .cm-content').innerText();
+  await view.locator('.note-view .cm-line').first().click();
+  await win.keyboard.type('xyz');
+  if ((await view.locator('.note-view .cm-content').innerText()) !== before) throw new Error('the viewed note changed');
+  await shot('note-view');
+  await view.getByRole('button', { name: 'Edit' }).click();
+  await win.locator('[data-pane="notes"] .tab.active', { hasText: 'design-basis.md' }).waitFor({ timeout: 10000 });
+  // Close both copies and go back to the review note for the steps that follow.
+  await win.locator('[data-pane="docs"] .tab', { hasText: 'design-basis.md' }).locator('.close').dispatchEvent('mousedown');
+  await win.locator('[data-pane="notes"] .tab', { hasText: 'design-basis.md' }).locator('.close').dispatchEvent('mousedown');
+  await win.locator('[data-pane="notes"] .tab', { hasText: 'review.md' }).click();
 });
 
 await step('follow a PDF area reference', async () => {
@@ -384,9 +404,10 @@ const until = async (what, test, ms = 8000) => {
 
 await step('flowchart: open, add a box, connect it, cite into it', async () => {
   await win.keyboard.press('Control+O');
-  await win.getByPlaceholder(/Find a note/).fill('retry-flow');
+  await win.getByPlaceholder('Find a file by name').fill('retry-flow');
   await win.locator('.tree-row', { hasText: 'retry-flow' }).first().waitFor();
   await win.keyboard.press('Enter');
+  await win.locator('.open-choice').getByRole('button', { name: /Edit/ }).click();
   await win.locator('.flow-box', { hasText: 'wait backoff' }).waitFor({ timeout: 10000 });
   if ((await win.locator('.flow-frame').count()) !== 2) throw new Error('loop frames missing');
   const edges0 = await win.locator('.flow-editor .react-flow__edge').count();
@@ -589,8 +610,8 @@ await step('restored tabs that no longer exist are dropped', async () => {
     localStorage.setItem(key, JSON.stringify(s));
   });
   await win.reload();
-  await win.locator('.pane:has(.tab-add[title^="Open a document"]) .tabs > .tab').first().waitFor({ timeout: 20000 });
-  const tabs = await win.locator('.pane:has(.tab-add[title^="Open a document"]) .tabs > .tab').count();
+  await win.locator('[data-pane="docs"] .tabs > .tab').first().waitFor({ timeout: 20000 });
+  const tabs = await win.locator('[data-pane="docs"] .tabs > .tab').count();
   if (tabs !== 1) throw new Error(`expected 1 restored document tab, got ${tabs}`);
   if (await win.getByText("Couldn't open").count()) throw new Error('a stale tab still shows an error');
 });

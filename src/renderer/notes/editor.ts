@@ -61,6 +61,8 @@ export interface NoteEditorOptions {
   renderHoverCard(info: LinkInfo, view: EditorView): HTMLElement;
   /** Notes zoom (1 = 100%). */
   zoom?: number;
+  /** Viewing a note on the right: formatted and clickable, but nothing can change it. */
+  readOnly?: boolean;
 }
 
 /** Ask the editor to rebuild decorations (e.g. after async link checks finish). */
@@ -495,6 +497,7 @@ class TaskWidget extends WidgetType {
     s.className = 'cm-task' + (this.done ? ' done' : '');
     s.addEventListener('mousedown', (e) => {
       e.preventDefault();
+      if (view.state.readOnly) return;
       view.dispatch({ changes: { from: this.pos + 1, to: this.pos + 2, insert: this.done ? ' ' : 'x' } });
     });
     return s;
@@ -723,6 +726,7 @@ function livePreview(opts: NoteEditorOptions): Extension {
     }),
     // Typing at the end of a link's label writes after the link, not into it.
     EditorView.inputHandler.of((view, from, to, text) => {
+      if (view.state.readOnly) return false;
       const info = from === to ? labelEndingAt(view.state, from) : null;
       if (!info) return false;
       view.dispatch({ changes: { from: info.to, insert: text }, selection: { anchor: info.to + text.length }, userEvent: 'input.type' });
@@ -1009,6 +1013,7 @@ export function createNoteEditor(parent: HTMLElement, opts: NoteEditorOptions): 
     doc: opts.doc,
     extensions: [
       EditorState.lineSeparator.of(opts.eol),
+      EditorState.readOnly.of(!!opts.readOnly),
       editorZoom(opts.zoom ?? 1),
       history(),
       drawSelection(),

@@ -39,9 +39,11 @@ await step('bundled git reads version history', async () => {
 });
 await step('note, PDF viewer and a reference', async () => {
   await win.keyboard.press('Control+O');
-  await win.getByPlaceholder('Find a note by name').fill('review');
+  await win.getByPlaceholder('Find a file by name').fill('review');
   await win.locator('.tree-row', { hasText: 'review.md' }).waitFor();
   await win.keyboard.press('Enter');
+  await win.locator('.open-choice').waitFor({ timeout: 5000 });
+  await win.keyboard.press('e');
   await win.locator('.cm-ref', { hasText: 'Table 5' }).click();
   await win.locator('.area-box.cited').waitFor({ timeout: 20000 });
 });

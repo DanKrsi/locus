@@ -774,3 +774,15 @@ svg.ico { width: 16px; height: 16px; flex: none; }
   .travel-rail { animation: none; }
 }
 @keyframes version-chip-still { 0%, 100% { opacity: 0; transform: translateX(-50%); } 10%, 80% { opacity: 1; transform: translateX(-50%); } }
+
+/* Open: edit or view a note or flowchart */
+.open-choice .dialog-head h2 { display: flex; align-items: center; gap: 8px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.open-choice-body { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.open-choice-option { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; text-align: left; padding: 12px 14px; border: 1px solid var(--border-strong); border-radius: 10px; background: var(--panel); cursor: pointer; white-space: normal; height: auto; }
+.open-choice-option:hover { border-color: var(--accent); background: var(--accent-soft); }
+.open-choice-option.primary-choice { border-color: var(--accent); }
+.open-choice-option .title { display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 14px; color: var(--text); }
+.open-choice-option .muted { font-size: 12.5px; line-height: 1.4; }
+.open-choice-option kbd { font-family: inherit; font-size: 11px; border: 1px solid var(--border-strong); border-radius: 4px; padding: 0 4px; margin-left: 2px; }
+.viewer .note-view { flex: 1; min-height: 0; }
+.viewer .flow-wrap { flex: 1; min-height: 0; display: flex; flex-direction: column; }

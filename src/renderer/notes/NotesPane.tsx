@@ -58,8 +58,6 @@ interface Props {
   onActiveChange(path: string | null): void;
   toast(msg: string): void;
   onTour(): void;
-  /** Opens the note picker (left-pane files only). */
-  onOpenNote(): void;
   touring: boolean;
   /** Zoom of the notes editor, separate from the documents'. */
   zoom: number;
@@ -386,7 +384,6 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
         ))}
         <button className="tab-add" title="New note (Ctrl+N)" onClick={() => void newNote()}><Icon name="plus" size={14} /></button>
         <button className="tab-add" title="New flowchart" onClick={() => void newFlowchart()}><Icon name="flow" size={14} /></button>
-        <button className="tab-add" title="Open a note or flowchart (Ctrl+O)" onClick={p.onOpenNote}><Icon name="folderOpen" size={14} /> Open note</button>
         <div className="spacer" />
         {activeIsFlow ? (
           <ZoomControl zoom={flowZoom} onZoom={(z) => flows.current.get(active!)?.handle?.setZoom(z)} label="Flowchart" />
@@ -432,13 +429,12 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
       {tabs.length === 0 && (
         <div className="empty">
           <h3>No note open</h3>
-          <div>Notes are markdown files in this workspace.</div>
+          <div>Open one with <b>Open</b> at the top and choose Edit, or start a new one.</div>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button className="primary" onClick={p.onOpenNote}><Icon name="folderOpen" /> Open note</button>
             <button className="outline" onClick={() => void newNote()}><Icon name="plus" /> New note</button>
             <button className="outline" onClick={() => void newFlowchart()}><Icon name="flow" /> New flowchart</button>
           </div>
-          <div className="muted" style={{ fontSize: 12 }}>Ctrl+O to find a note by name</div>
+          <div className="muted" style={{ fontSize: 12 }}>Ctrl+O to find a file by name</div>
         </div>
       )}
       {tabs.map((t) => {

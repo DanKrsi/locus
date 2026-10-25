@@ -152,16 +152,20 @@ export function renderHoverCard(info: LinkInfo, view: EditorView, ctx: HoverCont
   // Turns the link into the other kind, keeping its label, location and quote.
   const relink = (ref: Reference) => replaceLink(view, info, formatReference(info.label, ref, info.title));
   button('Open', 'primary', () => ctx.follow(info));
+  // A note viewed read-only offers what doesn't change it.
+  const editable = !view.state.readOnly;
   if (rev) {
     button('Compare with latest', 'outline', () => ctx.compare(info));
-    button('Make live', 'outline', () => relink({ ...info.ref, at: rev, rev: undefined }));
+    if (editable) button('Make live', 'outline', () => relink({ ...info.ref, at: rev, rev: undefined }));
   } else if (at) {
     if (ctx.status.changed) button('Compare with cited version', 'outline', () => ctx.compare(info));
-    button(ctx.status.changed ? 'Pin to cited version' : 'Pin to this version', 'outline', () => relink({ ...info.ref, rev: at, at: undefined }));
+    if (editable) button(ctx.status.changed ? 'Pin to cited version' : 'Pin to this version', 'outline', () => relink({ ...info.ref, rev: at, at: undefined }));
   }
-  button('Rename', 'outline', () => renameLink(view, info));
-  button('Edit target', 'outline', () => revealLink(view, info));
-  button('Remove link', 'danger-text', () => removeLink(view, info));
+  if (editable) {
+    button('Rename', 'outline', () => renameLink(view, info));
+    button('Edit target', 'outline', () => revealLink(view, info));
+    button('Remove link', 'danger-text', () => removeLink(view, info));
+  }
   infoEl.append(actions);
   card.append(infoEl);
   return card;

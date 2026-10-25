@@ -96,7 +96,9 @@ the toolbar), and the file browser's version selector resets to Latest each time
   latest** and **Make live** (pinned), **Compare with cited version** (live, changed) and
   **Pin to this version** / **Pin to cited version** (live), **Rename**, **Edit target**,
   **Remove link**.
-- Click → opens the document on the right at the location, scrolled into view, highlighted. A
+- Click → opens the document on the right at the location, highlighted, and always placed the
+  same way: the cited area, lines, cells or slide centred in the view (one taller than the view
+  starts at its top; a page alone shows the top of the page), as far as the document can scroll. A
   live link whose content changed opens the latest version with a notice saying so, with
   **Compare** and **Show the cited version**; a quoted PDF passage that moved is found on its
   new page.
@@ -182,8 +184,11 @@ per line, so diffs stay readable.
   `slide 2` → `slide 6`); the dot pulses on arrival and the rail fades. A wheel turn or click
   stops the glide. The first jump after a document opens still snaps.
 - **Same document, another version** (switching to its other tab, or changing version on the
-  strip): the content (not the toolbar or strip) zooms in from 94 % with a brief fade, and a chip
-  under the toolbar names the move (`Mar 3 → Latest`).
+  strip): the content (not the toolbar or strip) stays hidden for a moment while it lays out, then
+  slides in over 0.9 s from the side its version lies on the strip (an earlier version from the
+  left, a later one from the right), growing from 93 %. A chip under the toolbar shows both
+  versions on a little timeline, earlier on the left, with a dot travelling to the one you moved
+  to, which is highlighted (`Jan 12 ●──○ Latest`).
 - With the system's reduced-motion setting, places change instantly; the rail and chip still show.
 
 ## 6. Settings

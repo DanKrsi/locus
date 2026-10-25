@@ -51,6 +51,14 @@ export function glide(el: HTMLElement, to: { top?: number; left?: number }): num
   return duration;
 }
 
+/**
+ * Where to scroll so a cited span [start, end] (content pixels) sits in the middle of the view, the
+ * same way every time a link is followed. A span taller than the view starts just below its top edge.
+ */
+export function centred(size: number, start: number, end: number, margin = 40): number {
+  return end - start > size - 2 * margin ? start - margin : (start + end) / 2 - size / 2;
+}
+
 /** Whether a viewer has been on screen long enough that moving within it should glide. */
 export function settled(el: HTMLElement | null, readySince: number): boolean {
   return !!el && el.clientHeight > 0 && readySince > 0 && performance.now() - readySince > 450;

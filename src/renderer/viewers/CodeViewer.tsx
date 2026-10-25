@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { EditorState, RangeSetBuilder, StateEffect, StateField } from '@codemirror/state';
+import { EditorSelection, EditorState, RangeSetBuilder, StateEffect, StateField } from '@codemirror/state';
 import { Decoration, EditorView, GutterMarker, gutter, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers, type DecorationSet } from '@codemirror/view';
 import { LanguageDescription, HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { languages } from '@codemirror/language-data';
@@ -10,7 +10,7 @@ import { basename } from '../../core/link';
 import { decodeText } from '../files';
 import { Icon } from '../icons';
 import { editorZoom, setEditorZoom } from '../zoom';
-import { glide, settled, showTravel } from './travel';
+import { centred, glide, settled, showTravel } from './travel';
 import { CiteButton } from './CiteButton';
 import { iconSvg } from '../icons';
 import type { CiteMark, ViewerProps } from './types';
@@ -171,19 +171,20 @@ export function CodeViewer({ data, path, reveal, onCite, handle, marks, onMark, 
     const line = view.state.doc.line(start);
     const cited = setCited.of(end !== n || reveal ? { start, end: last } : null);
     const el = view.scrollDOM;
+    // The cited lines are centred in the view, the same way whether it glides there or jumps.
+    const a = view.lineBlockAt(line.from);
+    const b = view.lineBlockAt(view.state.doc.line(last).to);
+    const top = centred(el.clientHeight, a.top + view.documentPadding.top, b.bottom + view.documentPadding.top);
     if (settled(el, readySince.current)) {
-      // Glide so the cited lines end up centred, and show where in the file that is.
+      // Glide there, and show where in the file that is.
       const from = view.state.doc.lineAt(view.lineBlockAtHeight(el.scrollTop + el.clientHeight / 2).from).number;
-      const a = view.lineBlockAt(line.from);
-      const b = view.lineBlockAt(view.state.doc.line(last).to);
-      const top = (a.top + b.bottom) / 2 + view.documentPadding.top - el.clientHeight / 2;
       view.dispatch({ selection: { anchor: line.from }, effects: [cited] });
       const mid = el.clientHeight / 2;
       const ms = glide(el, { top });
       showTravel(el.parentElement!.parentElement!, (el.scrollTop + mid) / el.scrollHeight, (top + mid) / el.scrollHeight, `L${from}`, `L${start}`, ms);
       return;
     }
-    view.dispatch({ selection: { anchor: line.from }, effects: [cited, EditorView.scrollIntoView(line.from, { y: 'center' })] });
+    view.dispatch({ selection: { anchor: line.from }, effects: [cited, EditorView.scrollIntoView(EditorSelection.range(line.from, view.state.doc.line(last).to), { y: 'center' })] });
     if (!readySince.current && el.clientHeight > 0) readySince.current = performance.now();
   };
 

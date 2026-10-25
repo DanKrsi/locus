@@ -22,7 +22,7 @@ async function sanitize(data: Uint8Array): Promise<ArrayBuffer> {
 import { Icon } from '../icons';
 import { CiteButton } from './CiteButton';
 import type { ViewerProps } from './types';
-import { glide, settled, showTravel } from './travel';
+import { centred, glide, settled, showTravel } from './travel';
 
 /** Slide elements produced by pptx-preview, in order. */
 function slideElements(root: HTMLElement): HTMLElement[] {
@@ -104,7 +104,10 @@ export function SlidesViewer({ data, reveal, onCite, handle, marks, onMark, onPl
     const to = Math.min(Math.max(1, n), slides.length);
     const target = slides[to - 1];
     // Positions from the screen: slides sit inside pptx-preview's own positioned wrapper.
-    const top = scroller.scrollTop + target.getBoundingClientRect().top - scroller.getBoundingClientRect().top - 12;
+    const box = target.getBoundingClientRect();
+    const start = scroller.scrollTop + box.top - scroller.getBoundingClientRect().top;
+    // The slide is centred in the view (one taller than the view starts at its top).
+    const top = Math.max(0, centred(scroller.clientHeight, start, start + box.height, 12));
     if (animate && settled(scroller, readySince.current) && !rendering.current) {
       const mid = scroller.clientHeight / 2;
       const ms = glide(scroller, { top });

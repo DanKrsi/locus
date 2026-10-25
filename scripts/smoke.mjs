@@ -152,7 +152,7 @@ await step('follow a pinned code reference', async () => {
   await shot('code-pinned');
 });
 
-await step('moving within a document glides; another version zooms in with a chip', async () => {
+await step('moving within a document glides; another version slides in with a chip', async () => {
   // Back from the pinned version to the latest: the same file in another version.
   await win.locator('.cm-ref', { hasText: 'the backoff loop' }).click();
   await win.locator('.viewer:not(.hidden) .version-chip').waitFor({ timeout: 5000 });
@@ -161,6 +161,25 @@ await step('moving within a document glides; another version zooms in with a chi
   await win.locator('.cm-ref', { hasText: 'backoff()' }).first().click();
   await win.locator('.viewer:not(.hidden) .travel-rail .travel-label', { hasText: /^L\d+$/ }).waitFor({ timeout: 5000 });
   await shot('travel');
+});
+
+await step('a link always lands the same way: the cited area centred', async () => {
+  const centre = () =>
+    win.evaluate(() => {
+      const box = document.querySelector('.viewer:not(.hidden) .area-box.cited').getBoundingClientRect();
+      const view = document.querySelector('.viewer:not(.hidden) .pdf-scroll').getBoundingClientRect();
+      return ((box.top + box.bottom) / 2 - view.top) / view.height;
+    });
+  const follow = async (label) => {
+    await win.locator('.cm-ref', { hasText: label }).first().click();
+    await win.waitForTimeout(1600);
+  };
+  await follow('Table 5');
+  const first = await centre();
+  await follow('the backoff loop');
+  await follow('Table 5');
+  const again = await centre();
+  if (Math.abs(first - 0.5) > 0.05 || Math.abs(again - first) > 0.02) throw new Error(`area at ${first.toFixed(3)} then ${again.toFixed(3)} of the view`);
 });
 
 await step('follow a spreadsheet named range', async () => {

@@ -4,7 +4,7 @@ import { Icon } from '../icons';
 import { CiteButton } from './CiteButton';
 import { cellKey, loadWorkbook, nameForBox, resolveSheetRef, type CellModel, type SheetModel, type WorkbookModel } from './sheetModel';
 import type { ViewerProps } from './types';
-import { glide, settled, showTravel } from './travel';
+import { centred, glide, settled, showTravel } from './travel';
 
 /** Header sizes at 100%; the grid scales them (and every row and column) with the zoom. */
 const HEAD_H_100 = 22;
@@ -140,8 +140,18 @@ export function SheetViewer({ data, path, reveal, onCite, handle, onPlace, zoom 
     if (!el) return;
     const top = rowPre[Math.min(box.top, nRows) - 1];
     const left = colPre[Math.min(box.left, nCols) - 1];
-    const wantTop = top < el.scrollTop || top > el.scrollTop + el.clientHeight - HEAD_H - 40 ? Math.max(0, top - 60) : el.scrollTop;
-    const wantLeft = left < el.scrollLeft || left > el.scrollLeft + el.clientWidth - HEAD_W - 80 ? Math.max(0, left - 40) : el.scrollLeft;
+    let wantTop: number, wantLeft: number;
+    if (toLabel) {
+      // Following a link: the cited cells are centred in the grid (below and right of the headers).
+      const bottom = rowPre[Math.min(box.bottom, nRows)];
+      const right = colPre[Math.min(box.right, nCols)];
+      wantTop = Math.max(0, centred(el.clientHeight - HEAD_H, top, bottom));
+      wantLeft = Math.max(0, centred(el.clientWidth - HEAD_W, left, right));
+    } else {
+      // Moving the selection: scroll only as far as needed.
+      wantTop = top < el.scrollTop || top > el.scrollTop + el.clientHeight - HEAD_H - 40 ? Math.max(0, top - 60) : el.scrollTop;
+      wantLeft = left < el.scrollLeft || left > el.scrollLeft + el.clientWidth - HEAD_W - 80 ? Math.max(0, left - 40) : el.scrollLeft;
+    }
     if (toLabel && settled(el, readySince.current)) {
       // Glide there and show which rows of the sheet that is.
       const row = locate(rowPre, el.scrollTop + 1);

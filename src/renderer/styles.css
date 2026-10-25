@@ -762,14 +762,29 @@ svg.ico { width: 16px; height: 16px; flex: none; }
 @keyframes dot-arrive { 50% { box-shadow: 0 0 0 9px var(--accent-soft); } }
 .travel-label { position: absolute; right: 18px; top: 50%; transform: translateY(-50%); background: var(--accent); color: var(--accent-text); font-size: 11.5px; font-weight: 600; padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
 
-/* Moving to another version of the same document: content zooms in, a chip names the versions */
-.viewer.version-in > :not(.toolbar):not(.vstrip):not(.version-chip):not(.travel-rail) { animation: version-in 0.42s cubic-bezier(0.2, 0.75, 0.25, 1); transform-origin: 50% 35%; }
-@keyframes version-in { 0% { transform: scale(0.94); opacity: 0.15; filter: blur(3px); } 55% { opacity: 1; filter: blur(0); } 100% { transform: scale(1); } }
-.version-chip { position: absolute; top: 80px; left: 50%; z-index: 20; display: flex; align-items: center; gap: 6px; background: var(--panel); border: 1px solid var(--mark); color: var(--mark-text); border-radius: 999px; padding: 3px 12px; font-size: 12.5px; font-weight: 600; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12); pointer-events: none; white-space: nowrap; animation: version-chip 1.8s ease forwards; }
-.version-chip .arrow { color: var(--faint); font-weight: 400; }
-@keyframes version-chip { 0% { opacity: 0; transform: translate(-50%, -6px) scale(0.96); } 12% { opacity: 1; transform: translate(-50%, 0) scale(1); } 78% { opacity: 1; transform: translate(-50%, 0); } 100% { opacity: 0; transform: translate(-50%, 0); } }
+/* Moving to another version of the same document: the content slides in from the side of the
+   version strip it came from (older = left), and a chip shows both versions on a timeline. */
+.viewer.version-wait > :not(.toolbar):not(.vstrip):not(.version-chip):not(.travel-rail) { opacity: 0; }
+.viewer.version-in > :not(.toolbar):not(.vstrip):not(.version-chip):not(.travel-rail) { animation: version-in 0.9s cubic-bezier(0.22, 0.8, 0.3, 1) both; transform-origin: 50% 30%; will-change: transform, opacity; }
+.viewer[data-dir='earlier'] { --from-x: -110px; }
+.viewer[data-dir='later'] { --from-x: 110px; }
+@keyframes version-in { 0% { transform: translateX(var(--from-x, 0)) scale(0.93); opacity: 0; } 45% { opacity: 1; } 100% { transform: none; opacity: 1; } }
+.version-chip { position: absolute; top: 80px; left: 50%; z-index: 20; display: flex; align-items: center; gap: 10px; background: var(--panel); border: 1px solid var(--mark); color: var(--muted); border-radius: 999px; padding: 5px 14px; font-size: 12.5px; font-weight: 500; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.14); pointer-events: none; white-space: nowrap; animation: version-chip 2.6s ease forwards; }
+.version-chip .vc-label.target { color: var(--mark-text); font-weight: 650; }
+.version-chip .vc-track { position: relative; width: 72px; height: 2px; border-radius: 1px; background: color-mix(in srgb, var(--text) 18%, transparent); }
+.version-chip .vc-track::before, .version-chip .vc-track::after { content: ''; position: absolute; top: 50%; width: 6px; height: 6px; border-radius: 50%; background: var(--panel); border: 1.5px solid var(--faint); transform: translate(-50%, -50%); }
+.version-chip .vc-track::before { left: 0; }
+.version-chip .vc-track::after { left: 100%; }
+.version-chip .vc-dot { position: absolute; top: 50%; width: 10px; height: 10px; border-radius: 50%; background: var(--mark); transform: translate(-50%, -50%); z-index: 1; box-shadow: 0 0 0 3px color-mix(in srgb, var(--mark) 25%, transparent); }
+.version-chip.later .vc-dot { animation: vc-later 0.9s cubic-bezier(0.65, 0, 0.35, 1) 0.2s both; }
+.version-chip.earlier .vc-dot { animation: vc-earlier 0.9s cubic-bezier(0.65, 0, 0.35, 1) 0.2s both; }
+@keyframes vc-later { from { left: 0; } to { left: 100%; } }
+@keyframes vc-earlier { from { left: 100%; } to { left: 0; } }
+@keyframes version-chip { 0% { opacity: 0; transform: translate(-50%, -6px) scale(0.96); } 8% { opacity: 1; transform: translate(-50%, 0) scale(1); } 85% { opacity: 1; transform: translate(-50%, 0); } 100% { opacity: 0; transform: translate(-50%, 0); } }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 @media (prefers-reduced-motion: reduce) {
   .viewer.version-in > * { animation: none !important; }
+  .version-chip .vc-dot { animation-duration: 0s !important; animation-delay: 0s !important; }
   .version-chip { animation-name: version-chip-still; }
   .travel-rail { animation: none; }
 }

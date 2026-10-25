@@ -57,6 +57,8 @@ interface VersionHop {
   id: string;
   from?: string;
   to?: string;
+  /** Whether the move is to a later version (latest counts as the newest). */
+  later: boolean;
   key: number;
 }
 
@@ -64,10 +66,12 @@ export function DocsPane(p: Props) {
   const active = p.tabs.find((t) => t.id === p.activeId);
   const was = useRef<{ path: string; rev?: string } | null>(null);
   const [hop, setHop] = useState<VersionHop | null>(null);
+  const time = (rev?: string) => (rev ? Date.parse(p.versionDate(rev) ?? '') || 0 : Infinity);
+  const isLater = (from?: string, to?: string) => time(to) >= time(from);
   useEffect(() => {
     const prev = was.current;
     if (active && prev && !active.external && !active.compare && active.path === prev.path && !sameRev(active.rev, prev.rev))
-      setHop({ id: active.id, from: prev.rev, to: active.rev, key: Date.now() });
+      setHop({ id: active.id, from: prev.rev, to: active.rev, later: isLater(prev.rev, active.rev), key: Date.now() });
     was.current = active ? { path: active.path, rev: active.rev } : null;
   }, [p.activeId, active?.rev, active?.path]);
   return (
@@ -183,8 +187,9 @@ function ViewerBody({ kind, onZoom, noteCallbacks, onEdit, ...props }: BodyProps
 
 function DocView({ tab, visible, hop, ...p }: Props & { tab: DocTab; visible: boolean; hop?: VersionHop }) {
   const main = useBytes(tab.path, tab.external, tab.rev);
-  // A version hop plays once the new version's content is in: the content zooms in from slightly
-  // smaller while a chip says which versions you moved between.
+  // A version hop plays once the new version's content is in and laid out: the content slides in
+  // from the side of the version strip it came from (older on the left), and a chip shows the two
+  // versions on a little timeline with a dot travelling between them.
   const root = useRef<HTMLDivElement>(null);
   const played = useRef(0);
   const [chip, setChip] = useState<VersionHop | null>(null);
@@ -193,14 +198,23 @@ function DocView({ tab, visible, hop, ...p }: Props & { tab: DocTab; visible: bo
     if (!hop || !main.data || !el || played.current === hop.key) return;
     played.current = hop.key;
     el.classList.remove('version-in');
-    void el.offsetWidth;
-    el.classList.add('version-in');
+    el.dataset.dir = hop.later ? 'later' : 'earlier';
+    // Hidden for a moment while the viewer lays out and scrolls, so none of that shows.
+    el.classList.add('version-wait');
     setChip(hop);
-    const t = setTimeout(() => {
-      el.classList.remove('version-in');
-      setChip(null);
-    }, 1800);
-    return () => clearTimeout(t);
+    const timers = [
+      setTimeout(() => {
+        el.classList.remove('version-wait');
+        void el.offsetWidth;
+        el.classList.add('version-in');
+      }, 140),
+      setTimeout(() => el.classList.remove('version-in'), 140 + 900),
+      setTimeout(() => setChip(null), 2600),
+    ];
+    return () => {
+      timers.forEach(clearTimeout);
+      el.classList.remove('version-wait', 'version-in');
+    };
   }, [hop?.key, !!main.data]);
   // The left side of a comparison: a past version, or the current file (LATEST).
   const leftRev = tab.compare === LATEST ? undefined : tab.compare;
@@ -340,8 +354,15 @@ function DocView({ tab, visible, hop, ...p }: Props & { tab: DocTab; visible: bo
   return (
     <div ref={root} className={'viewer' + (visible ? '' : ' hidden')}>
       {chip && (
-        <div key={chip.key} className="version-chip" aria-live="polite">
-          {label(chip.from)} <span className="arrow">→</span> {label(chip.to)}
+        <div key={chip.key} className={'version-chip ' + (chip.later ? 'later' : 'earlier')} aria-live="polite">
+          <span className={'vc-label' + (chip.later ? '' : ' target')}>{label(chip.later ? chip.from : chip.to)}</span>
+          <span className="vc-track" aria-hidden="true">
+            <span className="vc-dot" />
+          </span>
+          <span className={'vc-label' + (chip.later ? ' target' : '')}>{label(chip.later ? chip.to : chip.from)}</span>
+          <span className="sr-only">
+            {label(chip.from)} to {label(chip.to)}
+          </span>
         </div>
       )}
       <CiteModeContext.Provider value={{ mode: p.citeMode, setMode: p.onCiteMode, pinnedOnly: !!tab.rev }}>{body}</CiteModeContext.Provider>

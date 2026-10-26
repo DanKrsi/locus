@@ -10,7 +10,7 @@ import { basename } from '../../core/link';
 import { decodeText } from '../files';
 import { Icon } from '../icons';
 import { editorZoom, setEditorZoom } from '../zoom';
-import { centred, glide, settled, showTravel } from './travel';
+import { centred, glide, pulse, settled, showTravel } from './travel';
 import { CiteButton } from './CiteButton';
 import { iconSvg } from '../icons';
 import type { CiteMark, ViewerProps } from './types';
@@ -181,7 +181,9 @@ export function CodeViewer({ data, path, reveal, onCite, handle, marks, onMark, 
       view.dispatch({ selection: { anchor: line.from }, effects: [cited] });
       const mid = el.clientHeight / 2;
       const ms = glide(el, { top });
-      showTravel(el.parentElement!.parentElement!, (el.scrollTop + mid) / el.scrollHeight, (top + mid) / el.scrollHeight, `L${from}`, `L${start}`, ms);
+      // Already there: no travel to show, just a pulse on what is cited.
+      if (ms === null) pulse(el);
+      else showTravel(el.parentElement!.parentElement!, (el.scrollTop + mid) / el.scrollHeight, (top + mid) / el.scrollHeight, `L${from}`, `L${start}`, ms);
       return;
     }
     view.dispatch({ selection: { anchor: line.from }, effects: [cited, EditorView.scrollIntoView(EditorSelection.range(line.from, view.state.doc.line(last).to), { y: 'center' })] });

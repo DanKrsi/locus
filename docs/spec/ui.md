@@ -98,7 +98,9 @@ the toolbar), and the file browser's version selector resets to Latest each time
   **Remove link**.
 - Click → opens the document on the right at the location, highlighted, and always placed the
   same way: the cited area, lines, cells or slide centred in the view (one taller than the view
-  starts at its top; a page alone shows the top of the page), as far as the document can scroll. A
+  starts at its top; a page alone shows the top of the page), as far as the document can scroll.
+  If the view is already there (a short file, or the place already on screen), nothing travels:
+  the cited highlight pulses once. A
   live link whose content changed opens the latest version with a notice saying so, with
   **Compare** and **Show the cited version**; a quoted PDF passage that moved is found on its
   new page.

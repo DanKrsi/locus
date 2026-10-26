@@ -4,7 +4,7 @@ import { Icon } from '../icons';
 import { CiteButton } from './CiteButton';
 import { cellKey, loadWorkbook, nameForBox, resolveSheetRef, type CellModel, type SheetModel, type WorkbookModel } from './sheetModel';
 import type { ViewerProps } from './types';
-import { centred, glide, settled, showTravel } from './travel';
+import { centred, glide, pulse, settled, showTravel } from './travel';
 
 /** Header sizes at 100%; the grid scales them (and every row and column) with the zoom. */
 const HEAD_H_100 = 22;
@@ -158,7 +158,9 @@ export function SheetViewer({ data, path, reveal, onCite, handle, onPlace, zoom 
       const col = locate(colPre, el.scrollLeft + 1);
       const mid = el.clientHeight / 2;
       const ms = glide(el, { top: wantTop, left: wantLeft });
-      showTravel(el.parentElement!, (el.scrollTop + mid) / el.scrollHeight, (wantTop + mid) / el.scrollHeight, `${colLetters(col)}${row}`, toLabel, ms);
+      // Already there: no travel to show, just a pulse on what is cited.
+      if (ms === null) pulse(el);
+      else showTravel(el.parentElement!, (el.scrollTop + mid) / el.scrollHeight, (wantTop + mid) / el.scrollHeight, `${colLetters(col)}${row}`, toLabel, ms);
     } else {
       el.scrollTop = wantTop;
       el.scrollLeft = wantLeft;

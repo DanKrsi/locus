@@ -4,7 +4,7 @@ import type { Rect } from '../../core/link';
 import { Icon } from '../icons';
 import { CiteButton } from './CiteButton';
 import { openPdf, pdfjs } from './pdf';
-import { centred, glide, settled, showTravel } from './travel';
+import { centred, glide, pulse, settled, showTravel } from './travel';
 import type { CiteMark, ViewerProps } from './types';
 
 interface Size {
@@ -155,7 +155,9 @@ export function PdfViewer({ data, reveal, onCite, handle, marks, onMark, onPlace
         const mid = el.clientHeight / 2;
         const name = (n: number) => `p ${labels?.[n - 1] ?? n}`;
         const ms = glide(el, { top: to });
-        showTravel(el.parentElement!, (el.scrollTop + mid) / el.scrollHeight, (to + mid) / el.scrollHeight, name(pageRef.current), name(loc.page), ms);
+        // Already there: no travel to show, just a pulse on what is cited.
+        if (ms === null) pulse(el);
+        else showTravel(el.parentElement!, (el.scrollTop + mid) / el.scrollHeight, (to + mid) / el.scrollHeight, name(pageRef.current), name(loc.page), ms);
       } else scrollToPage(loc.page, loc.viewrect?.y, loc.viewrect?.h);
     }
   }, [reveal, doc]);

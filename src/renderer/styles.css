@@ -489,6 +489,9 @@ svg.ico { width: 16px; height: 16px; flex: none; }
 .cm-cited-line { background: var(--mark-soft); }
 .cm-cited-line.first { box-shadow: inset 0 1px 0 var(--mark); }
 .cm-cited-line.last { box-shadow: inset 0 -1px 0 var(--mark); }
+/* A link followed to where the view already is: the cited highlight pulses once */
+.cite-pulse .cm-cited-line, .cite-pulse .area-box.cited, .cite-pulse .cited-box { animation: cite-pulse 0.8s ease-out; }
+@keyframes cite-pulse { 30% { background: color-mix(in srgb, var(--mark) 38%, transparent); } }
 
 .sheet { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .sheet-bar { display: flex; align-items: center; gap: 6px; padding: 4px 8px; border-bottom: 1px solid var(--border); }

@@ -157,9 +157,18 @@ await step('moving within a document glides; another version slides in with a ch
   await win.locator('.cm-ref', { hasText: 'the backoff loop' }).click();
   await win.locator('.viewer:not(.hidden) .version-chip').waitFor({ timeout: 5000 });
   await win.waitForTimeout(800);
-  // Another place in the same file and version: the travel rail shows where it went.
+  // Another place in a file that fits on screen: nothing travels, the cited lines pulse.
   await win.locator('.cm-ref', { hasText: 'backoff()' }).first().click();
-  await win.locator('.viewer:not(.hidden) .travel-rail .travel-label', { hasText: /^L\d+$/ }).waitFor({ timeout: 5000 });
+  await win.locator('.viewer:not(.hidden) .cite-pulse').waitFor({ timeout: 5000 });
+  if (await win.locator('.viewer:not(.hidden) .travel-rail').count()) throw new Error('travel rail shown with nothing to scroll');
+  // A place further down a long document: the travel rail shows where it went.
+  await win.locator('.cm-ref', { hasText: 'Table 5' }).first().click();
+  await win.locator('.viewer:not(.hidden) .area-box.cited').waitFor({ timeout: 20000 });
+  await win.waitForTimeout(800);
+  await win.evaluate(() => (document.querySelector('.viewer:not(.hidden) .pdf-scroll').scrollTop = 0));
+  await win.waitForTimeout(300);
+  await win.locator('.cm-ref', { hasText: 'Table 5' }).first().click();
+  await win.locator('.viewer:not(.hidden) .travel-rail .travel-label', { hasText: /^p / }).waitFor({ timeout: 5000 });
   await shot('travel');
 });
 

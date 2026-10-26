@@ -11,16 +11,18 @@ const running = new WeakMap<HTMLElement, () => void>();
 
 /**
  * Scrolls el to the target with an ease-in-out glide; long jumps take longer but stay quick.
- * A wheel turn or click during the glide stops it. Returns the glide's duration in ms (0 = jumped).
+ * A wheel turn or click during the glide stops it. Returns the glide's duration in ms (0 = jumped),
+ * or null when the view is already there (nothing to show travelling).
  */
-export function glide(el: HTMLElement, to: { top?: number; left?: number }): number {
+export function glide(el: HTMLElement, to: { top?: number; left?: number }): number | null {
   running.get(el)?.();
   const fromTop = el.scrollTop;
   const fromLeft = el.scrollLeft;
   const top = Math.max(0, Math.min(to.top ?? fromTop, el.scrollHeight - el.clientHeight));
   const left = Math.max(0, Math.min(to.left ?? fromLeft, el.scrollWidth - el.clientWidth));
   const dist = Math.hypot(top - fromTop, left - fromLeft);
-  if (reduced() || dist < 2) {
+  if (dist < 2) return null;
+  if (reduced()) {
     el.scrollTop = top;
     el.scrollLeft = left;
     return 0;
@@ -57,6 +59,14 @@ export function glide(el: HTMLElement, to: { top?: number; left?: number }): num
  */
 export function centred(size: number, start: number, end: number, margin = 40): number {
   return end - start > size - 2 * margin ? start - margin : (start + end) / 2 - size / 2;
+}
+
+/** Briefly pulses the cited highlight inside el: a link followed to where the view already is. */
+export function pulse(el: HTMLElement) {
+  el.classList.remove('cite-pulse');
+  void el.offsetWidth;
+  el.classList.add('cite-pulse');
+  setTimeout(() => el.classList.remove('cite-pulse'), 800);
 }
 
 /** Whether a viewer has been on screen long enough that moving within it should glide. */

@@ -22,7 +22,7 @@ async function sanitize(data: Uint8Array): Promise<ArrayBuffer> {
 import { Icon } from '../icons';
 import { CiteButton } from './CiteButton';
 import type { ViewerProps } from './types';
-import { centred, glide, settled, showTravel } from './travel';
+import { centred, glide, pulse, settled, showTravel } from './travel';
 
 /** Slide elements produced by pptx-preview, in order. */
 function slideElements(root: HTMLElement): HTMLElement[] {
@@ -111,7 +111,9 @@ export function SlidesViewer({ data, reveal, onCite, handle, marks, onMark, onPl
     if (animate && settled(scroller, readySince.current) && !rendering.current) {
       const mid = scroller.clientHeight / 2;
       const ms = glide(scroller, { top });
-      showTravel(scroller.parentElement!, (scroller.scrollTop + mid) / scroller.scrollHeight, (top + mid) / scroller.scrollHeight, `slide ${slideRef.current}`, `slide ${to}`, ms);
+      // Already there: no travel to show, just a pulse on what is cited.
+      if (ms === null) pulse(scroller);
+      else showTravel(scroller.parentElement!, (scroller.scrollTop + mid) / scroller.scrollHeight, (top + mid) / scroller.scrollHeight, `slide ${slideRef.current}`, `slide ${to}`, ms);
     } else scroller.scrollTop = top;
     if (!readySince.current && scroller.clientHeight > 0 && !rendering.current) readySince.current = performance.now();
     setSlide(to);

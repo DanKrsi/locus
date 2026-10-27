@@ -1,0 +1,65 @@
+# Builds the Windows installer and publishes a GitHub release whenever a version tag is pushed:
+#   npm version / edit package.json, commit, then  git tag v0.2.13 && git push origin v0.2.13
+# It can also be run by hand from the Actions tab for a tag that already exists.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag to release (for example v0.2.12)
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Check the tag matches package.json
+        shell: bash
+        run: |
+          version=$(node -p "require('./package.json').version")
+          [ "v$version" = "$TAG" ] || { echo "Tag $TAG but package.json says $version"; exit 1; }
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
+      - name: Build the installer
+        run: |
+          npm run build
+          npm run build:plugin
+          npx electron-builder --win nsis --publish never
+        env:
+          # The installer isn't code-signed yet.
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: Publish the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # The demo workspace doesn't change between versions: carry it over from the latest release.
+          gh release download --pattern Locus-demo.locus --dir release || echo "No demo on the latest release"
+          files=(release/Locus-Setup-*.exe)
+          [ -f release/Locus-demo.locus ] && files+=(release/Locus-demo.locus)
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release upload "$TAG" "${files[@]}" --clobber
+          else
+            gh release create "$TAG" "${files[@]}" --title "Locus ${TAG#v}" --generate-notes --verify-tag
+          fi

@@ -217,6 +217,9 @@ ${R.flow} is a flowchart of \`check()\`: a loop inside a loop, a decision, and c
 `,
 );
 
+// The repository's front page on GitHub: how to open the demo.
+await put('README.md', "# Locus demo\n\nA small workspace for trying [Locus](https://github.com/DanKrsi/locus): one note and one\nflowchart that link into a PDF, some code, a spreadsheet, slides, an image and a recording,\nacross three versions.\n\n## Open it\n\n- **Easiest:** download `Locus-demo.locus` from the\n  [Locus release](https://github.com/DanKrsi/locus/releases/latest) and double-click it.\n- **With git:** `git clone https://github.com/DanKrsi/locus-sample.git`, then in Locus choose\n  **Open a folder** and pick it. (A zip download won't work: the demo needs its version history.)\n\nThen open **notes/Start here.md**, click any green link, or press **Tour**.\n");
+
 // After the notes: the code changes, so live links follow moved lines and one shows "changed".
 await put(CODE, C.codeV3);
 const v3 = await commit('Notes added', '2026-03-10T14:40:00');

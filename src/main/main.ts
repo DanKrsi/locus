@@ -40,6 +40,8 @@ const DEFAULT_SETTINGS: Settings = {
   autosave: true,
   noteZoom: 1,
   docZoom: 1,
+  editorTabLimit: 0,
+  viewerTabLimit: 0,
 };
 
 const settingsFile = () => join(app.getPath('userData'), 'settings.json');

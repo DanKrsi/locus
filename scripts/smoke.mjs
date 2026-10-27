@@ -623,6 +623,38 @@ await step('notes and documents zoom independently', async () => {
   if ((await px('.editor-wrap .cm-scroller')) !== note0) throw new Error('notes text not back to normal');
 });
 
+await step('tab limits close the tab viewed longest ago', async () => {
+  const docTabs = win.locator('[data-pane="docs"] .tabs > .tab');
+  const noteTabs = win.locator('[data-pane="notes"] .tabs > .tab');
+  const names = async (tabs) => (await tabs.allTextContents()).join(' | ');
+  const setLimit = async (side, n) => {
+    await win.getByTitle('Settings').click();
+    await win.getByLabel(`${side} limit`).selectOption(n ? 'limit' : 'none');
+    if (n) await win.getByLabel(`${side} tabs`).fill(String(n));
+    await win.getByRole('button', { name: 'Done' }).click();
+  };
+  await noteTabs.filter({ hasText: 'review.md' }).first().click();
+  await docTabs.filter({ hasText: 'client.py' }).first().click();
+  await docTabs.filter({ hasText: 'BDS-100' }).first().click();
+  await setLimit('Viewer (documents)', 2);
+  await win.waitForFunction(() => document.querySelectorAll('[data-pane="docs"] .tabs > .tab').length === 2, null, { timeout: 5000 });
+  let now = await names(docTabs);
+  if (!/client\.py/.test(now) || !/BDS-100/.test(now)) throw new Error(`kept the wrong tabs: ${now}`);
+  // Opening a third closes client.py, viewed before BDS-100.
+  await win.locator('.cm-ref', { hasText: 'LoadTable' }).click();
+  await win.locator('.cited-box').waitFor({ timeout: 15000 });
+  await win.waitForTimeout(300);
+  now = await names(docTabs);
+  if ((await docTabs.count()) !== 2 || /client\.py/.test(now) || !/BDS-100/.test(now)) throw new Error(`after opening a third: ${now}`);
+  // The editor keeps only the note in front.
+  if ((await noteTabs.count()) < 2) throw new Error('expected several notes open');
+  await setLimit('Editor (notes and flowcharts)', 1);
+  await win.waitForFunction(() => document.querySelectorAll('[data-pane="notes"] .tabs > .tab').length === 1, null, { timeout: 5000 });
+  if (!/review\.md/.test(await names(noteTabs))) throw new Error('closed the note in front');
+  await setLimit('Viewer (documents)', 0);
+  await setLimit('Editor (notes and flowcharts)', 0);
+});
+
 await step('restored tabs that no longer exist are dropped', async () => {
   await win.evaluate(() => {
     const key = Object.keys(localStorage).find((k) => k.startsWith('session:'));

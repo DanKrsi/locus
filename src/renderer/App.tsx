@@ -365,13 +365,27 @@ export function App() {
     setActiveDoc(tab.id);
   };
 
+  // Keep the viewer within its tab limit by closing the tabs viewed longest ago.
+  const docViewed = useRef(new Map<string, number>());
+  useEffect(() => {
+    if (activeDoc) docViewed.current.set(activeDoc, Date.now());
+  }, [activeDoc]);
+  const viewerLimit = settings?.viewerTabLimit ?? 0;
+  useEffect(() => {
+    if (!viewerLimit || docTabs.length <= viewerLimit) return;
+    const seen = (id: string) => docViewed.current.get(id) ?? 0;
+    const oldest = docTabs.filter((t) => t.id !== activeDoc).sort((a, b) => seen(a.id) - seen(b.id));
+    for (const t of oldest.slice(0, docTabs.length - viewerLimit)) closeDoc(t.id);
+  }, [docTabs, activeDoc, viewerLimit]);
+
   const closeDoc = (id: string) => {
     const tabs = live.current.docTabs;
     const i = tabs.findIndex((t) => t.id === id);
     const rest = tabs.filter((t) => t.id !== id);
-    setDocTabs(rest);
+    setDocTabs((ts) => ts.filter((t) => t.id !== id));
     if (live.current.activeDoc === id) setActiveDoc(rest[Math.min(i, rest.length - 1)]?.id ?? null);
     handles.current.delete(id);
+    docViewed.current.delete(id);
   };
 
   /** A note or flowchart picked in Open: edit it on the left or view it on the right. */
@@ -900,6 +914,7 @@ export function App() {
               initialPaths={session?.notes ?? []}
               initialActive={session?.activeNote ?? null}
               autosave={settings.autosave}
+              tabLimit={settings.editorTabLimit ?? 0}
               callbacks={editorCallbacks}
               onSessionChange={(paths, active) => persistSession({ notes: paths, activeNote: active })}
               onActiveChange={(p) => {
@@ -1321,6 +1336,12 @@ function SettingsDialog({
             </label>
           </section>
           <section>
+            <div style={{ fontWeight: 600, marginBottom: 6 }}>Tabs</div>
+            <div className="muted" style={{ marginBottom: 8 }}>When a side is full, opening another file closes the one you looked at longest ago.</div>
+            <TabLimit label="Editor (notes and flowcharts)" value={settings.editorTabLimit ?? 0} onChange={(n) => onChange({ editorTabLimit: n })} />
+            <TabLimit label="Viewer (documents)" value={settings.viewerTabLimit ?? 0} onChange={(n) => onChange({ viewerTabLimit: n })} />
+          </section>
+          <section>
             <div style={{ fontWeight: 600, marginBottom: 6 }}>Claude</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <span className="muted" style={{ flex: 1 }}>Let Claude Code or Claude Desktop write notes, tours and flowcharts in your workspaces.</span>
@@ -1330,6 +1351,42 @@ function SettingsDialog({
         </div>
         <div className="dialog-foot"><button className="primary" onClick={onClose}>Done</button></div>
       </div>
+    </div>
+  );
+}
+
+/** A tab limit: no limit, or a number of tabs. */
+function TabLimit({ label, value, onChange }: { label: string; value: number; onChange(n: number): void }) {
+  const [draft, setDraft] = useState(String(value || 5));
+  useEffect(() => {
+    if (value) setDraft(String(value));
+  }, [value]);
+  const commit = (text: string) => {
+    const n = Math.round(Number(text));
+    if (n >= 1 && n <= 99) onChange(n);
+    else setDraft(String(value || 5));
+  };
+  return (
+    <div className="tab-limit" style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '4px 0' }}>
+      <span style={{ flex: 1 }}>{label}</span>
+      <select aria-label={`${label} limit`} value={value ? 'limit' : 'none'} onChange={(e) => onChange(e.target.value === 'none' ? 0 : Number(draft) || 5)}>
+        <option value="none">No limit</option>
+        <option value="limit">At most</option>
+      </select>
+      <input
+        type="number"
+        min={1}
+        max={99}
+        aria-label={`${label} tabs`}
+        style={{ width: 56, visibility: value ? 'visible' : 'hidden' }}
+        value={draft}
+        onChange={(e) => {
+          setDraft(e.target.value);
+          if (Number(e.target.value) >= 1) commit(e.target.value);
+        }}
+        onBlur={(e) => commit(e.target.value)}
+      />
+      <span className="muted" style={{ width: 30, visibility: value ? 'visible' : 'hidden' }}>tabs</span>
     </div>
   );
 }

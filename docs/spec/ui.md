@@ -242,6 +242,10 @@ opens the same dialog any time, with each app's status and a Connect / Update / 
 | Workspace | Repository |
 
 - Theme, autosave, auto-sync, Git: built-in or system git, GitHub account.
+- **Tabs:** a tab limit for the editor (notes and flowcharts) and for the viewer, each "No limit"
+  (the default) or "At most N". Opening one more tab than the limit closes the tab on that side
+  viewed longest ago (a note is saved first); the tab in front is never closed. Lowering the limit
+  trims straight away.
 
 ## 7. Sharing (later milestone)
 

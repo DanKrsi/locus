@@ -52,6 +52,8 @@ interface Props {
   initialPaths: string[];
   initialActive: string | null;
   autosave: boolean;
+  /** Most tabs open at once (0 = no limit). */
+  tabLimit: number;
   /** Editor callbacks for a note; `notePath` returns its current path (it can be moved). */
   callbacks(notePath: () => string): EditorCallbacks;
   onSessionChange(paths: string[], active: string | null): void;
@@ -209,9 +211,27 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
       docs.current.delete(path);
     }
     const remaining = tabsRef.current.filter((t) => t.path !== path);
-    setTabs(remaining);
+    setTabs((ts) => ts.filter((t) => t.path !== path));
     if (active === path) setActive(remaining.length ? remaining[remaining.length - 1].path : null);
   };
+
+  // Keep within the tab limit by closing the tabs viewed longest ago (close saves them first).
+  const viewed = useRef(new Map<string, number>());
+  const closing = useRef(new Set<string>());
+  useEffect(() => {
+    if (active) viewed.current.set(active, Date.now());
+  }, [active]);
+  useEffect(() => {
+    const open = tabs.filter((t) => !closing.current.has(t.path));
+    if (!p.tabLimit || open.length <= p.tabLimit) return;
+    const seen = (path: string) => viewed.current.get(path) ?? 0;
+    const oldest = open.filter((t) => t.path !== active).sort((a, b) => seen(a.path) - seen(b.path));
+    for (const t of oldest.slice(0, open.length - p.tabLimit)) {
+      closing.current.add(t.path);
+      viewed.current.delete(t.path);
+      void close(t.path).finally(() => closing.current.delete(t.path));
+    }
+  }, [tabs, active, p.tabLimit]);
 
   const newNote = async () => {
     const files = new Set(await api.listFiles());

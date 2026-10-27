@@ -93,6 +93,9 @@ export interface Settings {
   /** Zoom of the notes editor and of the document viewers (1 = 100%), set separately. */
   noteZoom: number;
   docZoom: number;
+  /** Most tabs open at once on each side (0 = no limit). Opening one more closes the least recently viewed. */
+  editorTabLimit: number;
+  viewerTabLimit: number;
   /** App version the Claude prompt was last shown for (so it asks once, and again after updates). */
   claudeOffered?: string;
 }

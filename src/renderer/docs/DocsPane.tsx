@@ -463,7 +463,9 @@ function VersionStrip({
     let current = tab.rev ? versions.findIndex((v) => v.sha.startsWith(tab.rev!)) : versions.length;
     // The latest file with no unsaved edits is the same as its last version: start one further back.
     if (!tab.rev && current > 1 && !(await api.fileChangedSince(tab.path, versions[current - 1].sha).catch(() => true))) current--;
-    const before = versions[Math.max(0, current - 1)];
+    // Nothing older than the oldest version: the other side is the next one (or the latest).
+    if (current <= 0) return onCompare(versions[1]?.sha ?? LATEST);
+    const before = versions[current - 1];
     if (before) onCompare(before.sha);
   };
   const notes = new Set(citations.map((c) => c.note)).size;

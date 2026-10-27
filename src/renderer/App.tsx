@@ -491,7 +491,7 @@ export function App() {
           loc = { ...loc, lines: { start: m.start, end: m.end } };
           if (m.status === 'changed') setNotice({ text: `Some of these lines were edited since they were cited${since}.`, actions });
           else if (m.status === 'gone') setNotice({ text: `The cited lines were deleted since${since}.`, danger: true, actions });
-          else if (m.status === 'moved') showToast(`Lines moved to ${m.start}–${m.end} since this was cited`);
+          else if (m.status === 'moved') showToast(m.start === m.end ? `Moved to line ${m.start} since this was cited` : `Lines moved to ${m.start}–${m.end} since this was cited`);
         } else if (await api.fileChangedSince(path, at).catch(() => false)) {
           const name = basename(path);
           if (kind === 'pdf' && info.title && loc.page) {

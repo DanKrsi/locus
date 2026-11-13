@@ -841,3 +841,5 @@ svg.ico { width: 16px; height: 16px; flex: none; }
 .tree-row .fold { display: inline-grid; place-items: center; width: 12px; color: var(--faint); transition: transform 0.12s; }
 .tree-row .fold.open { transform: rotate(90deg); }
 .tree-row .count { font-size: 12px; }
+
+.choice.demo { border-color: var(--accent); background: var(--accent-soft); }

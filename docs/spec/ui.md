@@ -61,12 +61,42 @@ and **Back to files** return to the file browser. There is no global "viewing an
 version" mode: each document tab carries its own version (badge on the tab, version strip under
 the toolbar), and the file browser's version selector resets to Latest each time it opens.
 
+Folders in the file browser fold and unfold (click the folder; **Collapse all** / **Expand all**)
+and show how many files they hold. A workspace of more than 60 files starts with its top folders
+folded; a smaller one starts open. Searching gives a flat list.
+
+**Welcome screen** (shown when no workspace can be reopened): **Try the demo** first, then open a
+folder, create a workspace, open a shared `.locus` file, download from GitHub; and the recent
+list. The demo ships inside the app: the first time it is unpacked into `Documents\Locus\Locus
+demo` and opens on its **Start here** note; later the same folder is reopened.
+
 ## 4. Left pane: notes
 
-- Note tabs (● = unsaved), middle-click closes, drag to reorder, + new note.
+- Note tabs (● = unsaved), middle-click closes, drag to reorder (both panes), + new note.
+- **Right-click a tab**: Save, Rename…, Move to… (new folders are created), Save as… (what is on
+  screen goes into a new file and the tab moves to it; the old file keeps what was last saved),
+  Save a copy…, Copy link to this note, Show in folder, Close, Close others, Delete…. Rename and
+  Move rewrite every link to the file. Delete asks first (Cancel is the default), says how many
+  links in other notes will be left pointing at nothing, warns about unsaved changes, and sends
+  the file to the Recycle Bin. Document tabs on the right offer Copy path, Show in folder, Close,
+  Close others and Close all.
 - Formatting toolbar: paragraph/heading dropdown, bold, italic, strikethrough, inline code,
   code block, bullet/numbered/task list, quote, table, horizontal rule, link, undo/redo;
-  right side: **Link to section** and **Tour**.
+  right side: **Tour**. Buttons light up for what applies at the cursor, the dropdown shows the
+  current style, and undo/redo grey out when there is nothing to undo or redo.
+- Formatting works from the note's structure: italic on bold text keeps the bold; un-bolding part
+  of a phrase leaves the rest bold; with the cursor inside formatted text the button removes it;
+  each line of a selection is formatted separately, after its bullet; a link's text can be
+  formatted without breaking the link.
+- Lists change kind in place and keep their indent; the same button again removes the list.
+  **Tab** nests a list item and **Shift+Tab** brings it back. A heading inside a quote or list
+  keeps the quote or bullet.
+- **Pictures**: paste or drop a picture (screenshot, copied image, image file) and it is saved as
+  a new file under `/images/<note name>/` and shown at the cursor; nothing existing is replaced.
+  When the clipboard also holds text (cells copied from a spreadsheet), the text is pasted. A
+  handle at the picture's corner sets its width (drag), or returns it to its own size
+  (double-click). The width is kept as `#w=<pixels>` on the picture's address, which other
+  markdown tools ignore.
 - Editor: a **formatted view** (CodeMirror 6). Markdown renders in place and its markup stays
   hidden while editing; the cursor steps over hidden markup. Markdown shortcuts work as you type.
   A link's label is ordinary text: Backspace and typing inside it edit it, deleting its last
@@ -76,7 +106,8 @@ the toolbar), and the file browser's version selector resets to Latest each time
 - Tables are always shown as tables, including straight after **Table** inserts one. Clicking a
   cell edits it in place (same formatted view); Tab / Shift+Tab and Enter move between cells,
   Tab from the last cell adds a row, Esc finishes. While a cell is edited, buttons under the
-  table insert a row above or below, a column left or right, or delete the row, column or table.
+  table insert a row above or below, a column left or right, align the column (left, centre,
+  right; the same button again clears it), or delete the row, column or table.
 - The file on disk is the source of truth: only edited lines change; line endings and
   encoding are preserved. Autosave after a pause, with a small "Saved" toast.
 
@@ -112,7 +143,8 @@ the toolbar), and the file browser's version selector resets to Latest each time
 - Inserts the reference at the cursor (see link-format §3 for the label rules) and opens an
   inline rename box over the label: label pre-selected, 2px accent border, hint
   "Enter to name · Esc keeps '<default>'". Typing replaces, Enter confirms.
-- **Drag to cite**: drag a selection from the viewer into the note.
+- Not yet: dragging a selection from the viewer into the note; **Link to a section** (a picker
+  of a note's headings).
 
 ### 4.3 Tour mode
 
@@ -191,7 +223,8 @@ per line, so diffs stay readable.
   left, a later one from the right), growing from 93 %. A chip under the toolbar shows both
   versions on a little timeline, earlier on the left, with a dot travelling to the one you moved
   to, which is highlighted (`Jan 12 ●──○ Latest`).
-- With the system's reduced-motion setting, places change instantly; the rail and chip still show.
+- With Motion set to Reduced (or Match Windows, when Windows asks for less motion), places change
+  instantly; the rail and chip still show.
 
 ## 6. Settings
 
@@ -241,7 +274,9 @@ opens the same dialog any time, with each app's status and a Connect / Update / 
 | Keep mine / Keep theirs | Resolve: ours / theirs |
 | Workspace | Repository |
 
-- Theme, autosave, auto-sync, Git: built-in or system git, GitHub account.
+- Theme and light/dark, autosave.
+- **Motion**: Match Windows (the default), Full or Reduced. Reduced moves straight to a link's
+  place: no glide, no slide between versions, no pulse.
 - **Tabs:** a tab limit for the editor (notes and flowcharts) and for the viewer, each "No limit"
   (the default) or "At most N". Opening one more tab than the limit closes the tab on that side
   viewed longest ago (a note is saved first); the tab in front is never closed. Lowering the limit
@@ -262,11 +297,14 @@ copies. Single-file `.locus` package (git bundle) for sharing without accounts.
 | New note | Ctrl+N |
 | Open a file | Ctrl+O or Ctrl+P |
 | Headings | Ctrl+0 … Ctrl+6 |
-| Bold / Italic | Ctrl+B / Ctrl+I |
+| Bold / Italic / Strikethrough / Inline code | Ctrl+B / Ctrl+I / Alt+Shift+5 / Ctrl+E |
+| Web link | Ctrl+K |
+| Code block / Quote | Ctrl+Shift+K / Ctrl+Shift+Q |
+| Bulleted / Numbered / Task list | Ctrl+Shift+] / Ctrl+Shift+[ / Ctrl+Shift+X |
+| Table | Ctrl+T |
+| Nest / un-nest a list item | Tab / Shift+Tab |
 | Cite what's shown on the right | Ctrl+Shift+L |
-| Link to a section of a note | Ctrl+Alt+L |
 | Search open document | Ctrl+F |
 | Zoom the pane you're in (notes or documents) | Ctrl+= / Ctrl+− or Ctrl+mouse wheel |
 | Tour mode | Ctrl+Shift+T |
 | Save version | Ctrl+Shift+S |
-| Shortcuts | F1 |

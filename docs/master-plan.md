@@ -1,7 +1,7 @@
 # Master plan: catching up with Folio and going past it
 
 Drafted 13 November 2026 from the Folio 0.3.0 overview, checked against Locus 0.2.12 (spec and
-code). Status: **draft, waiting on the two decisions in section 2**.
+code). Status: **phase 1 built (0.3.0)**; phases 2 onward wait on the two decisions in section 2.
 
 ## 1. Where Locus stands
 
@@ -57,18 +57,23 @@ the hover card.
 
 Each phase ends in a release. Sizes are relative: S is days, M about a week, L more.
 
-### Phase 1: everyday smoothness (M)
+### Phase 1: everyday smoothness (M) — done in 0.3.0
 
 Things felt in the first five minutes. None depends on the decisions above.
 
-1. Tab right-click menu (row 5).
-2. Paste, drop and resize pictures (row 6).
-3. Editor polish (row 7).
-4. Motion setting and the notice bar.
-5. File browser polish; strip marks.
-6. **Try the demo** button on the welcome screen, so a new user needs no download.
-7. One version number for the app, the plugin and the tool server.
-8. Tidy the spec: drag-to-cite is listed but was never built.
+- [x] Tab right-click menu (row 5), and tabs drag to reorder.
+- [x] Paste, drop and resize pictures (row 6).
+- [x] Editor polish (row 7).
+- [x] Motion setting. (The notice bar already existed.)
+- [x] File browser: folders fold, with counts.
+- [x] **Try the demo** button on the welcome screen, so a new user needs no download.
+- [x] One version number for the app, the plugin and the tool server.
+- [x] Spec tidied: drag-to-cite, Link to a section and the F1 shortcuts list were described but
+  never built.
+
+Moved to later phases: marks on the version strip for edited, moved and "not saved" (phase 2,
+with link upkeep); **Link to a section** and the F1 shortcuts list (phase 3, with the citation
+editor); Windows-1252 notes, PDF Fit page, copying cells, equations on slides (phase 5).
 
 ### Phase 2: links that look after themselves (L)
 

@@ -1,9 +1,17 @@
 {
   "name": "locus",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Write markdown notes, tours and flowcharts whose links jump to exact code lines, PDF passages, spreadsheet ranges and past versions, for the Locus app.",
-  "author": { "name": "Daniel Krsikapa" },
+  "author": {
+    "name": "Daniel Krsikapa"
+  },
   "repository": "https://github.com/DanKrsi/locus",
   "license": "MIT",
-  "keywords": ["notes", "markdown", "citations", "code-tour", "pdf"]
+  "keywords": [
+    "notes",
+    "markdown",
+    "citations",
+    "code-tour",
+    "pdf"
+  ]
 }

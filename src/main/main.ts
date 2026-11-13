@@ -384,6 +384,16 @@ const api: Api = {
     await share.importPackage(file, dest);
     return openWorkspaceAt(dest);
   },
+  async openDemo(dest) {
+    dest ??= join(app.getPath('documents'), 'Locus', 'Locus demo');
+    // Opened before: go back to it, with whatever was changed there.
+    if (!(await exists(join(dest, WORKSPACE_DIR)))) {
+      if (await exists(dest)) dest = await documentsFolder('Locus demo');
+      const pkg = app.isPackaged ? join(process.resourcesPath, 'Locus-demo.locus') : join(app.getAppPath(), 'build', 'Locus-demo.locus');
+      await share.importPackage(pkg, dest);
+    }
+    return openWorkspaceAt(dest);
+  },
   async sharingStatus(doFetch) {
     const w = ws();
     const a = await loadAccount();

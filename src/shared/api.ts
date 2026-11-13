@@ -152,6 +152,8 @@ export interface Api {
   exportPackage(file?: string): Promise<string | null>;
   /** Unpacks a package into a new folder and opens it. Asks for missing paths. */
   importPackage(file?: string, dest?: string): Promise<WorkspaceInfo | null>;
+  /** Opens the demo workspace that ships with the app, unpacking it into Documents the first time. */
+  openDemo(dest?: string): Promise<WorkspaceInfo>;
   sharingStatus(fetch: boolean): Promise<SharingInfo>;
   sync(): Promise<SyncResult>;
   conflictSides(path: string): Promise<{ mine: Uint8Array | null; theirs: Uint8Array | null; theirsAuthor: string }>;
@@ -181,7 +183,7 @@ export const API_METHODS: (keyof Api)[] = [
   'head', 'versions', 'changesSince', 'uncommitted', 'saveVersion', 'ensureVersion', 'diffHunks',
   'getSettings', 'setSettings', 'pickExternalFiles', 'readExternal', 'openExternally', 'setTitleBarColors',
   'renameFile', 'findMoved', 'citations', 'versionChanges',
-  'exportPackage', 'importPackage', 'sharingStatus', 'sync', 'conflictSides', 'resolveConflict', 'finishSync', 'abortSync',
+  'exportPackage', 'importPackage', 'openDemo', 'sharingStatus', 'sync', 'conflictSides', 'resolveConflict', 'finishSync', 'abortSync',
   'githubSignInStart', 'githubSignInWait', 'githubSignOut', 'githubShare', 'githubInvite', 'githubPeople', 'githubRepos',
   'githubAcceptInvitation', 'githubClone', 'copyText', 'showInFolder', 'trashFile',
 ];

@@ -61,6 +61,12 @@ await step('share as a file', async () => {
   await callApi('exportPackage', file);
   if (!existsSync(file)) throw new Error('package not written');
 });
+await step('the demo workspace ships inside the app and opens', async () => {
+  const info = await callApi('openDemo', join(out, 'demo'));
+  if (!existsSync(join(info.root, 'notes', 'Start here.md'))) throw new Error('the demo note is missing');
+  const versions = await callApi('versions');
+  if (versions.length < 3) throw new Error(`expected the demo's history, got ${versions.length} versions`);
+});
 await win.screenshot({ path: join(out, 'packaged.png') });
 await app.close();
 

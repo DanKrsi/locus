@@ -26,13 +26,13 @@ is inside.
 Bump `version` in `package.json`, commit, then push a matching tag:
 
 ```
-git tag v0.2.13
-git push origin v0.2.13
+git tag v0.3.1
+git push origin v0.3.1
 ```
 
 The [Release workflow](../.github/workflows/release.yml) builds the installer on GitHub and
-publishes the release with `Locus-Setup-<version>.exe` and the demo `Locus-demo.locus` (carried
-over from the previous release). To release a tag that already exists, run the workflow from the
+publishes the release with `Locus-Setup-<version>.exe` and the demo `build/Locus-demo.locus` (which
+also ships inside the installer; rebuild it with `npm run sample` and **Share → Send as a file**). To release a tag that already exists, run the workflow from the
 Actions tab and enter the tag.
 
 ## Where things are

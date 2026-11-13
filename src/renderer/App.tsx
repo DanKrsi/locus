@@ -37,6 +37,9 @@ interface Session {
   activeDoc: number;
 }
 
+/** The note the demo workspace opens on. */
+const DEMO_NOTE = '/notes/Start here.md';
+
 interface Notice {
   text: string;
   danger?: boolean;
@@ -904,6 +907,16 @@ export function App() {
             }
           }}
           onGitHub={() => setGhOpen({})}
+          onDemo={async () => {
+            try {
+              const info = await api.openDemo();
+              // The first time, start on the note that walks through everything.
+              if (!localStorage.getItem(sessionKey(info.root))) localStorage.setItem(sessionKey(info.root), JSON.stringify({ notes: [DEMO_NOTE], activeNote: DEMO_NOTE }));
+              await openWorkspace(undefined, false, info);
+            } catch (e) {
+              showToast(String((e as Error).message).replace(/^Error invoking remote method 'api': (Error: )?/, ''));
+            }
+          }}
         />
       ) : (
         <div
@@ -1211,6 +1224,7 @@ function Welcome({
   onCreate,
   onImport,
   onGitHub,
+  onDemo,
 }: {
   recent: string[];
   terminology: Settings['terminology'];
@@ -1218,6 +1232,7 @@ function Welcome({
   onCreate(): void;
   onImport(): void;
   onGitHub(): void;
+  onDemo(): void;
 }) {
   return (
     <div className="welcome">
@@ -1225,6 +1240,10 @@ function Welcome({
         <div>
           <h1>Welcome</h1>
           <p className="muted" style={{ marginTop: 0 }}>Pick a folder to work in. Your notes and the files they cite live there together.</p>
+          <button className="choice demo" onClick={onDemo}>
+            <span><Icon name="presentation" /> <b>Try the demo</b></span>
+            <span className="sub">A small workspace that shows every kind of link. Nothing to download</span>
+          </button>
           <button className="choice" onClick={() => onOpen()}>
             <span><Icon name="folderOpen" /> <b>Open a folder</b></span>
             <span className="sub">Any folder of documents or code</span>

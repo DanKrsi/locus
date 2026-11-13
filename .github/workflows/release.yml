@@ -35,6 +35,8 @@ jobs:
         run: |
           version=$(node -p "require('./package.json').version")
           [ "v$version" = "$TAG" ] || { echo "Tag $TAG but package.json says $version"; exit 1; }
+          plugin=$(node -p "require('./plugin/.claude-plugin/plugin.json').version")
+          [ "$plugin" = "$version" ] || { echo "The Claude plugin says $plugin: run npm run build:plugin and commit"; exit 1; }
 
       - run: npm ci
       - run: npm run typecheck
@@ -54,10 +56,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # The demo workspace doesn't change between versions: carry it over from the latest release.
-          gh release download --pattern Locus-demo.locus --dir release || echo "No demo on the latest release"
-          files=(release/Locus-Setup-*.exe)
-          [ -f release/Locus-demo.locus ] && files+=(release/Locus-demo.locus)
+          # The demo workspace also ships inside the installer (Welcome > Try the demo).
+          files=(release/Locus-Setup-*.exe build/Locus-demo.locus)
           if gh release view "$TAG" > /dev/null 2>&1; then
             gh release upload "$TAG" "${files[@]}" --clobber
           else

@@ -32,7 +32,10 @@ PDF pages and highlighted areas, code lines, spreadsheet ranges, note headings, 
 Never hand-write reference links: get each one from make_reference, which verifies the target and records the version.
 Before finishing a note, run validate_note and fix anything that is not "ok".`;
 
-const server = new McpServer({ name: 'locus', version: '0.1.0' }, { instructions: INSTRUCTIONS });
+/** The app's version, set when the server is bundled. */
+declare const __LOCUS_VERSION__: string;
+
+const server = new McpServer({ name: 'locus', version: typeof __LOCUS_VERSION__ === 'string' ? __LOCUS_VERSION__ : '0.0.0' }, { instructions: INSTRUCTIONS });
 
 const workspaceArg = z
   .string()

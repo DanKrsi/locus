@@ -1,7 +1,7 @@
 {
   "name": "locus",
   "productName": "Locus",
-  "version": "0.2.12",
+  "version": "0.3.0",
   "description": "Write markdown notes that link to exact places in PDFs, code, spreadsheets and their versions.",
   "license": "MIT",
   "private": true,
@@ -80,6 +80,12 @@
       "package.json",
       "!dist/mcp/**",
       "plugin/**"
+    ],
+    "extraResources": [
+      {
+        "from": "build/Locus-demo.locus",
+        "to": "Locus-demo.locus"
+      }
     ],
     "asarUnpack": [
       "node_modules/dugite/**",

@@ -1,6 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import type { EditorView } from '@codemirror/view';
-import { basename, slugify } from '../../core/link';
+import { basename, dirname, formatReference, slugify, stem } from '../../core/link';
 import { api } from '../api';
 import { decodeText } from '../files';
 import { Icon, type IconName } from '../icons';
@@ -24,6 +24,7 @@ import { insertTable } from './tables';
 import { setEditorZoom, ZoomControl } from '../zoom';
 import { isCanvas, newCanvas, serializeCanvas } from '../../core/canvas';
 import { FlowEditor, type FlowHandle } from '../flow/FlowEditor';
+import { ConfirmDialog, ContextMenu, PathDialog, type ConfirmRequest, type MenuItem, type MenuState, type PathRequest } from '../menus';
 
 export interface NotesHandle {
   activeView(): EditorView | null;
@@ -66,6 +67,12 @@ interface Props {
   onZoom(z: number): void;
   /** Called after a note is written to disk. */
   onSaved(path: string): void;
+  /** Moves a file and rewrites the links to it. */
+  onRename(from: string, to: string): Promise<void>;
+  /** Called after a note or flowchart was deleted. */
+  onDeleted(path: string): void;
+  /** How many links in other notes point at this file. */
+  linksTo(path: string): number;
 }
 
 /** An open flowchart (.canvas file); its editor reports changes as file text. */
@@ -199,14 +206,18 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
     return promise;
   };
 
-  const close = async (path: string) => {
-    if (flows.current.has(path)) {
-      await save(path);
+  /** Closes a tab, saving it first unless `discard` is set. */
+  const close = async (path: string, discard = false) => {
+    const fl = flows.current.get(path);
+    if (fl) {
+      if (discard) clearTimeout(fl.timer);
+      else await save(path);
       flows.current.delete(path);
     }
     const d = docs.current.get(path);
     if (d) {
-      if (docText(d.view) !== d.savedText) await save(path);
+      if (discard) clearTimeout(d.timer);
+      else if (docText(d.view) !== d.savedText) await save(path);
       d.view.destroy();
       docs.current.delete(path);
     }
@@ -232,6 +243,136 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
       void close(t.path).finally(() => closing.current.delete(t.path));
     }
   }, [tabs, active, p.tabLimit]);
+
+  // ---------- Tab menu ----------
+
+  const [menu, setMenu] = useState<MenuState | null>(null);
+  const [pathRequest, setPathRequest] = useState<PathRequest | null>(null);
+  const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
+
+  /** What the tab shows now, unsaved changes included, as file text. */
+  const textOnScreen = (path: string): string => {
+    const fl = flows.current.get(path);
+    if (fl) return fl.handle?.text() ?? fl.text;
+    const d = docs.current.get(path);
+    return d ? (d.bom ? '\uFEFF' : '') + docText(d.view) : '';
+  };
+
+  const askPath = async (request: Omit<PathRequest, 'folders'>) => {
+    const folders = new Set<string>(['/']);
+    for (const f of await api.listFiles()) for (let dir = dirname(f); dir && dir !== '/'; dir = dirname(dir)) folders.add(dir);
+    setPathRequest({ ...request, folders: [...folders].sort() });
+  };
+
+  /** Writes what the tab shows into a new file; false (with a message) when the name is taken. */
+  const writeCopy = async (path: string, to: string) => {
+    if (await api.exists(to)) {
+      p.toast(`${to.slice(1)} already exists`);
+      return false;
+    }
+    await api.writeText(to, textOnScreen(path));
+    p.onSaved(to);
+    return true;
+  };
+
+  const tabMenu = (t: NoteTab): MenuItem[] => {
+    const path = t.path;
+    const kind = isCanvas(path) ? 'flowchart' : 'note';
+    return [
+      { label: 'Save', disabled: !t.dirty, run: () => void save(path, true) },
+      { label: 'Rename…', run: () => void askPath({ title: `Rename ${basename(path)}`, action: 'Rename', path, edit: 'name', run: (to) => void p.onRename(path, to) }) },
+      { label: 'Move to…', run: () => void askPath({ title: `Move ${basename(path)}`, action: 'Move', path, edit: 'folder', run: (to) => void p.onRename(path, to) }) },
+      {
+        label: 'Save as…',
+        run: () =>
+          void askPath({
+            title: `Save ${basename(path)} as`,
+            action: 'Save',
+            path,
+            edit: 'both',
+            run: async (to) => {
+              if (!(await writeCopy(path, to))) return;
+              // The tab moves to the new file; the old one keeps what was last saved.
+              await close(path, true);
+              await open(to);
+            },
+          }),
+      },
+      {
+        label: 'Save a copy…',
+        run: () =>
+          void askPath({
+            title: `Save a copy of ${basename(path)}`,
+            action: 'Save a copy',
+            path: `${dirname(path) === '/' ? '' : dirname(path)}/${stem(path)} copy${basename(path).slice(stem(path).length)}`,
+            edit: 'both',
+            run: async (to) => {
+              if (await writeCopy(path, to)) p.toast(`Saved a copy as ${basename(to)}`);
+            },
+          }),
+      },
+      {
+        label: `Copy link to this ${kind}`,
+        run: () => {
+          void api.copyText(formatReference(stem(path), { path, pathKind: 'root', loc: {}, extra: [] }));
+          p.toast('Link copied. Paste it into a note');
+        },
+      },
+      'sep',
+      { label: 'Show in folder', run: () => void save(path).then(() => api.showInFolder(path)) },
+      'sep',
+      { label: 'Close', run: () => void close(path) },
+      {
+        label: 'Close others',
+        disabled: tabs.length < 2,
+        run: async () => {
+          setActive(path);
+          for (const other of tabsRef.current) if (other.path !== path) await close(other.path);
+        },
+      },
+      'sep',
+      {
+        label: 'Delete…',
+        danger: true,
+        run: () => {
+          const links = p.linksTo(path);
+          setConfirm({
+            title: `Delete ${basename(path)}?`,
+            lines: [
+              `This ${kind} goes to the Recycle Bin.`,
+              ...(links ? [`${links} link${links === 1 ? '' : 's'} in other notes will be left pointing at nothing.`] : []),
+              ...(t.dirty ? ['It has changes that were never saved.'] : []),
+            ],
+            action: 'Delete',
+            run: async () => {
+              try {
+                await api.trashFile(path);
+              } catch {
+                p.toast(`Couldn't delete ${basename(path)}`);
+                return;
+              }
+              await close(path, true);
+              p.onDeleted(path);
+              p.toast(`${basename(path)} is in the Recycle Bin`);
+            },
+          });
+        },
+      },
+    ];
+  };
+
+  /** Tab being dragged to a new place in the row. */
+  const dragged = useRef<string | null>(null);
+  const [dropBefore, setDropBefore] = useState<string | null>(null);
+  const moveTab = (id: string, beforeId: string) =>
+    setTabs((ts) => {
+      const moving = ts.find((t) => t.id === id);
+      if (!moving || id === beforeId) return ts;
+      const rest = ts.filter((t) => t.id !== id);
+      const i = rest.findIndex((t) => t.id === beforeId);
+      rest.splice(i < 0 ? rest.length : i, 0, moving);
+      return rest;
+    });
 
   const newNote = async () => {
     const files = new Set(await api.listFiles());
@@ -381,17 +522,40 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
 
   return (
     <div className="pane" style={{ flex: 1 }}>
+      {menu && <ContextMenu menu={menu} onClose={() => setMenu(null)} />}
+      {pathRequest && <PathDialog request={pathRequest} onClose={() => setPathRequest(null)} />}
+      {confirm && <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />}
       <div className="tabs">
         {tabs.map((t) => (
           <div
             key={t.id}
-            className={'tab' + (t.path === active ? ' active' : '')}
+            className={'tab' + (t.path === active ? ' active' : '') + (dropBefore === t.id ? ' drop-before' : '')}
             title={t.path}
+            draggable
+            onDragStart={(e) => {
+              dragged.current = t.id;
+              e.dataTransfer.effectAllowed = 'move';
+            }}
+            onDragOver={(e) => {
+              if (!dragged.current) return;
+              e.preventDefault();
+              setDropBefore(t.id);
+            }}
+            onDragLeave={() => setDropBefore((d) => (d === t.id ? null : d))}
+            onDrop={() => dragged.current && moveTab(dragged.current, t.id)}
+            onDragEnd={() => {
+              dragged.current = null;
+              setDropBefore(null);
+            }}
             onMouseDown={(e) => {
               if (e.button === 1) {
                 e.preventDefault();
                 void close(t.path);
-              } else setActive(t.path);
+              } else if (e.button === 0) setActive(t.path);
+            }}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setMenu({ x: e.clientX, y: e.clientY, items: tabMenu(t) });
             }}
           >
             <span className="title">{basename(t.path)}</span>

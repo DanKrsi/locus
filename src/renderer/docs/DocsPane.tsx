@@ -16,6 +16,7 @@ import { CiteModeContext, type CiteMode } from '../viewers/CiteButton';
 import { ZoomControl } from '../zoom';
 import { FlowViewer, NoteViewer, type NoteCallbacks } from '../viewers/NoteViewer';
 import { isCanvas } from '../../core/canvas';
+import { ContextMenu, type MenuState } from '../menus';
 import type { CiteMark, RevealRequest, ViewerHandle } from '../viewers/types';
 
 interface Props {
@@ -30,6 +31,8 @@ interface Props {
   citations: Citation[];
   onActivate(id: string): void;
   onClose(id: string): void;
+  /** Moves a tab to sit before another one. */
+  onReorder(id: string, beforeId: string): void;
   onCite(tab: DocTab): void;
   /** Kind of link the Cite buttons insert when viewing the latest version. */
   citeMode: CiteMode;
@@ -74,18 +77,56 @@ export function DocsPane(p: Props) {
       setHop({ id: active.id, from: prev.rev, to: active.rev, later: isLater(prev.rev, active.rev), key: Date.now() });
     was.current = active ? { path: active.path, rev: active.rev } : null;
   }, [p.activeId, active?.rev, active?.path]);
+  const [menu, setMenu] = useState<MenuState | null>(null);
+  const dragged = useRef<string | null>(null);
+  const [dropBefore, setDropBefore] = useState<string | null>(null);
   return (
     <div className="pane" style={{ flex: 1 }}>
+      {menu && <ContextMenu menu={menu} onClose={() => setMenu(null)} />}
       <div className="tabs">
         {p.tabs.map((t) => (
           <div
             key={t.id}
-            className={'tab' + (t.id === p.activeId ? ' active' : '')}
+            className={'tab' + (t.id === p.activeId ? ' active' : '') + (dropBefore === t.id ? ' drop-before' : '')}
+            draggable
+            onDragStart={(e) => {
+              dragged.current = t.id;
+              e.dataTransfer.effectAllowed = 'move';
+            }}
+            onDragOver={(e) => {
+              if (!dragged.current) return;
+              e.preventDefault();
+              setDropBefore(t.id);
+            }}
+            onDragLeave={() => setDropBefore((d) => (d === t.id ? null : d))}
+            onDrop={() => dragged.current && p.onReorder(dragged.current, t.id)}
+            onDragEnd={() => {
+              dragged.current = null;
+              setDropBefore(null);
+            }}
             onMouseDown={(e) => {
               if (e.button === 1) {
                 e.preventDefault();
                 p.onClose(t.id);
-              } else p.onActivate(t.id);
+              } else if (e.button === 0) p.onActivate(t.id);
+            }}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setMenu({
+                x: e.clientX,
+                y: e.clientY,
+                items: [
+                  { label: 'Copy path', run: () => void api.copyText(t.external ? t.path : t.path.slice(1)) },
+                  { label: 'Show in folder', disabled: !!t.rev, run: () => void api.showInFolder(t.path) },
+                  'sep',
+                  { label: 'Close', run: () => p.onClose(t.id) },
+                  { label: 'Close others', disabled: p.tabs.length < 2, run: () => {
+                    p.tabs.forEach((o) => o.id !== t.id && p.onClose(o.id));
+                    p.onActivate(t.id);
+                  } },
+                  { label: 'Close all', run: () => p.tabs.forEach((o) => p.onClose(o.id)) },
+                ],
+              });
             }}
             title={t.path}
           >

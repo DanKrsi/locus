@@ -462,6 +462,12 @@ const api: Api = {
   async copyText(text) {
     clipboard.writeText(text);
   },
+  async showInFolder(path) {
+    shell.showItemInFolder(/^[A-Za-z]:[\/]/.test(path) ? path : abs(path));
+  },
+  async trashFile(path) {
+    await shell.trashItem(abs(path));
+  },
   async setTitleBarColors(bg, fg) {
     win?.setTitleBarOverlay({ color: bg, symbolColor: fg, height: 40 });
   },

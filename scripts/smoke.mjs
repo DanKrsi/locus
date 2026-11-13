@@ -623,6 +623,41 @@ await step('notes and documents zoom independently', async () => {
   if ((await px('.editor-wrap .cm-scroller')) !== note0) throw new Error('notes text not back to normal');
 });
 
+await step('tab menu: rename, save a copy, move, delete', async () => {
+  const noteTabs = win.locator('[data-pane="notes"] .tabs > .tab');
+  const pick = async (tabText, item) => {
+    await noteTabs.filter({ hasText: tabText }).first().click({ button: 'right' });
+    await win.locator('.context-menu').getByRole('menuitem', { name: item }).click();
+  };
+  const exists = (path) => win.evaluate((p) => window.api.exists(p), path);
+  await win.locator('.tab-add[title^="New note"]').click();
+  await noteTabs.filter({ hasText: 'Untitled.md' }).waitFor({ timeout: 5000 });
+  await pick('Untitled.md', 'Rename…');
+  await win.getByLabel('Name', { exact: true }).fill('Scratch');
+  await win.keyboard.press('Enter');
+  await noteTabs.filter({ hasText: 'Scratch.md' }).waitFor({ timeout: 5000 });
+  if (await exists('/Untitled.md')) throw new Error('the old name is still there');
+  await pick('Scratch.md', 'Save a copy…');
+  await win.locator('.path-dialog').getByRole('button', { name: 'Save a copy' }).click();
+  await win.waitForFunction(() => window.api.exists('/Scratch copy.md'), null, { timeout: 5000 });
+  await pick('Scratch.md', 'Move to…');
+  await win.getByLabel('Folder', { exact: true }).fill('/notes/drafts');
+  await win.keyboard.press('Enter');
+  await win.locator('[data-pane="notes"] .tab[title="/notes/drafts/Scratch.md"]').waitFor({ timeout: 5000 });
+  await shot('tab-menu-moved');
+  await pick('Scratch.md', 'Delete…');
+  // Cancel is the default: Enter must not delete.
+  await win.locator('.confirm-dialog').waitFor();
+  await win.keyboard.press('Enter');
+  if (!(await exists('/notes/drafts/Scratch.md'))) throw new Error('Enter deleted the note');
+  await pick('Scratch.md', 'Delete…');
+  await win.locator('.confirm-dialog').getByRole('button', { name: 'Delete' }).click();
+  await win.waitForFunction(() => window.api.exists('/notes/drafts/Scratch.md').then((e) => !e), null, { timeout: 5000 });
+  await noteTabs.filter({ hasText: 'Scratch.md' }).waitFor({ state: 'detached', timeout: 5000 });
+  await win.evaluate(() => window.api.trashFile('/Scratch copy.md'));
+  await noteTabs.filter({ hasText: 'review.md' }).first().click();
+});
+
 await step('tab limits close the tab viewed longest ago', async () => {
   const docTabs = win.locator('[data-pane="docs"] .tabs > .tab');
   const noteTabs = win.locator('[data-pane="notes"] .tabs > .tab');

@@ -1,0 +1,114 @@
+# Master plan: catching up with Folio and going past it
+
+Drafted 13 November 2026 from the Folio 0.3.0 overview, checked against Locus 0.2.12 (spec and
+code). Status: **draft, waiting on the two decisions in section 2**.
+
+## 1. Where Locus stands
+
+### Already level with Folio
+
+Two panes, themes, zoom, Simple/Git wording, tab limits, the formatted editor, tables, inline
+pictures, citing with the rename box, live and pinned links, hover cards, glide and travel rail,
+version slide-in, version strip, compare, "Cited in" markers, tour mode, flowcharts, version
+history, moved-file detection, `.locus` packages, GitHub sharing and sync, the nine Claude tools
+and one-click Claude setup, the per-user installer.
+
+### Already ahead of Folio
+
+- One **Open** with Edit or View (Folio has two browsers with different rules).
+- Links land centred every time, and pulse instead of replaying the trip when already there.
+- An area tool for pictures (Folio cites only the whole image).
+- Updating keeps your settings and sign-in (Folio's installer wipes them).
+- Releases build and publish themselves from a tag (Folio's are made by hand).
+
+### Behind Folio
+
+| # | Area | What Folio has that Locus lacks |
+|---|---|---|
+| 1 | Link upkeep on Save version | Checks every live link, moves the ones that only shifted, asks about the ones that changed (side-by-side helper), renumbers labels like "p12", one Undo |
+| 2 | Note identity | A hidden permanent ID so links to a note survive renames outside the app; the "Record" banner for old links |
+| 3 | Citation editor | A dialog with preview and "Pick in the document"; **Redraw area** for PDF boxes. Locus shows raw markdown |
+| 4 | Export | Note as PDF or web page with working links; a folder for someone without the app, with a browser viewer |
+| 5 | Tab right-click menu | Save, Rename, Move, Save as, Save a copy, Copy link, Show in folder, Close others, Delete to Recycle Bin (with a count of links left dangling) |
+| 6 | Pictures | Paste or drop to insert; drag a corner to resize |
+| 7 | Editor polish | Toolbar buttons that light up; formatting that respects structure; Tab to nest lists; shortcuts for every toolbar button; column alignment in tables |
+| 8 | Small things | Motion setting; a notice bar for messages with buttons; file browser with Collapse/Expand all, counts and type badges; strip marks for edited, moved and "not saved"; Windows-1252 notes kept as they are; code labels without line numbers; PDF Fit page; copy cells from a spreadsheet; equations on slides |
+
+Also to check in Locus, because Folio found it in the same code lineage: the Claude plugin
+carries its own version number (0.2.1 while the app is 0.2.12), so people already connected may
+not receive tool changes.
+
+## 2. Decisions needed before phase 2
+
+**A. What the right pane shows.**
+
+- *Folio:* saved versions only. A link always opens exactly what was cited, but a file edited in
+  Excel doesn't show until a version is saved. Folio's overview calls this its main cost.
+- *Locus today:* the file as it is now. Friendlier, but a live link points at a moving target.
+- *Recommended, a hybrid:* keep showing the file as it is now, clearly marked "not saved in a
+  version yet", and add Folio's check on Save version. Links then get moved forward and reviewed
+  at each save, so they never drift far, and outside edits still show at once.
+
+**B. Badges beside links.** Folio's notes show none; the save-time check does that job.
+Recommended: remove Locus's date and "changed" badges once phase 2 is in, and keep the state in
+the hover card.
+
+## 3. The phases
+
+Each phase ends in a release. Sizes are relative: S is days, M about a week, L more.
+
+### Phase 1: everyday smoothness (M)
+
+Things felt in the first five minutes. None depends on the decisions above.
+
+1. Tab right-click menu (row 5).
+2. Paste, drop and resize pictures (row 6).
+3. Editor polish (row 7).
+4. Motion setting and the notice bar.
+5. File browser polish; strip marks.
+6. **Try the demo** button on the welcome screen, so a new user needs no download.
+7. One version number for the app, the plugin and the tool server.
+8. Tidy the spec: drag-to-cite is listed but was never built.
+
+### Phase 2: links that look after themselves (L)
+
+1. Note identity and the Record banner.
+2. The check after Save version: summary, auto-update, Undo.
+3. The side-by-side helper for links that really changed, and Redraw area.
+4. Label renumbering; code labels without line numbers.
+5. Then remove badges (decision B).
+
+Locus already has the core logic for following moved lines and quotes, so this builds on it.
+
+### Phase 3: edit a link without seeing markdown (M)
+
+The citation editor, replacing **Edit target**, with "Pick in the document".
+
+### Phase 4: share with anyone (L)
+
+1. Export a note as PDF and as a web page.
+2. Export a folder for someone without Locus, with the browser viewer. The largest single piece
+   in this plan.
+
+### Phase 5: past Folio (pick and order as wanted)
+
+Everything here is on Folio's own "not built" list, or absent from it:
+
+- **Restore** an old version of a file (Folio can only view and copy by hand).
+- Files changed in another program refresh at once (Folio waits for the window to regain focus).
+- A review **before** saving a version, not only after.
+- Flowcharts: hover cards, tour mode, the update helper, copy and paste, align, auto-layout
+  from a button.
+- "Cited in" markers on spreadsheet cells; cell-by-cell comparison; search in spreadsheets.
+- Hover previews for slides and recordings.
+- Reopen tabs at the place you left them.
+- A designed Find in notes, and spell check.
+- Automatic updates and a signed installer.
+- Word documents.
+- Drag a selection into the note to cite it.
+
+## 4. How each phase is done
+
+- Spec first (`docs/spec/`), then code, then a smoke-test step for every new behaviour.
+- A new installer version per phase, published by pushing its tag.
+- Nothing is taken from Folio's code; each feature is written fresh from its described behaviour.

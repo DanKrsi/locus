@@ -932,6 +932,15 @@ export function App() {
                 void loadCitations();
                 void refreshSharing(false);
               }}
+              onRename={renameFile}
+              onDeleted={() => {
+                invalidateLatest();
+                statusCache.current.clear();
+                notes.current?.refresh();
+                void loadCitations();
+                void refreshSharing(false);
+              }}
+              linksTo={(path) => citations.filter((c) => c.path === path && c.note !== path).length}
             />
           </div>
           <div
@@ -959,6 +968,16 @@ export function App() {
               onOpenCitation={openCitation}
               onActivate={setActiveDoc}
               onClose={closeDoc}
+              onReorder={(id, beforeId) =>
+                setDocTabs((ts) => {
+                  const moving = ts.find((t) => t.id === id);
+                  if (!moving || id === beforeId) return ts;
+                  const rest = ts.filter((t) => t.id !== id);
+                  const i = rest.findIndex((t) => t.id === beforeId);
+                  rest.splice(i < 0 ? rest.length : i, 0, moving);
+                  return rest;
+                })
+              }
               onCite={(t) => void cite(t)}
               noteCallbacks={(path) => editorCallbacks(() => path)}
               onEditInNotes={(path) => void notes.current?.open(path)}

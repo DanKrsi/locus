@@ -166,6 +166,10 @@ export interface Api {
   /** Downloads a workspace from GitHub into a new folder and opens it. */
   githubClone(fullName: string, dest?: string): Promise<WorkspaceInfo | null>;
   copyText(text: string): Promise<void>;
+  /** Opens the file's folder in Explorer with the file selected. */
+  showInFolder(path: string): Promise<void>;
+  /** Sends a workspace file to the Recycle Bin. */
+  trashFile(path: string): Promise<void>;
 }
 
 export const API_METHODS: (keyof Api)[] = [
@@ -175,5 +179,5 @@ export const API_METHODS: (keyof Api)[] = [
   'renameFile', 'findMoved', 'citations', 'versionChanges',
   'exportPackage', 'importPackage', 'sharingStatus', 'sync', 'conflictSides', 'resolveConflict', 'finishSync', 'abortSync',
   'githubSignInStart', 'githubSignInWait', 'githubSignOut', 'githubShare', 'githubInvite', 'githubPeople', 'githubRepos',
-  'githubAcceptInvitation', 'githubClone', 'copyText',
+  'githubAcceptInvitation', 'githubClone', 'copyText', 'showInFolder', 'trashFile',
 ];

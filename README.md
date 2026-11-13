@@ -70,14 +70,13 @@ the real file: the right lines, the right page, the right version. [More about C
    rights, and includes everything it needs.
    > Windows may say "Windows protected your PC" because the installer isn't signed yet. Click
    > **More info**, then **Run anyway**.
-2. **Try the demo.** It's a small workspace with one note and one flowchart linking into a PDF,
-   code, a spreadsheet, slides, an image and a recording. Get it either way:
-   - **No account needed:** from the same release, download `Locus-demo.locus` and double-click
-     it. Locus unpacks it into a folder and opens it.
-   - **With git:** `git clone https://github.com/DanKrsi/locus-sample.git`, then open that folder
-     in Locus. (A zip download from GitHub won't work, because the demo needs its version history.)
-
-   Then open **Start here** and click any green link, or press **Tour** to walk through them all.
+2. **Try the demo.** Click **Try the demo** on the welcome screen. It opens a small workspace with
+   one note and one flowchart linking into a PDF, code, a spreadsheet, slides, an image and a
+   recording. Open **Start here** and click any green link, or press **Tour** to walk through
+   them all.
+   > Already past the welcome screen? Download `Locus-demo.locus` from the same release and
+   > double-click it, or `git clone https://github.com/DanKrsi/locus-sample.git` and open that
+   > folder. (A zip download from GitHub won't work, because the demo needs its version history.)
 3. **Use your own folder.** Click the workspace name at the top left (or **Open a folder** on the
    welcome screen) and pick any folder of documents. **Open** at the top opens files: notes and
    flowcharts on the left, everything else on the right.

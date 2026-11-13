@@ -1,8 +1,8 @@
 // Moving to another place in the same document (UI spec §5.2): the view glides there instead of
 // snapping, and a rail at the right edge shows where in the document you were and where you went.
-// Honours the system's reduced-motion setting.
+// Honours the Motion setting (App sets data-motion on the root from it and from Windows).
 
-const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+const reduced = () => document.documentElement.dataset.motion === 'reduced';
 const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
 /** The same curve for CSS (the rail's dot moves in step with the scroll). */
 const EASE_CSS = 'cubic-bezier(0.65, 0, 0.35, 1)';

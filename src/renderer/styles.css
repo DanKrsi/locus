@@ -785,12 +785,11 @@ svg.ico { width: 16px; height: 16px; flex: none; }
 @keyframes vc-earlier { from { left: 100%; } to { left: 0; } }
 @keyframes version-chip { 0% { opacity: 0; transform: translate(-50%, -6px) scale(0.96); } 8% { opacity: 1; transform: translate(-50%, 0) scale(1); } 85% { opacity: 1; transform: translate(-50%, 0); } 100% { opacity: 0; transform: translate(-50%, 0); } }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-@media (prefers-reduced-motion: reduce) {
-  .viewer.version-in > * { animation: none !important; }
-  .version-chip .vc-dot { animation-duration: 0s !important; animation-delay: 0s !important; }
-  .version-chip { animation-name: version-chip-still; }
-  .travel-rail { animation: none; }
-}
+:root[data-motion="reduced"] .viewer.version-in > * { animation: none !important; }
+:root[data-motion="reduced"] .version-chip .vc-dot { animation-duration: 0s !important; animation-delay: 0s !important; }
+:root[data-motion="reduced"] .version-chip { animation-name: version-chip-still; }
+:root[data-motion="reduced"] .travel-rail { animation: none; }
+:root[data-motion="reduced"] .cite-pulse { animation: none !important; }
 @keyframes version-chip-still { 0%, 100% { opacity: 0; transform: translateX(-50%); } 10%, 80% { opacity: 1; transform: translateX(-50%); } }
 
 /* Open: edit or view a note or flowchart */
@@ -836,3 +835,9 @@ svg.ico { width: 16px; height: 16px; flex: none; }
 
 .toolbar button.icon:disabled { opacity: 0.35; cursor: default; }
 .toolbar button.icon:disabled:hover { background: none; color: var(--muted); }
+
+/* Folders in Open fold and unfold */
+.tree-row.folder { cursor: pointer; }
+.tree-row .fold { display: inline-grid; place-items: center; width: 12px; color: var(--faint); transition: transform 0.12s; }
+.tree-row .fold.open { transform: rotate(90deg); }
+.tree-row .count { font-size: 12px; }

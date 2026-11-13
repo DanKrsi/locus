@@ -90,6 +90,8 @@ export interface Settings {
   recentWorkspaces: string[];
   splitRatio: number;
   autosave: boolean;
+  /** Animated glides and version slide-ins: always, never, or as Windows is set. */
+  motion: 'system' | 'full' | 'reduced';
   /** Zoom of the notes editor and of the document viewers (1 = 100%), set separately. */
   noteZoom: number;
   docZoom: number;

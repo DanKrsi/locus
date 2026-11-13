@@ -142,6 +142,18 @@ export function App() {
     return () => mq.removeEventListener('change', apply);
   }, [settings?.theme, settings?.dark]);
 
+  useEffect(() => {
+    if (!settings) return;
+    const mq = matchMedia('(prefers-reduced-motion: reduce)');
+    const apply = () => {
+      const motion = settings.motion ?? 'system';
+      document.documentElement.dataset.motion = motion === 'reduced' || (motion === 'system' && mq.matches) ? 'reduced' : 'full';
+    };
+    apply();
+    mq.addEventListener('change', apply);
+    return () => mq.removeEventListener('change', apply);
+  }, [settings?.motion]);
+
   const updateSettings = async (patch: Partial<Settings>) => setSettings(await api.setSettings(patch));
 
   // ---------- Zoom (notes and documents separately) ----------
@@ -1353,6 +1365,17 @@ function SettingsDialog({
               <input type="checkbox" checked={settings.autosave} onChange={(e) => onChange({ autosave: e.target.checked })} />
               <span>Autosave notes <span className="muted">· saves a moment after you stop typing</span></span>
             </label>
+          </section>
+          <section>
+            <div style={{ fontWeight: 600, marginBottom: 6 }}>Motion</div>
+            <div className="segmented" role="radiogroup" aria-label="Motion">
+              {([['system', 'Match Windows'], ['full', 'Full'], ['reduced', 'Reduced']] as const).map(([value, label]) => (
+                <button key={value} role="radio" aria-checked={(settings.motion ?? 'system') === value} className={(settings.motion ?? 'system') === value ? 'on' : ''} onClick={() => onChange({ motion: value })}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="muted" style={{ marginTop: 6 }}>Reduced moves straight to a link's place, without the glide or the slide between versions.</div>
           </section>
           <section>
             <div style={{ fontWeight: 600, marginBottom: 6 }}>Tabs</div>

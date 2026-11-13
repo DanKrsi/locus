@@ -38,6 +38,7 @@ const DEFAULT_SETTINGS: Settings = {
   recentWorkspaces: [],
   splitRatio: 0.5,
   autosave: true,
+  motion: 'system',
   noteZoom: 1,
   docZoom: 1,
   editorTabLimit: 0,

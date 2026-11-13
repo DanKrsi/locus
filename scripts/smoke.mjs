@@ -559,6 +559,26 @@ await step('history: what changed, open a file as it was, browse a version', asy
   await win.keyboard.press('Escape');
 });
 
+await step('Open: folders fold and unfold; Motion setting', async () => {
+  await win.keyboard.press('Control+O');
+  const row = win.locator('.tree-row', { hasText: 'review.md' });
+  await row.first().waitFor();
+  await win.getByRole('button', { name: 'Collapse all' }).click();
+  if (await row.count()) throw new Error('files still listed after Collapse all');
+  await win.locator('.tree-row.folder', { hasText: 'notes' }).first().click();
+  await row.first().waitFor({ timeout: 3000 });
+  await win.getByRole('button', { name: 'Expand all' }).click();
+  await shot('open-folders');
+  await win.keyboard.press('Escape');
+  const motion = (m) => win.waitForFunction((m) => document.documentElement.dataset.motion === m, m, { timeout: 5000 });
+  await win.getByTitle('Settings').click();
+  await win.getByRole('radio', { name: 'Reduced' }).click();
+  await motion('reduced');
+  await win.getByRole('radio', { name: 'Full' }).click();
+  await motion('full');
+  await win.getByRole('button', { name: 'Done' }).click();
+});
+
 await step('git terminology', async () => {
   await win.getByTitle('Settings').click();
   await win.getByText('Git', { exact: true }).click();

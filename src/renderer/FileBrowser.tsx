@@ -34,6 +34,8 @@ export function FileBrowser(p: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [renaming, setRenaming] = useState<{ path: string; value: string } | null>(null);
   const [reload, setReload] = useState(0);
+  /** Folders shown folded ("docs", "docs/old"). A big workspace starts folded, a small one open. */
+  const [folded, setFolded] = useState<Set<string> | null>(null);
 
   const commitRename = async () => {
     if (!renaming) return;
@@ -137,6 +139,25 @@ export function FileBrowser(p: Props) {
     });
   }, [files, filter]);
 
+  const folders = useMemo(() => {
+    const count = new Map<string, number>();
+    for (const f of files) {
+      const parts = f.path.split('/').slice(1, -1);
+      for (let d = 1; d <= parts.length; d++) count.set(parts.slice(0, d).join('/'), (count.get(parts.slice(0, d).join('/')) ?? 0) + 1);
+    }
+    return count;
+  }, [files]);
+  useEffect(() => {
+    if (folded === null && files.length) setFolded(new Set(files.length > 60 ? [...folders.keys()].filter((f) => !f.includes('/')) : []));
+  }, [files]);
+  const isFolded = (folder: string) => !!folded?.has(folder);
+  const toggleFold = (folder: string) =>
+    setFolded((old) => {
+      const next = new Set(old);
+      if (!next.delete(folder)) next.add(folder);
+      return next;
+    });
+
   const openable = shown.filter((f) => f.mark !== 'notYet');
   const open = (e: Entry) => {
     if (e.mark === 'notYet') return;
@@ -175,19 +196,31 @@ export function FileBrowser(p: Props) {
     const seen = new Set<string>();
     for (const f of shown) {
       const parts = f.path.split('/').slice(1);
-      for (let d = 1; d < parts.length; d++) {
+      let hidden = false;
+      for (let d = 1; d < parts.length && !hidden; d++) {
         const folder = parts.slice(0, d).join('/');
+        hidden = isFolded(folder);
         if (seen.has(folder)) continue;
         seen.add(folder);
+        const n = folders.get(folder) ?? 0;
         rows.push(
-          <div key={'d:' + folder} className="tree-row folder" style={{ paddingLeft: 8 + (d - 1) * 18 }}>
-            <Icon name="folder" />
+          <div
+            key={'d:' + folder}
+            className="tree-row folder"
+            style={{ paddingLeft: 8 + (d - 1) * 18 }}
+            aria-expanded={!hidden}
+            onClick={() => renaming?.path !== '/' + folder && toggleFold(folder)}
+          >
+            <span className={'fold' + (hidden ? '' : ' open')}><Icon name="chevron" size={12} /></span>
+            <Icon name={hidden ? 'folder' : 'folderOpen'} />
             {renaming?.path === '/' + folder ? renameControl('/' + folder) : <span className="name">{parts[d - 1]}</span>}
+            <span className="muted count">{n} {n === 1 ? 'file' : 'files'}</span>
             <span className="spacer" />
             {renaming?.path !== '/' + folder && renameControl('/' + folder)}
           </div>,
         );
       }
+      if (hidden) continue;
       rows.push(
         <div
           key={f.path}
@@ -244,6 +277,12 @@ export function FileBrowser(p: Props) {
           {rows.length ? rows : <div className="muted" style={{ padding: 8 }}>No files match.</div>}
         </div>
         <div className="dialog-foot">
+          {!filter.trim() && folders.size > 0 && (
+            <>
+              <button className="outline" title="Fold every folder" onClick={() => setFolded(new Set(folders.keys()))}>Collapse all</button>
+              <button className="outline" title="Open every folder" onClick={() => setFolded(new Set())}>Expand all</button>
+            </>
+          )}
           {p.onHistory && (
             <button className="outline" onClick={p.onHistory} title="See what changed in each version">
               <Icon name="history" /> {term(p.terminology, 'history')}

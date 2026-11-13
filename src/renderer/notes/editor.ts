@@ -34,6 +34,9 @@ import { escapeLabel, fileKind, parseDestination, splitLinkTarget, type Referenc
 import { iconSvg, kindIcon } from '../icons';
 import { renderedTables } from './tables';
 import { editorZoom } from '../zoom';
+import { nestList, setHeading, toggleLinePrefix, toggleWrap } from './format';
+
+export { formatState, setHeading, toggleLinePrefix, toggleWrap, NO_FORMAT, type FormatState } from './format';
 
 export interface LinkInfo {
   from: number;
@@ -63,6 +66,8 @@ export interface NoteEditorOptions {
   zoom?: number;
   /** Viewing a note on the right: formatted and clickable, but nothing can change it. */
   readOnly?: boolean;
+  /** The cursor moved or the text changed: what applies at the cursor may be different now. */
+  onCursor?(): void;
   /** Saves a pasted or dropped picture into the workspace and returns its path. */
   saveImage?(file: File): Promise<string | null>;
 }
@@ -771,6 +776,8 @@ function buildDecorations(view: EditorView, opts: NoteEditorOptions): Preview {
             return false;
           }
           case 'HorizontalRule': {
+            // "****" is what Bold leaves on an empty line, about to be typed into: not a rule.
+            if (state.sliceDoc(node.from, node.to) === '****') return;
             object(Decoration.replace({ widget: new HrWidget() }), node.from, node.to);
             return;
           }
@@ -1009,76 +1016,6 @@ function deleteSmart(view: EditorView, preview: Preview | undefined, dir: -1 | 1
 
 // ---------- Formatting commands ----------
 
-export function toggleWrap(view: EditorView, mark: string) {
-  view.dispatch(
-    view.state.changeByRange((r) => {
-      const before = view.state.sliceDoc(r.from - mark.length, r.from);
-      const after = view.state.sliceDoc(r.to, r.to + mark.length);
-      if (before === mark && after === mark) {
-        return {
-          changes: [
-            { from: r.from - mark.length, to: r.from },
-            { from: r.to, to: r.to + mark.length },
-          ],
-          range: EditorSelection.range(r.from - mark.length, r.to - mark.length),
-        };
-      }
-      return {
-        changes: [
-          { from: r.from, insert: mark },
-          { from: r.to, insert: mark },
-        ],
-        range: EditorSelection.range(r.from + mark.length, r.to + mark.length),
-      };
-    }),
-  );
-  view.focus();
-}
-
-function selectedLines(view: EditorView) {
-  const lines = new Map<number, { from: number; text: string }>();
-  for (const r of view.state.selection.ranges) {
-    for (let l = view.state.doc.lineAt(r.from).number; l <= view.state.doc.lineAt(r.to).number; l++) {
-      const line = view.state.doc.line(l);
-      lines.set(line.from, { from: line.from, text: line.text });
-    }
-  }
-  return [...lines.values()];
-}
-
-export function setHeading(view: EditorView, level: number) {
-  const changes = selectedLines(view).map(({ from, text }) => {
-    const m = text.match(/^#{1,6}\s+/);
-    const insert = level > 0 ? '#'.repeat(level) + ' ' : '';
-    return { from, to: from + (m ? m[0].length : 0), insert };
-  });
-  view.dispatch({ changes });
-  view.focus();
-}
-
-const LINE_PREFIXES = [/^\s*- \[[ xX]\]\s/, /^\s*[-*+]\s/, /^\s*\d+[.)]\s/, /^\s*>\s?/];
-
-export function toggleLinePrefix(view: EditorView, prefix: '- ' | '1. ' | '- [ ] ' | '> ') {
-  const lines = selectedLines(view);
-  const has = (text: string) =>
-    prefix === '- [ ] '
-      ? LINE_PREFIXES[0].test(text)
-      : prefix === '- '
-        ? LINE_PREFIXES[1].test(text) && !LINE_PREFIXES[0].test(text)
-        : prefix === '1. '
-          ? LINE_PREFIXES[2].test(text)
-          : LINE_PREFIXES[3].test(text);
-  const remove = lines.every((l) => has(l.text));
-  const changes = lines.map(({ from, text }, i) => {
-    const existing = LINE_PREFIXES.map((re) => text.match(re)).find(Boolean);
-    const len = existing ? existing[0].length : 0;
-    const insert = remove ? '' : prefix === '1. ' ? `${i + 1}. ` : prefix;
-    return { from, to: from + len, insert };
-  });
-  view.dispatch({ changes });
-  view.focus();
-}
-
 export function insertBlock(view: EditorView, text: string, cursorOffset?: number) {
   const r = view.state.selection.main;
   const line = view.state.doc.lineAt(r.from);
@@ -1156,7 +1093,15 @@ export function createNoteEditor(parent: HTMLElement, opts: NoteEditorOptions): 
         { key: 'Mod-i', run: (v) => (toggleWrap(v, '*'), true) },
         { key: 'Mod-e', run: (v) => (toggleWrap(v, '`'), true) },
         { key: 'Mod-k', run: (v) => (insertLink(v), true) },
+        { key: 'Alt-Shift-5', run: (v) => (toggleWrap(v, '~~'), true) },
+        { key: 'Mod-Shift-k', run: (v) => (insertBlock(v, '```\n\n```', 4), true) },
+        { key: 'Mod-Shift-q', run: (v) => (toggleLinePrefix(v, '> '), true) },
+        { key: 'Mod-Shift-]', run: (v) => (toggleLinePrefix(v, '- '), true) },
+        { key: 'Mod-Shift-[', run: (v) => (toggleLinePrefix(v, '1. '), true) },
+        { key: 'Mod-Shift-x', run: (v) => (toggleLinePrefix(v, '- [ ] '), true) },
         ...[0, 1, 2, 3, 4, 5, 6].map((l) => ({ key: `Mod-${l}`, run: (v: EditorView) => (setHeading(v, l), true) })),
+        { key: 'Tab', run: (v) => nestList(v, 1) },
+        { key: 'Shift-Tab', run: (v) => nestList(v, -1) },
         ...searchKeymap,
         ...historyKeymap,
         indentWithTab,
@@ -1164,6 +1109,7 @@ export function createNoteEditor(parent: HTMLElement, opts: NoteEditorOptions): 
       ]),
       EditorView.updateListener.of((u) => {
         if (u.docChanged) opts.onChange();
+        if (u.docChanged || u.selectionSet || u.focusChanged) opts.onCursor?.();
       }),
     ],
   });

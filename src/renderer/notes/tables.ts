@@ -371,7 +371,7 @@ function finishEdit(view: EditorView, wrap: HTMLElement, opts: NoteEditorOptions
   dispatchThenFocus(view, { changes: { from: cell.from, to: cell.from + cell.text.length, insert: text }, userEvent: 'input.table' });
 }
 
-type TableOp = 'rowAbove' | 'rowBelow' | 'colLeft' | 'colRight' | 'deleteRow' | 'deleteCol' | 'deleteTable';
+type TableOp = 'rowAbove' | 'rowBelow' | 'colLeft' | 'colRight' | 'alignLeft' | 'alignCenter' | 'alignRight' | 'deleteRow' | 'deleteCol' | 'deleteTable';
 
 /** Rewrites the table with a row or column added or removed, keeping any cell edit in progress. */
 function changeTable(view: EditorView, wrap: HTMLElement, opts: NoteEditorOptions, op: TableOp | null, next?: { row: number; col: number }) {
@@ -410,6 +410,15 @@ function changeTable(view: EditorView, wrap: HTMLElement, opts: NoteEditorOption
       sep.splice(col + 1, 0, '---');
       col += 1;
       break;
+    case 'alignLeft':
+    case 'alignCenter':
+    case 'alignRight': {
+      const want = op === 'alignLeft' ? ':---' : op === 'alignCenter' ? ':---:' : '---:';
+      // The same button again goes back to no alignment.
+      const now = sep[col].replace(/-+/, '---').trim();
+      sep[col] = now === want ? '---' : want;
+      break;
+    }
     case 'deleteRow':
       if (row > 0) rows.splice(row, 1);
       row = Math.min(row, rows.length - 1);
@@ -432,6 +441,9 @@ const TOOLS: [TableOp, string, string][] = [
   ['rowBelow', '↓ Row', 'Insert a row below'],
   ['colLeft', '← Column', 'Insert a column to the left'],
   ['colRight', '→ Column', 'Insert a column to the right'],
+  ['alignLeft', 'Left', 'Align this column left'],
+  ['alignCenter', 'Centre', 'Centre this column'],
+  ['alignRight', 'Right', 'Align this column right'],
   ['deleteRow', 'Delete row', 'Delete this row'],
   ['deleteCol', 'Delete column', 'Delete this column'],
   ['deleteTable', 'Delete table', 'Delete the whole table'],
@@ -481,7 +493,7 @@ function buildTables(state: EditorState, opts: NoteEditorOptions): DecorationSet
 }
 
 export function renderedTables(opts: NoteEditorOptions): Extension {
-  return StateField.define<DecorationSet>({
+  const field = StateField.define<DecorationSet>({
     create: (state) => buildTables(state, opts),
     update(value, tr) {
       if (tr.docChanged || tr.effects.some((e) => e.is(refreshEffect))) return buildTables(tr.state, opts);
@@ -489,4 +501,5 @@ export function renderedTables(opts: NoteEditorOptions): Extension {
     },
     provide: (f) => EditorView.decorations.from(f),
   });
+  return [field, keymap.of([{ key: 'Mod-t', run: (v) => (v.state.readOnly ? false : (insertTable(v), true)) }])];
 }

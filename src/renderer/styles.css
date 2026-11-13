@@ -833,3 +833,6 @@ svg.ico { width: 16px; height: 16px; flex: none; }
 }
 .cm-image-wrap:hover .cm-image-handle, .cm-image-wrap.resizing .cm-image-handle { opacity: 1; }
 .cm-image-wrap.resizing .cm-image { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.toolbar button.icon:disabled { opacity: 0.35; cursor: default; }
+.toolbar button.icon:disabled:hover { background: none; color: var(--muted); }

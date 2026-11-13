@@ -93,7 +93,7 @@ await step('edit a table cell in place, add a row and a column', async () => {
 await step('insert a table: it is a table straight away', async () => {
   await win.locator('.editor-wrap .cm-line').first().click();
   await win.keyboard.press('Control+End');
-  await win.getByTitle('Table', { exact: true }).click();
+  await win.locator('[data-pane="notes"] .toolbar button[title^="Table"]').click();
   await win.locator('.cm-md-table .editing-cell').waitFor({ timeout: 5000 });
   if (await rawTableShown()) throw new Error('new table shown as markdown');
   await win.keyboard.type('Name');
@@ -621,6 +621,40 @@ await step('notes and documents zoom independently', async () => {
   await docsPct().click();
   if ((await notesPct.textContent()) !== '100%' || (await docsPct().textContent()) !== '100%') throw new Error('reset failed');
   if ((await px('.editor-wrap .cm-scroller')) !== note0) throw new Error('notes text not back to normal');
+});
+
+await step('toolbar shows what applies at the cursor; Tab nests a list item', async () => {
+  await win.locator('[data-pane="notes"] .tabs > .tab', { hasText: 'review.md' }).first().click();
+  await win.locator('.editor-wrap .cm-content').first().click();
+  await win.keyboard.press('Control+End');
+  await win.keyboard.press('Enter');
+  await win.keyboard.press('Enter');
+  const button = (title) => win.locator(`[data-pane="notes"] .toolbar button[title^="${title}"]`).first();
+  const lit = async (title) => (await button(title).getAttribute('aria-pressed')) === 'true';
+  if (await lit('Bold')) throw new Error('Bold lit on plain text');
+  await win.keyboard.press('Control+B');
+  await win.keyboard.type('strong');
+  if (!(await lit('Bold'))) throw new Error('Bold not lit inside bold text');
+  await win.keyboard.press('End');
+  await win.keyboard.press('Enter');
+  await win.keyboard.press('Enter');
+  await win.keyboard.press('Control+Shift+}'); // what a real keyboard sends for Ctrl+Shift+]
+  await win.keyboard.type('parent');
+  if (!(await lit('Bulleted list'))) throw new Error('Bulleted list not lit');
+  await win.keyboard.press('Enter');
+  await win.keyboard.type('child');
+  await win.keyboard.press('Tab');
+  await win.waitForTimeout(1500);
+  const text = await win.evaluate(() => window.api.readText('/notes/review.md'));
+  if (!/\*\*strong\*\*/.test(text)) throw new Error('bold text not written');
+  if (!/- parent\r?\n  - child/.test(text)) throw new Error('the item was not nested');
+  if (await button('Redo').isEnabled()) throw new Error('Redo enabled with nothing to redo');
+  await win.keyboard.press('Control+Z');
+  if (!(await button('Redo').isEnabled())) throw new Error('Redo not enabled after undo');
+  await win.keyboard.press('Control+Y');
+  await win.keyboard.press('Enter');
+  await win.keyboard.press('Enter');
+  await win.keyboard.press('Enter');
 });
 
 await step('pictures: paste saves a file and shows it; drag the corner to resize', async () => {

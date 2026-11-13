@@ -12,12 +12,15 @@ import {
   editorUndo,
   flashLine,
   flashRange,
+  formatState,
   insertBlock,
   insertLink,
   refreshEffect,
   setHeading,
   toggleLinePrefix,
   toggleWrap,
+  NO_FORMAT,
+  type FormatState,
   type NoteEditorOptions,
 } from './editor';
 import { insertTable } from './tables';
@@ -104,8 +107,17 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
   const pending = useRef(new Map<string, Promise<EditorView | null>>());
   const tabsRef = useRef(tabs);
   tabsRef.current = tabs;
+  const activeRef = useRef(active);
+  activeRef.current = active;
   const autosaveRef = useRef(p.autosave);
   autosaveRef.current = p.autosave;
+
+  /** What applies at the cursor of the note in front, for the toolbar. */
+  const [fmt, setFmt] = useState<FormatState>(NO_FORMAT);
+  const showFormat = (v: EditorView | null | undefined) => {
+    const next = v ? formatState(v.state) : NO_FORMAT;
+    setFmt((old) => ((Object.keys(next) as (keyof FormatState)[]).every((k) => old[k] === next[k]) ? old : next));
+  };
 
   const setDirty = (path: string, dirty: boolean) =>
     setTabs((ts) => ts.map((t) => (t.path === path && t.dirty !== dirty ? { ...t, dirty } : t)));
@@ -213,6 +225,7 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
         ...cb,
         onSave: () => void save(doc.path, true),
         saveImage: (file) => saveImage(doc.path, file),
+        onCursor: () => doc.path === activeRef.current && showFormat(doc.view),
         onChange: () => {
           setDirty(doc.path, docText(doc.view) !== doc.savedText);
           clearTimeout(doc.timer);
@@ -524,20 +537,19 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
     const fl = active ? flows.current.get(active) : undefined;
     if (fl?.handle) setFlowZoom(fl.handle.getZoom());
     p.onActiveChange(active);
+    showFormat(active ? docs.current.get(active)?.view : null);
     if (active) requestAnimationFrame(() => docs.current.get(active)?.view.requestMeasure());
   }, [active]);
 
   const view = () => (active ? docs.current.get(active)?.view ?? null : null);
   const activeIsFlow = !!active && isCanvas(active);
-  const activeRef = useRef(active);
-  activeRef.current = active;
   const run = (fn: (v: EditorView) => unknown) => () => {
     const v = view();
     if (v) fn(v);
   };
 
-  const tool = (icon: IconName, title: string, fn: (v: EditorView) => unknown) => (
-    <button className="icon" title={title} onMouseDown={(e) => e.preventDefault()} onClick={run(fn)}>
+  const tool = (icon: IconName, title: string, fn: (v: EditorView) => unknown, on = false, disabled = false) => (
+    <button className={'icon' + (on ? ' active' : '')} aria-pressed={on} disabled={disabled} title={title} onMouseDown={(e) => e.preventDefault()} onClick={run(fn)}>
       <Icon name={icon} />
     </button>
   );
@@ -600,33 +612,32 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
       <div className="toolbar" style={{ display: activeIsFlow ? 'none' : undefined }}>
         <select
           title="Paragraph style"
-          value=""
+          value={fmt.heading}
           onChange={(e) => {
             const v = view();
             if (v) setHeading(v, Number(e.target.value));
           }}
         >
-          <option value="" disabled>Style</option>
           <option value="0">Paragraph</option>
           {[1, 2, 3, 4, 5, 6].map((l) => <option key={l} value={l}>Heading {l}</option>)}
         </select>
         <div className="sep" />
-        {tool('bold', 'Bold (Ctrl+B)', (v) => toggleWrap(v, '**'))}
-        {tool('italic', 'Italic (Ctrl+I)', (v) => toggleWrap(v, '*'))}
-        {tool('strike', 'Strikethrough', (v) => toggleWrap(v, '~~'))}
-        {tool('inlineCode', 'Inline code (Ctrl+E)', (v) => toggleWrap(v, '`'))}
-        {tool('codeBlock', 'Code block', (v) => insertBlock(v, '```\n\n```', 4))}
+        {tool('bold', 'Bold (Ctrl+B)', (v) => toggleWrap(v, '**'), fmt.bold)}
+        {tool('italic', 'Italic (Ctrl+I)', (v) => toggleWrap(v, '*'), fmt.italic)}
+        {tool('strike', 'Strikethrough (Alt+Shift+5)', (v) => toggleWrap(v, '~~'), fmt.strike)}
+        {tool('inlineCode', 'Inline code (Ctrl+E)', (v) => toggleWrap(v, '`'), fmt.code)}
+        {tool('codeBlock', 'Code block (Ctrl+Shift+K)', (v) => insertBlock(v, '```\n\n```', 4))}
         <div className="sep" />
-        {tool('list', 'Bulleted list', (v) => toggleLinePrefix(v, '- '))}
-        {tool('numList', 'Numbered list', (v) => toggleLinePrefix(v, '1. '))}
-        {tool('task', 'Task list', (v) => toggleLinePrefix(v, '- [ ] '))}
-        {tool('quote', 'Quote', (v) => toggleLinePrefix(v, '> '))}
-        {tool('table', 'Table', (v) => insertTable(v))}
+        {tool('list', 'Bulleted list (Ctrl+Shift+]) · Tab nests', (v) => toggleLinePrefix(v, '- '), fmt.list === 'bullet')}
+        {tool('numList', 'Numbered list (Ctrl+Shift+[) · Tab nests', (v) => toggleLinePrefix(v, '1. '), fmt.list === 'number')}
+        {tool('task', 'Task list (Ctrl+Shift+X)', (v) => toggleLinePrefix(v, '- [ ] '), fmt.list === 'task')}
+        {tool('quote', 'Quote (Ctrl+Shift+Q)', (v) => toggleLinePrefix(v, '> '), fmt.quote)}
+        {tool('table', 'Table (Ctrl+T)', (v) => insertTable(v))}
         {tool('hr', 'Horizontal rule', (v) => insertBlock(v, '---'))}
         {tool('link', 'Web link (Ctrl+K)', insertLink)}
         <div className="sep" />
-        {tool('undo', 'Undo (Ctrl+Z)', editorUndo)}
-        {tool('redo', 'Redo (Ctrl+Y)', editorRedo)}
+        {tool('undo', 'Undo (Ctrl+Z)', editorUndo, false, !fmt.canUndo)}
+        {tool('redo', 'Redo (Ctrl+Y)', editorRedo, false, !fmt.canRedo)}
         <div className="spacer" />
         <button className={'pill' + (p.touring ? ' active' : '')} title="Step through this note's references (Ctrl+Shift+T)" onClick={p.onTour}>
           <Icon name="presentation" /> Tour

@@ -340,10 +340,8 @@ export function defaultLabel(path: string, loc: Location, pageLabel?: string): s
   const s = stem(path);
   if (loc.page !== undefined) return `${s} p${pageLabel ?? loc.page}`;
   if (loc.slide !== undefined) return `${s} slide ${loc.slide}`;
-  if (loc.lines) {
-    const { start, end } = loc.lines;
-    return end !== start ? `${name} L${start}-${end}` : `${name} L${start}`;
-  }
+  // No line numbers for code: lines move, and the link follows them.
+  if (loc.lines) return name;
   if (loc.sheet) return `${s} ${formatSheetRef(loc.sheet)}`;
   if (loc.time !== undefined) return `${s} ${formatTime(loc.time)}`;
   return s;

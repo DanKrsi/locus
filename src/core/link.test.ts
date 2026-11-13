@@ -57,7 +57,7 @@ test('round trip with spaces, title and unknown parts', () => {
 
 test('default labels', () => {
   assert.equal(defaultLabel('/docs/NASA-STD.pdf', { page: 18 }), 'NASA-STD p18');
-  assert.equal(defaultLabel('/src/solver.py', { lines: { start: 12, end: 18 } }), 'solver.py L12-18');
+  assert.equal(defaultLabel('/src/solver.py', { lines: { start: 12, end: 18 } }), 'solver.py');
   assert.equal(defaultLabel('/data/Loads.xlsx', { sheet: { sheet: 'Load cases', range: 'B4:D12' } }), "Loads 'Load cases'!B4:D12");
 });
 

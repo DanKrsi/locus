@@ -169,7 +169,7 @@ version: omit for a live link to the latest file; pass a commit SHA to pin the l
     inputSchema: {
       workspace: workspaceArg,
       path: z.string(),
-      label: z.string().optional().describe('Link text shown in the note. Defaults to a name like "spec p5" or "client.py L12-18".'),
+      label: z.string().optional().describe('Link text shown in the note. Defaults to a name like "spec p5" or "client.py" (no line numbers: lines move).'),
       lines: z.tuple([z.number().int(), z.number().int()]).optional(),
       page: z.number().int().optional(),
       quote: z.string().optional().describe('Exact text from the cited spot; shown on hover and used to find the spot again'),

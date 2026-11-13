@@ -30,6 +30,8 @@ export interface HoverContext {
   compare(info: LinkInfo): void;
   /** Moves a live link to the latest version (asking when what it cites changed). */
   update?(info: LinkInfo): void;
+  /** Draws a new box for a link to an area of a PDF page. */
+  redraw?(info: LinkInfo): void;
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string): HTMLElementTagNameMap[K] {
@@ -130,7 +132,9 @@ export function renderHoverCard(info: LinkInfo, view: EditorView, ctx: HoverCont
     const date = ctx.versionDate(sha);
     return ctx.terminology === 'git' || !date ? sha.slice(0, 7) : longDate(date);
   };
-  if (rev) {
+  if (src.external) {
+    infoEl.append(el('div', 'link-kind', 'Outside the workspace · no version history'));
+  } else if (rev) {
     infoEl.append(el('div', 'link-kind', `Pinned · always shows the version from ${when(rev)}`));
   } else if (at) {
     infoEl.append(el('div', 'link-kind', `Live · cited from the version of ${when(at)} · follows the file when you save a version`));
@@ -164,6 +168,7 @@ export function renderHoverCard(info: LinkInfo, view: EditorView, ctx: HoverCont
     if (ctx.status.changed) button('Compare with cited version', 'outline', () => ctx.compare(info));
     if (editable) button(ctx.status.changed ? 'Pin to cited version' : 'Pin to this version', 'outline', () => relink({ ...info.ref, rev: at, at: undefined }));
   }
+  if (editable && ctx.redraw && kind === 'pdf' && info.ref.loc.viewrect && !rev) button('Redraw area', 'outline', () => ctx.redraw!(info));
   if (editable) {
     button('Rename', 'outline', () => renameLink(view, info));
     button('Edit target', 'outline', () => revealLink(view, info));

@@ -196,8 +196,6 @@ function BoxText({ text }: { text: string }) {
       >
         <span dangerouslySetInnerHTML={{ __html: iconSvg(kindIcon(fileKind(info.ref.path))) }} />
         {info.label}
-        {status.badge && <span className="badge mark">{status.badge}</span>}
-        {status.changed && <span className="badge warn" title={status.reason}>changed</span>}
       </span>,
     );
   });

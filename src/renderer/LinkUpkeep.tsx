@@ -82,7 +82,7 @@ export function ReviewBar({ link, index, count, canSelect, onChoose }: { link: C
         <span className="muted">in {basename(link.cite.note)} · {link.reason}</span>
       </div>
       <div className="review-how muted">
-        {link.verdict === 'follow' ? 'It can follow as it is.' : 'Left: what was cited. Right: the latest version, with the proposed place.'}
+        {link.verdict === 'follow' ? 'It can follow as it is.' : link.next.at === link.ref.at ? 'The document is on the right.' : 'Left: what was cited. Right: the latest version, with the proposed place.'}
       </div>
       <div className="review-actions">
         {lines && (

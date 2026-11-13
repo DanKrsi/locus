@@ -560,6 +560,7 @@ export function App() {
           if (left) openCompare(resolvePath(i.ref, notePath()), left);
         },
         update: (i) => void updateOneLink(i, notePath()),
+        redraw: (i) => void updateOneLink(i, notePath(), true),
       }),
   });
 
@@ -826,9 +827,9 @@ export function App() {
       external: false,
       kind: fileKind(link.next.path),
       // A file that moved has no earlier version under its new name to put beside it.
-      compare: moved ? undefined : link.ref.at,
+      compare: moved || link.next.at === link.ref.at ? undefined : link.ref.at,
       reveal: revealOf(link.next.loc),
-      revealLeft: moved ? undefined : { ...revealOf(link.ref.loc), follow: true },
+      revealLeft: moved || link.next.at === link.ref.at ? undefined : { ...revealOf(link.ref.loc), follow: true },
     };
     setDocTabs((ts) => [...ts, tab]);
     setActiveDoc(tab.id);
@@ -870,14 +871,19 @@ export function App() {
   };
 
   /** "Update link to latest" on one link's hover card. */
-  const updateOneLink = async (info: LinkInfo, notePath: string) => {
+  const updateOneLink = async (info: LinkInfo, notePath: string, redraw = false) => {
     await notes.current?.saveAll();
     const path = resolvePath(info.ref, notePath);
     // The latest content may not be in a version yet: the link needs one to point at.
     const sha = (await api.exists(path).catch(() => false)) ? await api.ensureVersion(path).catch(() => null) : await api.head().catch(() => null);
     const cites = await api.citations().catch(() => [] as Citation[]);
     const cite = cites.find((c) => c.note === notePath && c.dest === info.dest) ?? { note: notePath, line: 1, label: info.label, path, dest: info.dest, quote: info.title };
-    const link = sha ? await checkLink(cite, sha).catch(() => null) : null;
+    let link = sha ? await checkLink(cite, sha).catch(() => null) : null;
+    if (redraw && sha) {
+      // Redraw area: review the link whether or not the file changed, to draw a new box.
+      const ref = link?.ref ?? info.ref;
+      link = { cite, ref, verdict: 'review', next: link?.next ?? { ...ref, at: sha.slice(0, 10) }, reason: 'draw the new area on the right, then use what is selected' };
+    }
     if (!link) return showToast('This link is already up to date');
     if (link.verdict === 'review') startReview([link], []);
     else await applyLinkUpdates([link.verdict === 'deleted' ? pinFor(link) : updateFor(link)]);

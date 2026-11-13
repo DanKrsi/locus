@@ -301,7 +301,7 @@ await step('live or pinned: choose when citing, switch from the hover card', asy
   if (!/&rev=[0-9a-f]{10}/.test(await lineOf())) throw new Error('not pinned again: ' + (await lineOf()));
 });
 
-await step('a live link whose file changed is marked and warns when opened', async () => {
+await step('a live link whose file changed says so in its hover card and when opened', async () => {
   // Someone adds a cover page outside the app: everything moves down a page.
   const file = join(workspace, 'docs', 'BDS-100 Bracket Design Standard.pdf');
   const current = await readFile(file);
@@ -310,9 +310,16 @@ await step('a live link whose file changed is marked and warns when opened', asy
   await writeFile(file, await doc.save());
   try {
     await win.evaluate(() => window.dispatchEvent(new Event('focus')));
+    // Nothing is written beside the link; its hover card says what happened.
     const line = win.locator('.cm-line', { hasText: 'verification methods' });
-    await line.locator('.badge.warn').nth(1).waitFor({ timeout: 15000 });
-    await shot('changed-badge');
+    await win.waitForTimeout(1500);
+    if (await line.locator('.badge').count()) throw new Error('a badge is shown beside a link');
+    await win.locator('.cm-ref', { hasText: 'Table 5' }).scrollIntoViewIfNeeded();
+    await hoverLink('Table 5');
+    await win.locator('.hover-card .link-changed').waitFor({ timeout: 15000 });
+    await win.locator('.hover-card').getByRole('button', { name: 'Update link to latest' }).waitFor();
+    await shot('changed-card');
+    await win.mouse.move(5, 500);
     // The quoted passage is found on its new page.
     await win.locator('.cm-ref', { hasText: 'BDS-100 p5' }).click();
     await win.locator('.notice', { hasText: 'now on page 6' }).waitFor({ timeout: 15000 });

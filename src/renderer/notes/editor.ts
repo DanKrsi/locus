@@ -315,23 +315,12 @@ const flashField = StateField.define<DecorationSet>({
 
 // ---------- Widgets ----------
 
-/** Badges after a reference: its pinned version, and "changed" when a live link's target changed. */
-export function refBadges(status: RefStatus): HTMLElement[] {
-  const out: HTMLElement[] = [];
-  if (status.badge) {
-    const b = document.createElement('span');
-    b.className = 'badge mark';
-    b.textContent = status.badge;
-    out.push(b);
-  }
-  if (status.changed) {
-    const c = document.createElement('span');
-    c.className = 'badge warn';
-    c.textContent = 'changed';
-    c.title = (status.reason ?? 'Changed since it was cited') + ' · hover for options';
-    out.push(c);
-  }
-  return out;
+/**
+ * Badges after a reference. Nothing is written beside a link any more: whether it is pinned, and
+ * what happened to what it cites, is in its hover card, and Save version asks about changes.
+ */
+export function refBadges(_status: RefStatus): HTMLElement[] {
+  return [];
 }
 
 class RefWidget extends WidgetType {

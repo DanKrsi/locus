@@ -26,6 +26,7 @@ import {
 import { insertTable } from './tables';
 import { setEditorZoom, ZoomControl } from '../zoom';
 import { isCanvas, newCanvas, serializeCanvas } from '../../core/canvas';
+import { joinNoteId, splitNoteId } from '../../core/noteid';
 import { FlowEditor, type FlowHandle } from '../flow/FlowEditor';
 import { ConfirmDialog, ContextMenu, PathDialog, type ConfirmRequest, type MenuItem, type MenuState, type PathRequest } from '../menus';
 
@@ -94,6 +95,8 @@ interface Doc {
   view: EditorView;
   bom: boolean;
   savedText: string;
+  /** The note's hidden identity (the last line of the file), kept out of the editor. */
+  noteId?: string;
   timer?: number;
 }
 
@@ -141,7 +144,12 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
     clearTimeout(d.timer);
     const text = docText(d.view);
     if (text !== d.savedText) {
-      await api.writeText(path, (d.bom ? '﻿' : '') + text);
+      // Something may have linked to this note since it was opened, giving it an identity.
+      d.noteId ??= await api
+        .readText(path)
+        .then((t) => splitNoteId(t).id)
+        .catch(() => undefined);
+      await api.writeText(path, (d.bom ? '﻿' : '') + joinNoteId(text, d.noteId, text.includes('\r\n') ? '\r\n' : '\n'));
       d.savedText = text;
       p.onSaved(path);
     }
@@ -203,7 +211,8 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
         p.toast(`Couldn't open ${basename(path)}`);
         return null;
       }
-      const { text, bom, eol } = decodeText(bytes);
+      const { text: fileText, bom, eol } = decodeText(bytes);
+      const { body: text, id: noteId } = splitNoteId(fileText);
       setTabs((ts) => (ts.some((t) => t.path === path) ? ts : [...ts, { id: newId(), path, dirty: false }]));
       setActive(path);
       // Wait for React to mount the tab's host div (can take more than one frame).
@@ -216,7 +225,7 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
         p.toast(`Couldn't open ${basename(path)}`);
         return null;
       }
-      const doc = { path, bom, savedText: text } as Doc;
+      const doc = { path, bom, savedText: text, noteId } as Doc;
       const cb = p.callbacks(() => doc.path);
       doc.view = createNoteEditor(host, {
         doc: text,
@@ -348,8 +357,13 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
       },
       {
         label: `Copy link to this ${kind}`,
-        run: () => {
-          void api.copyText(formatReference(stem(path), { path, pathKind: 'root', loc: {}, extra: [] }));
+        run: async () => {
+          // The link records the note itself, so it survives a rename or move.
+          await save(path);
+          const id = await api.ensureNoteId(path).catch(() => null);
+          const d = docs.current.get(path);
+          if (d && id) d.noteId = id;
+          void api.copyText(formatReference(stem(path), { path, pathKind: 'root', loc: {}, extra: id ? [`id=${id}`] : [] }));
           p.toast('Link copied. Paste it into a note');
         },
       },
@@ -508,7 +522,8 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
         if (docText(d.view) !== d.savedText) continue;
         const bytes = await api.readFile(path).catch(() => null);
         if (!bytes) continue;
-        const { text } = decodeText(bytes);
+        const { body: text, id } = splitNoteId(decodeText(bytes).text);
+        if (id) d.noteId = id;
         const normalized = text.replace(/\r\n/g, '\n');
         if (normalized === d.savedText.replace(/\r\n/g, '\n')) continue;
         d.view.dispatch({ changes: { from: 0, to: d.view.state.doc.length, insert: normalized } });

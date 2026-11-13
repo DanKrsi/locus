@@ -1,7 +1,7 @@
 # Master plan: catching up with Folio and going past it
 
 Drafted 13 November 2026 from the Folio 0.3.0 overview, checked against Locus 0.2.12 (spec and
-code). Status: **phase 1 built (0.3.0)**; phases 2 onward wait on the two decisions in section 2.
+code). Status: **phases 1 and 2 built (0.3.0, 0.4.0)**; phase 3 is next.
 
 ## 1. Where Locus stands
 
@@ -75,15 +75,22 @@ Moved to later phases: marks on the version strip for edited, moved and "not sav
 with link upkeep); **Link to a section** and the F1 shortcuts list (phase 3, with the citation
 editor); Windows-1252 notes, PDF Fit page, copying cells, equations on slides (phase 5).
 
-### Phase 2: links that look after themselves (L)
+### Phase 2: links that look after themselves (L) — done in 0.4.0
 
-1. Note identity and the Record banner.
-2. The check after Save version: summary, auto-update, Undo.
-3. The side-by-side helper for links that really changed, and Redraw area.
-4. Label renumbering; code labels without line numbers.
-5. Then remove badges (decision B).
+Decisions taken: the right pane keeps showing files as they are now (the hybrid), and badges
+beside links are gone.
 
-Locus already has the core logic for following moved lines and quotes, so this builds on it.
+- [x] Note identity, and the Record notice.
+- [x] The check after Save version: summary, auto-update, Undo.
+- [x] Reviewing a changed link side by side; **Use what's selected on the right** (which is
+  also how an area is redrawn); **Update link to latest** and **Redraw area** on hover cards.
+- [x] Label renumbering; code labels without line numbers.
+- [x] Badges removed.
+
+Not done, moved to phase 5: slide links follow only when the file is unchanged (Folio follows a
+slide that moved within the deck); a block of spreadsheet cells that moved elsewhere is not
+found; marks on the version strip for edited, moved and "not saved"; the review of links inside
+flowcharts uses the same bar but the flowchart doesn't flash the box.
 
 ### Phase 3: edit a link without seeing markdown (M)
 

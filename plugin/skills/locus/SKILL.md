@@ -25,7 +25,8 @@ so explain in your own words and let the links show the source.
 4. Write each paragraph on a single line. The app's editor shows line breaks exactly as
    written, so hard-wrapped text looks broken.
 5. Labels are short and say what the reader will see: "the retry loop", "Table 5",
-   "load cases B4:D12". Never use "here" or "this link".
+   "load cases B4:D12". Never use "here" or "this link". Don't put line numbers in a label for
+   code ("client.py L12-18"): lines move, and the link follows them.
 
 ## Workflow for a tour
 

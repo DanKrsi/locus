@@ -115,17 +115,19 @@ demo` and opens on its **Start here** note; later the same folder is reopened.
 
 - Accent colour, medium weight, no underline until hover, small icon by type (PDF page, code,
   grid for cells, # for notes, play for media).
-- **Pinned** references show a small date badge (Simple mode) or short SHA (Git mode).
-- **Live** references whose cited content changed since they were cited show a red **changed**
-  badge: cited code lines edited or deleted (lines that only moved don't count), a quoted PDF
-  passage moved to another page or gone, or for other files any change to the file.
-- Broken references: red wavy underline with the reason; `moved` ones offer **Fix links**.
+- Nothing is written beside a link: no version or "changed" badges, in notes or in flowchart
+  boxes. Whether a link is pinned, and what has happened to what it cites, is in its hover card;
+  Save version asks about changes (§4.5).
+- Broken references: red wavy underline with the reason; `moved` ones offer **Fix links**. A
+  link to a note that was renamed or moved outside the app is not broken: it finds the note by
+  its identity, and **Fix links** writes the new path.
 - **Hover card** (~400ms): preview (page thumbnail with the area drawn, code lines with
   numbers, mini table of cells) · file name and folder · location description · kind
-  ("Live · shows the latest version · cited Mar 3" or "Pinned · always shows the version from
-  Mar 3") · what changed, if anything · quote in italics · buttons **Open**, **Compare with
-  latest** and **Make live** (pinned), **Compare with cited version** (live, changed) and
-  **Pin to this version** / **Pin to cited version** (live), **Rename**, **Edit target**,
+  ("Live · cited from the version of Mar 3 · follows the file when you save a version" or
+  "Pinned · always shows the version from Mar 3") · what changed, if anything · quote in italics
+  · buttons **Open**, **Compare with latest** and **Make live** (pinned), **Update link to
+  latest** and **Compare with cited version** (live, changed), **Pin to this version** / **Pin
+  to cited version** (live), **Redraw area** (a box on a PDF page), **Rename**, **Edit target**,
   **Remove link**.
 - Click → opens the document on the right at the location, highlighted, and always placed the
   same way: the cited area, lines, cells or slide centred in the view (one taller than the view
@@ -146,6 +148,51 @@ demo` and opens on its **Start here** note; later the same folder is reopened.
 - Not yet: dragging a selection from the viewer into the note; **Link to a section** (a picker
   of a note's headings).
 
+### 4.5 Keeping links up to date
+
+The right pane shows files as they are now, so a file edited in another program shows at once. A
+live link records the version it was cited from and is brought forward each time a version is
+saved, so it never drifts far from the file.
+
+**After Save version** (and when Save version finds nothing new to save but links are waiting),
+Locus checks every live link whose file changed since it was cited:
+
+| File | Follows by itself when | Needs a look when |
+|---|---|---|
+| Code, text | the cited lines are untouched or only moved | lines in the range were edited or deleted (the same lines in the new version are proposed) |
+| PDF with a quote | the quote is found again, on this page or another | the quote was reworded or removed |
+| PDF page or area, no quote | never (nothing to check) | always; the same page or box is proposed |
+| Spreadsheet | a named range still resolves; the cited cells hold the same values | a value in the cited cells changed |
+| Slides, pictures, recordings | never | any change to the file |
+| Any file, whole-file link | always | never |
+| Any file | it was only moved or renamed | it was moved and edited |
+
+A link whose file was deleted stays on the version it was cited from (it becomes pinned). Links
+to notes are left alone: a note is always read as it is now.
+
+- **The summary** says how many links can follow by themselves, how many cite something that
+  changed, and how many point at deleted files. **Update the N and review the rest**, **Go
+  through them one by one**, or **Not now**. No button is the default, so a stray Enter does
+  nothing. After **Not now**, pressing Save version again brings the summary back.
+- **Reviewing a link**: a bar under the header names the link and what happened. The note opens
+  at the link on the left; on the right the cited version and the latest version sit side by
+  side, the latest at the proposed place (code shows as a difference view). **Update the link**
+  takes the proposal (for code, the two line boxes can be changed first). **Use what's selected
+  on the right** takes the place selected in the latest version instead: an area drawn on a PDF
+  page, the cells picked, the page or slide shown; the old quote is dropped, because it no longer
+  applies. **Keep the old version** pins the link so it never asks again. **Skip** leaves it for
+  next time. **Stop reviewing** ends the round and keeps what was decided so far.
+- **Writing back**: the links are rewritten with the new version and place and saved as one
+  automatic version, "Automatic version (updated N links)". A label that names the old place
+  ("p12", "slide 4", "B4:D12", "L20-33") is renumbered; nothing else in it is touched. A notice
+  offers **Undo**, which puts back the notes that were rewritten unless they changed since.
+- **Update link to latest** on a hover card does the same for one link; **Redraw area** opens
+  the review for a PDF box so a new one can be drawn.
+- **Record**: a note with links that record no version (made by hand, or by an older app), or
+  links to notes that record no identity, shows a notice once per session. **Record** writes the
+  latest version into each such link, gives linked notes an identity, and turns a link to the note
+  it is written in into a plain `#heading` link. Pictures and outside files are skipped.
+
 ### 4.3 Tour mode
 
 Steps through the note's references in order with ←/→ (or PageUp/PageDown); the viewer
@@ -164,8 +211,8 @@ per line, so diffs stay readable.
   toolbar (the new box's text is selected, so typing replaces it); change the shape of a selected
   box from the toolbar; drag to move (snaps to an 8 px grid), drag the corners to resize.
 - **Box text** is markdown with citations, edited in place with the notes editor (double-click or
-  Enter; Esc or clicking away finishes). Citations show as in notes, with version and **changed**
-  badges; clicking one opens what it cites.
+  Enter; Esc or clicking away finishes). Citations show as in notes; clicking one opens what it
+  cites.
 - **Cite** on the right puts the citation in the box being edited, else the selected box (on a new
   line), else a new box — with the usual rename box.
 - **Loop frames** (groups) carry the boxes and frames inside them when moved; frames nest.

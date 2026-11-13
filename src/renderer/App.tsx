@@ -19,6 +19,7 @@ import { FileBrowser } from './FileBrowser';
 import { invalidateLatest, loadBytes, mimeFor } from './files';
 import { locateQuote } from './viewers/pdf';
 import { checkLink, checkLinks, pinFor, updateFor, type CheckedLink } from './linkcheck';
+import { linkNoteId, withLinkNoteId } from '../core/noteid';
 import { ReviewBar, UpkeepSummary, type ReviewChoice, type SummaryChoice } from './LinkUpkeep';
 import { Icon, Logo } from './icons';
 import { newId, revealOf, type DocTab } from './model';
@@ -75,6 +76,8 @@ export function App() {
   const [saveName, setSaveName] = useState<string | null>(null);
   const [toast, setToast] = useState<{ text: string; id: number } | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
+  const noticeRef = useRef(notice);
+  noticeRef.current = notice;
   /** Kind of link Cite inserts while viewing the latest version (older versions are always pinned). */
   const [citeMode, setCiteMode] = useState<CiteMode>(() => {
     try {
@@ -439,6 +442,8 @@ export function App() {
       return ok ? { state: 'ok', badge } : { state: 'broken', reason: `${basename(path)} isn't in that version`, badge };
     }
     if (await api.exists(path).catch(() => false)) return ref.at ? changeSinceCited(path, ref, info.title) : { state: 'ok' };
+    const noteId = linkNoteId(ref.extra);
+    if (noteId && (await api.findNoteById(noteId).catch(() => null))) return { state: 'ok' };
     const existed = ref.at ? await api.exists(path, ref.at).catch(() => false) : false;
     return {
       state: 'broken',
@@ -490,9 +495,12 @@ export function App() {
       return;
     }
     const external = ref.pathKind === 'external';
-    const path = external ? ref.path : resolvePath(ref, notePath);
+    let path = external ? ref.path : resolvePath(ref, notePath);
     const kind = fileKind(path);
     if ((kind === 'markdown' || isCanvas(path)) && !ref.rev && !external) {
+      // Renamed or moved outside the app: the link still knows which note it meant.
+      const id = linkNoteId(ref.extra);
+      if (id && !(await api.exists(path).catch(() => true))) path = (await api.findNoteById(id).catch(() => null)) ?? path;
       await notes.current?.open(path);
       if (ref.loc.heading) setTimeout(() => notes.current?.revealHeading(path, ref.loc.heading!), 50);
       return;
@@ -607,20 +615,83 @@ export function App() {
     const fixes = new Map<string, string>();
     for (const l of allLinks(view.state)) {
       const ref = l.ref;
-      if (ref.rev || !ref.at || !ref.path || (ref.pathKind !== 'root' && ref.pathKind !== 'relative')) continue;
+      if (ref.rev || !ref.path || (ref.pathKind !== 'root' && ref.pathKind !== 'relative')) continue;
+      const noteId = linkNoteId(ref.extra);
+      if (!ref.at && !noteId) continue;
       const path = resolvePath(ref, notePath);
       if (await api.exists(path).catch(() => true)) continue;
-      const to = await api.findMoved(path, ref.at).catch(() => null);
+      const to = noteId ? await api.findNoteById(noteId).catch(() => null) : await api.findMoved(path, ref.at!).catch(() => null);
       if (to) fixes.set(l.dest, to);
     }
     movedFixes.current = fixes;
-    if (!fixes.size) return;
+    if (!fixes.size) return void checkUnrecorded();
     const n = allLinks(view.state).filter((l) => fixes.has(l.dest)).length;
     setNotice({
       text: `${n} link${n === 1 ? ' points' : 's point'} to ${fixes.size === 1 ? 'a file that was' : 'files that were'} moved.`,
       actions: [{ label: 'Fix links', run: () => applyMovedFixes() }],
     });
   };
+  /** Notes whose Record banner was closed or used; it isn't offered twice in a session. */
+  const recordSeen = useRef(new Set<string>());
+
+  /** Links in the active note that record no version (or, for a link to a note, no identity). */
+  const unrecorded = async (view: import('@codemirror/view').EditorView, notePath: string) => {
+    const out: { link: LinkInfo; path: string; kind: 'version' | 'note' | 'self' }[] = [];
+    for (const l of allLinks(view.state)) {
+      const ref = l.ref;
+      if (l.image || ref.rev || !ref.path || (ref.pathKind !== 'root' && ref.pathKind !== 'relative')) continue;
+      const path = resolvePath(ref, notePath);
+      const isNote = fileKind(path) === 'markdown' || isCanvas(path);
+      if (isNote ? !!linkNoteId(ref.extra) : !!ref.at) continue;
+      if (!(await api.exists(path).catch(() => false))) continue;
+      out.push({ link: l, path, kind: !isNote ? 'version' : path === notePath ? 'self' : 'note' });
+    }
+    return out;
+  };
+
+  const checkUnrecorded = async () => {
+    const view = notes.current?.activeView();
+    const notePath = notes.current?.activePath();
+    if (!view || !notePath || recordSeen.current.has(notePath) || noticeRef.current) return;
+    const found = await unrecorded(view, notePath);
+    if (!found.length || notes.current?.activePath() !== notePath) return;
+    recordSeen.current.add(notePath);
+    const n = found.length;
+    setNotice({
+      text: `${n} link${n === 1 ? '' : 's'} in this note ${n === 1 ? "doesn't" : "don't"} record ${found.every((f) => f.kind === 'version') ? 'a version' : found.every((f) => f.kind !== 'version') ? 'which note they point at' : 'a version or which note they point at'}, so Locus can't follow ${n === 1 ? 'it' : 'them'} through changes.`,
+      actions: [{ label: 'Record', run: () => void recordLinks(notePath) }],
+    });
+  };
+
+  /** Writes the latest version into links that have none, and the note's identity into links to notes. */
+  const recordLinks = async (notePath: string) => {
+    const view = notes.current?.activeView();
+    if (!view || notes.current?.activePath() !== notePath) return;
+    const changes: { from: number; to: number; insert: string }[] = [];
+    for (const { link, path, kind } of await unrecorded(view, notePath)) {
+      let ref = link.ref;
+      if (kind === 'self') {
+        // A link to this note itself is a plain #heading link: it can never break.
+        ref = { ...ref, path: '', pathKind: 'relative' };
+      } else if (kind === 'note') {
+        const id = await api.ensureNoteId(path).catch(() => null);
+        if (!id) continue;
+        ref = { ...ref, extra: withLinkNoteId(ref.extra, id) };
+      } else {
+        const sha = await api.ensureVersion(path).catch(() => null);
+        if (!sha) continue;
+        ref = { ...ref, at: shortSha(sha) };
+      }
+      changes.push({ from: link.from, to: link.to, insert: formatReference(link.label, ref, link.title) });
+    }
+    if (!changes.length) return;
+    view.dispatch({ changes });
+    statusCache.current.clear();
+    notes.current?.refresh();
+    void refreshVersions();
+    showToast(`Recorded ${changes.length} link${changes.length === 1 ? '' : 's'}`);
+  };
+
   const checkMovedLinksRef = useRef(checkMovedLinks);
   checkMovedLinksRef.current = checkMovedLinks;
 
@@ -731,6 +802,8 @@ export function App() {
     } else {
       let rev: string | undefined;
       let at: string | undefined;
+      // A link to a note records the note itself, so it survives the note being renamed or moved.
+      const noteId = !tab.rev && (tab.kind === 'markdown' || isCanvas(tab.path)) ? await api.ensureNoteId(tab.path).catch(() => null) : null;
       if (tab.rev) rev = shortSha(tab.rev);
       else {
         // Citing the latest version: a live link remembers it, a pinned link points at it.
@@ -738,7 +811,7 @@ export function App() {
         if (sha && live.current.citeMode === 'pinned') rev = shortSha(sha);
         else if (sha) at = shortSha(sha);
       }
-      ref = { path: tab.path, pathKind: 'root', loc: target.loc, rev, at, extra: [] };
+      ref = { path: tab.path, pathKind: 'root', loc: target.loc, rev, at, extra: noteId ? withLinkNoteId([], noteId) : [] };
     }
     const label = defaultLabel(tab.path, target.loc, target.pageLabel);
     if (flow) flow.insertCitation((l) => formatReference(l, ref, target.quote), label);

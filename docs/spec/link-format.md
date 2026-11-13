@@ -92,7 +92,7 @@ When citing:
 |---|---|
 | PDF page / area | `<file stem> p<n>` (printed page label when the PDF has one) |
 | Slide | `<file stem> slide <n>` |
-| Code | `<file name> L<a>-<b>` |
+| Code | `<file name>` (no line numbers: lines move and the link follows them) |
 | Spreadsheet | `<file stem> <reference>` |
 | Note heading | `<heading text>` |
 | Media | `<file stem> <m:ss>` |
@@ -113,6 +113,26 @@ When citing:
 
 Statuses surfaced in the UI: `ok`, `remapped`, `changed`, `moved`, `deleted`, `missing`, `external`.
 
+### 2.5 Note identity
+
+A note is edited all the time, so it can't be recognised by its content the way a PDF can. A
+note or flowchart that something links to carries a permanent 12-character identity (lowercase
+letters and digits), written once and never changed:
+
+- markdown: a comment on the last line, `<!-- locus-id: k3v9x0q2m7ab -->`, which the editor
+  never shows (it is split off on opening and put back on saving);
+- flowchart: a top-level `"locusId"` key, which other canvas apps ignore.
+
+It is added the first time something links to the note (citing it, **Copy link to this note**,
+`make_reference`, or **Record**), not before. The link records it as `id=<identity>` in its
+address: `[basis](/notes/design-basis.md#loads&id=k3v9x0q2m7ab)`. When the path no longer finds
+the note, the app finds it by this identity. A copy of a note is a new note with no identity.
+
+### 2.6 Picture width
+
+`#w=<pixels>` on a picture's address records a width chosen in the editor. Other markdown tools
+ignore it and show the picture at its own size.
+
 ## 5. Automatic versions
 
 - **Simple mode / app-managed workspaces**: an automatic version is a normal commit with the
@@ -125,7 +145,11 @@ Statuses surfaced in the UI: `ok`, `remapped`, `changed`, `moved`, `deleted`, `m
 
 - Renaming or moving a file **inside the app** rewrites every reference in the workspace.
 - Files moved outside the app are detected through git rename detection at the next version;
-  the app offers to fix the affected links.
+  the app offers to fix the affected links. Notes are found by their identity (§2.5).
+- After a version is saved, live links whose file changed are brought forward: `at=` becomes the
+  new version and the place is mapped (lines through the diff, a PDF quote by searching for it).
+  Links whose cited content really changed are shown to the user first (UI spec §4.5). The
+  rewrite is saved as `Automatic version (updated N links)`.
 - The app keeps a local index (`.locus/cache/`) of all references for "Cited in" markers,
   backlinks, and link health.
 

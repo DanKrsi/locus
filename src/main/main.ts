@@ -12,6 +12,7 @@ import { canvasLinks, isCanvas, rewriteCanvas } from '../core/canvas';
 import { claudeStatus, connectClaude, refreshClaude, removeClaude, restartClaudeDesktop } from './claude';
 import { mapLines } from '../core/remap';
 import { updateLinks } from '../core/upkeep';
+import { addNoteId, newNoteId, readNoteId } from '../core/noteid';
 import { fileKind } from '../core/link';
 import type { Citation, GitHubAccount } from '../shared/api';
 import * as share from './share';
@@ -207,6 +208,8 @@ async function documentsFolder(name: string): Promise<string> {
   return dest;
 }
 
+const noteIdCache = new Map<string, { mtime: number; id?: string }>();
+
 /** What the last link update rewrote, so it can be undone. */
 interface LinkUndo {
   root: string;
@@ -373,6 +376,32 @@ const api: Api = {
     }
     if (restored.length) await git.autoVersion(w.root, restored, w.managed, `${git.AUTO_PREFIX} (undid a link update)`);
     return { restored: restored.length, skipped: undo.notes.length - restored.length };
+  },
+  async ensureNoteId(path) {
+    const full = abs(path);
+    const text = await fs.readFile(full, 'utf8');
+    const has = readNoteId(path, text);
+    if (has) return has;
+    const id = newNoteId();
+    const next = addNoteId(path, text, id);
+    if (next === text) throw new Error(`${path.slice(1)} can't carry an identity`);
+    await fs.writeFile(full, next, 'utf8');
+    return id;
+  },
+  async findNoteById(id) {
+    for (const note of await workspaceNotes()) {
+      const full = abs(note);
+      const st = await fs.stat(full).catch(() => null);
+      if (!st) continue;
+      const key = `${ws().root}|${note}`;
+      let cached = noteIdCache.get(key);
+      if (!cached || cached.mtime !== st.mtimeMs) {
+        cached = { mtime: st.mtimeMs, id: readNoteId(note, await fs.readFile(full, 'utf8').catch(() => '')) };
+        noteIdCache.set(key, cached);
+      }
+      if (cached.id === id) return note;
+    }
+    return null;
   },
   async findMoved(path, at) {
     const root = ws().root;

@@ -2,7 +2,7 @@
 // links that only moved, reviewing one that changed, Undo, and keeping a link on its old version.
 // Usage: npm run build && node scripts/make-test-workspace.mjs && node scripts/test-upkeep.mjs
 import { _electron as electron } from 'playwright';
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
 const repo = resolve(import.meta.dirname, '..');
@@ -126,6 +126,55 @@ await step('a pinned link is not asked about again; the other still is', async (
   const text = await dlg.innerText();
   if ((text.match(/\b1 link\b/g) ?? []).length !== 1) throw new Error(`summary: ${text}`);
   await win.getByRole('button', { name: 'Not now' }).click();
+});
+
+const openNote = async (name) => {
+  await win.keyboard.press('Control+O');
+  await win.getByPlaceholder('Find a file by name').fill(name);
+  await win.locator('.tree-row', { hasText: name }).first().waitFor();
+  await win.keyboard.press('Enter');
+  await win.locator('.open-choice').waitFor({ timeout: 5000 });
+  await win.keyboard.press('e');
+  await win.locator('[data-pane="notes"] .tab.active', { hasText: name }).waitFor({ timeout: 10000 });
+};
+
+await step('a note that is linked to gets a hidden identity that survives editing', async () => {
+  await win.locator('[data-pane="notes"] .tabs > .tab', { hasText: 'review.md' }).click({ button: 'right' });
+  await win.locator('.context-menu').getByRole('menuitem', { name: 'Copy link to this note' }).click();
+  await win.waitForFunction(() => window.api.readText('/notes/review.md').then((t) => /<!-- locus-id: [a-z0-9]{12} -->\r?\n?$/.test(t)), null, { timeout: 5000 });
+  if (/locus-id/.test(await win.locator('.editor-wrap .cm-content').first().innerText())) throw new Error('the identity shows in the editor');
+  const id = (await note()).match(/locus-id: ([a-z0-9]{12})/)[1];
+  await win.locator('.editor-wrap .cm-content').first().click();
+  await win.keyboard.press('Control+End');
+  await win.keyboard.type(' more');
+  await win.keyboard.press('Control+S');
+  await win.waitForFunction(() => window.api.readText('/notes/review.md').then((t) => / more/.test(t)), null, { timeout: 5000 });
+  const text = await note();
+  if (!new RegExp(`more\r?\n<!-- locus-id: ${id} -->\r?\n?$`).test(text)) throw new Error(`identity lost or moved: ${JSON.stringify(text.slice(-80))}`);
+});
+
+await step('a link finds its note after the note is renamed outside the app', async () => {
+  const id = await api('ensureNoteId', '/notes/design-basis.md');
+  await api('writeText', '/notes/pointer.md', `# Pointer\n\nSee [the basis](/notes/design-basis.md#id=${id}).\n`);
+  await rename(join(workspace, 'notes', 'design-basis.md'), join(workspace, 'notes', 'basis-renamed.md'));
+  await openNote('pointer.md');
+  const ref = win.locator('.editor-wrap .cm-ref', { hasText: 'the basis' });
+  await ref.waitFor({ timeout: 10000 });
+  await win.waitForTimeout(800);
+  if (await win.locator('.editor-wrap .cm-ref.broken', { hasText: 'the basis' }).count()) throw new Error('the link is drawn as broken');
+  await ref.click();
+  await win.locator('[data-pane="notes"] .tab.active', { hasText: 'basis-renamed.md' }).waitFor({ timeout: 10000 });
+});
+
+await step('Record: links made by hand get a version written into them', async () => {
+  await api('writeText', '/notes/byhand.md', '# By hand\n\nSee [the solver](/src/solver.py#L1-L2).\n');
+  await win.locator('.notice .icon').click().catch(() => undefined);
+  await openNote('byhand.md');
+  const notice = win.locator('.notice', { hasText: "doesn't record a version" });
+  await notice.waitFor({ timeout: 10000 });
+  await notice.getByRole('button', { name: 'Record' }).click();
+  await win.keyboard.press('Control+S');
+  await win.waitForFunction(() => window.api.readText('/notes/byhand.md').then((t) => /solver\.py#L1-L2&at=[0-9a-f]{10}\)/.test(t)), null, { timeout: 10000 });
 });
 
 await app.close();

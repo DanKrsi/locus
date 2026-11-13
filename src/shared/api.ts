@@ -160,6 +160,10 @@ export interface Api {
   updateLinks(changes: NoteLinkUpdate[], message: string): Promise<number>;
   /** Puts back the notes the last updateLinks rewrote, except any changed since. Returns how many were restored and skipped. */
   undoLinkUpdate(): Promise<{ restored: number; skipped: number }>;
+  /** The permanent identity of a note or flowchart, giving it one (written into the file) if it has none. */
+  ensureNoteId(path: string): Promise<string>;
+  /** Where the note with this identity is now, if it is in the workspace. */
+  findNoteById(id: string): Promise<string | null>;
   /** Every reference in every note of the workspace. */
   citations(): Promise<Citation[]>;
   /** What a version changed compared with the one before it. */
@@ -199,7 +203,7 @@ export const API_METHODS: (keyof Api)[] = [
   'openWorkspace', 'createWorkspace', 'listFiles', 'readFile', 'readText', 'writeText', 'writeNewFile', 'exists', 'fileChangedSince', 'claudeStatus', 'connectClaude', 'restartClaudeDesktop', 'appVersion',
   'head', 'versions', 'changesSince', 'uncommitted', 'saveVersion', 'ensureVersion', 'diffHunks',
   'getSettings', 'setSettings', 'pickExternalFiles', 'readExternal', 'openExternally', 'setTitleBarColors',
-  'renameFile', 'findMoved', 'citations', 'versionChanges', 'updateLinks', 'undoLinkUpdate',
+  'renameFile', 'findMoved', 'citations', 'versionChanges', 'updateLinks', 'undoLinkUpdate', 'ensureNoteId', 'findNoteById',
   'exportPackage', 'importPackage', 'openDemo', 'sharingStatus', 'sync', 'conflictSides', 'resolveConflict', 'finishSync', 'abortSync',
   'githubSignInStart', 'githubSignInWait', 'githubSignOut', 'githubShare', 'githubInvite', 'githubPeople', 'githubRepos',
   'githubAcceptInvitation', 'githubClone', 'copyText', 'showInFolder', 'trashFile',

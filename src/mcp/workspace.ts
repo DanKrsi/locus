@@ -22,6 +22,7 @@ import { findQuote } from '../core/quote';
 import { mapLines } from '../core/remap';
 import * as git from '../main/git';
 import { readPdf, readSlides, readWorkbook, type PdfPage } from './reader';
+import { addNoteId, joinNoteId, newNoteId, readNoteId, splitNoteId, withLinkNoteId } from '../core/noteid';
 
 export interface Workspace {
   root: string;
@@ -254,6 +255,19 @@ export async function makeReference(ws: Workspace, req: ReferenceRequest): Promi
     reference.rev = pinned.slice(0, 10);
     version = `pinned to ${pinned.slice(0, 10)}`;
   } else if (ws.isRepo) {
+    if (kind === 'markdown' || isCanvas(path)) {
+      // A link to a note records the note itself, so it survives the note being renamed or moved.
+      const full = absPath(ws, path);
+      const text = await fs.readFile(full, 'utf8');
+      let id = readNoteId(path, text);
+      if (!id) {
+        id = newNoteId();
+        const next = addNoteId(path, text, id);
+        if (next !== text) await fs.writeFile(full, next, 'utf8');
+        else id = undefined;
+      }
+      if (id) reference.extra = withLinkNoteId(reference.extra, id);
+    }
     const sha = await git.ensureVersion(ws.root, path, ws.managed);
     if (sha) {
       reference.at = sha.slice(0, 10);
@@ -511,7 +525,11 @@ export async function writeNote(ws: Workspace, path: string, content: string): P
   if (!/\.md$/i.test(p)) throw new Error('Notes must be .md files');
   const full = absPath(ws, p);
   await fs.mkdir(dirname(full), { recursive: true });
-  await fs.writeFile(full, content, 'utf8');
+  // A note that something links to keeps its hidden identity when it is rewritten.
+  const old = await fs.readFile(full, 'utf8').catch(() => '');
+  const id = splitNoteId(old).id;
+  const { body } = splitNoteId(content);
+  await fs.writeFile(full, joinNoteId(body, id, body.includes('\r\n') ? '\r\n' : '\n'), 'utf8');
   return p;
 }
 

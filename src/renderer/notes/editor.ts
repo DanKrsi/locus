@@ -63,6 +63,8 @@ export interface NoteEditorOptions {
   zoom?: number;
   /** Viewing a note on the right: formatted and clickable, but nothing can change it. */
   readOnly?: boolean;
+  /** Saves a pasted or dropped picture into the workspace and returns its path. */
+  saveImage?(file: File): Promise<string | null>;
 }
 
 /** Ask the editor to rebuild decorations (e.g. after async link checks finish). */
@@ -449,20 +451,129 @@ class LinkBadgeWidget extends WidgetType {
   }
 }
 
+/** Width chosen for a picture ("#w=320" on its address), in pixels at 100% zoom. */
+export function imageWidth(dest: string): number | null {
+  const m = dest.match(/[#&]w=(\d+)(?:&|$)/);
+  return m ? +m[1] : null;
+}
+
+/** Records (or with null, forgets) the width of the picture drawn by `dom`. */
+function setImageWidth(view: EditorView, dom: HTMLElement, width: number | null) {
+  const pos = view.posAtDOM(dom);
+  const info = allLinks(view.state).find((l) => l.image && l.from === pos);
+  if (!info) return;
+  const at = view.state.sliceDoc(info.from, info.to).lastIndexOf(info.dest);
+  if (at < 0) return;
+  let dest = info.dest.replace(/([#&])w=\d+(&|$)/, (_m, lead: string, tail: string) => (tail ? lead : ''));
+  if (width) dest += `${dest.includes('#') ? '&' : '#'}w=${width}`;
+  if (dest !== info.dest) view.dispatch({ changes: { from: info.from + at, to: info.from + at + info.dest.length, insert: dest } });
+}
+
 class ImageWidget extends WidgetType {
-  constructor(readonly src: string, readonly alt: string) {
+  constructor(readonly src: string, readonly alt: string, readonly width: number | null) {
     super();
   }
   eq(o: ImageWidget) {
-    return o.src === this.src;
+    return o.src === this.src && o.width === this.width;
   }
-  toDOM() {
+  toDOM(view: EditorView) {
+    const wrap = document.createElement('span');
+    wrap.className = 'cm-image-wrap';
     const img = document.createElement('img');
     img.className = 'cm-image';
     img.src = this.src;
     img.alt = this.alt;
-    return img;
+    img.draggable = false;
+    const size = (w: number | null) => {
+      img.classList.toggle('sized', w !== null);
+      img.style.width = w === null ? '' : `calc(${w}px * var(--zoom, 1))`;
+    };
+    size(this.width);
+    wrap.append(img);
+    if (view.state.readOnly) return wrap;
+    // A corner handle: drag for a width, double-click for the picture's own size.
+    const handle = document.createElement('span');
+    handle.className = 'cm-image-handle';
+    handle.title = 'Drag to resize · double-click for full size';
+    handle.onmousedown = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const zoom = parseFloat(getComputedStyle(wrap).getPropertyValue('--zoom')) || 1;
+      const startX = e.clientX;
+      const startW = img.getBoundingClientRect().width;
+      let width = Math.round(startW / zoom);
+      let moved = false;
+      wrap.classList.add('resizing');
+      const onMove = (ev: MouseEvent) => {
+        moved = true;
+        width = Math.max(40, Math.round((startW + ev.clientX - startX) / zoom));
+        size(width);
+      };
+      const onUp = () => {
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+        wrap.classList.remove('resizing');
+        // The picture never draws wider than the note, so record what is actually shown.
+        if (moved) setImageWidth(view, wrap, Math.round(img.getBoundingClientRect().width / zoom));
+      };
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
+    };
+    handle.ondblclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setImageWidth(view, wrap, null);
+    };
+    wrap.append(handle);
+    return wrap;
   }
+  ignoreEvent(e: Event) {
+    return (e.target as HTMLElement).classList?.contains('cm-image-handle');
+  }
+}
+
+/** A picture on the clipboard or in a drop, if there is one. */
+function imageFiles(data: DataTransfer | null): File[] {
+  return data ? [...data.files].filter((f) => f.type.startsWith('image/')) : [];
+}
+
+async function insertImages(view: EditorView, files: File[], pos: { from: number; to: number }, save: (file: File) => Promise<string | null>) {
+  const links: string[] = [];
+  for (const file of files) {
+    const path = await save(file);
+    if (path) links.push(`![](${/[\s()<>]/.test(path) ? `<${path}>` : path})`);
+  }
+  if (!links.length) return;
+  const insert = links.join('\n\n');
+  const from = Math.min(pos.from, view.state.doc.length);
+  const to = Math.min(pos.to, view.state.doc.length);
+  view.dispatch({ changes: { from, to, insert }, selection: { anchor: from + insert.length }, scrollIntoView: true });
+  view.focus();
+}
+
+/** Paste or drop a picture into the note: it is saved as a file and shown where the cursor is. */
+function imagePasting(opts: NoteEditorOptions): Extension {
+  const save = opts.saveImage;
+  if (!save || opts.readOnly) return [];
+  return EditorView.domEventHandlers({
+    paste(e, view) {
+      const files = imageFiles(e.clipboardData);
+      // Cells copied from a spreadsheet come with a picture of them too: the text wins.
+      if (!files.length || e.clipboardData?.getData('text/plain')) return false;
+      e.preventDefault();
+      const sel = view.state.selection.main;
+      void insertImages(view, files, { from: sel.from, to: sel.to }, save);
+      return true;
+    },
+    drop(e, view) {
+      const files = imageFiles(e.dataTransfer);
+      if (!files.length) return false;
+      e.preventDefault();
+      const at = view.posAtCoords({ x: e.clientX, y: e.clientY }) ?? view.state.selection.main.head;
+      void insertImages(view, files, { from: at, to: at }, save);
+      return true;
+    },
+  });
 }
 
 class HrWidget extends WidgetType {
@@ -619,7 +730,7 @@ function buildDecorations(view: EditorView, opts: NoteEditorOptions): Preview {
             }
             if (info.image) {
               const src = opts.imageUrl(info);
-              if (src) object(Decoration.replace({ widget: new ImageWidget(src, info.label) }), info.from, info.to);
+              if (src) object(Decoration.replace({ widget: new ImageWidget(src, info.label, imageWidth(info.dest)) }), info.from, info.to);
               return false;
             }
             const web = info.ref.pathKind === 'web';
@@ -1029,6 +1140,7 @@ export function createNoteEditor(parent: HTMLElement, opts: NoteEditorOptions): 
       revealField,
       livePreview(opts),
       renderedTables(opts),
+      imagePasting(opts),
       hoverTooltip(
         (view, pos) => {
           const info = linkAt(view.state, pos);

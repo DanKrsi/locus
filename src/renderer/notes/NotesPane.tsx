@@ -137,6 +137,27 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
     if (announce) p.toast(`Saved ${basename(path)}`);
   };
 
+  /** Saves a pasted or dropped picture as a new file under /images/<note name>/. */
+  const saveImage = async (notePath: string, file: File): Promise<string | null> => {
+    const ext = ({ 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp', 'image/bmp': 'bmp', 'image/svg+xml': 'svg' } as Record<string, string>)[file.type] ?? 'png';
+    const now = new Date();
+    const two = (n: number) => String(n).padStart(2, '0');
+    const stamp = `${now.getFullYear()}${two(now.getMonth() + 1)}${two(now.getDate())}-${two(now.getHours())}${two(now.getMinutes())}${two(now.getSeconds())}`;
+    // A screenshot or copied picture arrives as "image.png"; a dropped file keeps its own name.
+    const given = file.name && !/^image\.\w+$/i.test(file.name) ? file.name.replace(/[<>:"/\\|?*]/g, '') : '';
+    const base = given ? stem(given) : `pasted-${stamp}`;
+    const dir = `/images/${stem(notePath)}`;
+    try {
+      let path = `${dir}/${base}.${ext}`;
+      for (let n = 2; await api.exists(path); n++) path = `${dir}/${base}-${n}.${ext}`;
+      await api.writeNewFile(path, new Uint8Array(await file.arrayBuffer()));
+      return path;
+    } catch {
+      p.toast("Couldn't save the picture");
+      return null;
+    }
+  };
+
   const openFlow = async (path: string) => {
     if (!flows.current.has(path)) {
       let text: string;
@@ -191,6 +212,7 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
         zoom: zoomRef.current,
         ...cb,
         onSave: () => void save(doc.path, true),
+        saveImage: (file) => saveImage(doc.path, file),
         onChange: () => {
           setDirty(doc.path, docText(doc.view) !== doc.savedText);
           clearTimeout(doc.timer);

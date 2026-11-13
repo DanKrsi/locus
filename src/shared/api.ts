@@ -113,6 +113,8 @@ export interface Api {
   readFile(path: string, rev?: string): Promise<Uint8Array>;
   readText(path: string, rev?: string): Promise<string>;
   writeText(path: string, text: string): Promise<void>;
+  /** Writes a new binary file (a pasted picture); refuses to replace an existing one. */
+  writeNewFile(path: string, bytes: Uint8Array): Promise<void>;
   exists(path: string, rev?: string): Promise<boolean>;
   /** Whether the file now differs from the file in a version. */
   fileChangedSince(path: string, rev: string): Promise<boolean>;
@@ -173,7 +175,7 @@ export interface Api {
 }
 
 export const API_METHODS: (keyof Api)[] = [
-  'openWorkspace', 'createWorkspace', 'listFiles', 'readFile', 'readText', 'writeText', 'exists', 'fileChangedSince', 'claudeStatus', 'connectClaude', 'restartClaudeDesktop', 'appVersion',
+  'openWorkspace', 'createWorkspace', 'listFiles', 'readFile', 'readText', 'writeText', 'writeNewFile', 'exists', 'fileChangedSince', 'claudeStatus', 'connectClaude', 'restartClaudeDesktop', 'appVersion',
   'head', 'versions', 'changesSince', 'uncommitted', 'saveVersion', 'ensureVersion', 'diffHunks',
   'getSettings', 'setSettings', 'pickExternalFiles', 'readExternal', 'openExternally', 'setTitleBarColors',
   'renameFile', 'findMoved', 'citations', 'versionChanges',

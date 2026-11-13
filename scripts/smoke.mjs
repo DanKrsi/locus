@@ -623,6 +623,50 @@ await step('notes and documents zoom independently', async () => {
   if ((await px('.editor-wrap .cm-scroller')) !== note0) throw new Error('notes text not back to normal');
 });
 
+await step('pictures: paste saves a file and shows it; drag the corner to resize', async () => {
+  await win.locator('[data-pane="notes"] .tabs > .tab', { hasText: 'review.md' }).first().click();
+  await win.locator('.editor-wrap .cm-content').first().click();
+  await win.keyboard.press('Control+End');
+  await win.keyboard.press('Enter');
+  await win.evaluate(async () => {
+    const c = document.createElement('canvas');
+    c.width = 300;
+    c.height = 120;
+    const g = c.getContext('2d');
+    g.fillStyle = '#1f5c45';
+    g.fillRect(0, 0, 300, 120);
+    const blob = await new Promise((r) => c.toBlob(r, 'image/png'));
+    const data = new DataTransfer();
+    data.items.add(new File([blob], 'image.png', { type: 'image/png' }));
+    document.activeElement.closest('.cm-content').dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+  });
+  const img = win.locator('.editor-wrap .cm-image-wrap img').last();
+  await img.waitFor({ timeout: 10000 });
+  const text = () => win.evaluate(() => document.activeElement.closest('.cm-editor') && window.api.readText('/notes/review.md'));
+  await win.waitForTimeout(1500);
+  const m = (await text()).match(/!\[\]\((\/images\/review\/pasted-[\d-]+\.png)\)/);
+  if (!m) throw new Error('no picture link in the note');
+  if (!(await win.evaluate((p) => window.api.exists(p), m[1]))) throw new Error('the picture file was not saved');
+  // Resize from the corner handle.
+  await img.scrollIntoViewIfNeeded();
+  await img.hover();
+  const h = await win.locator('.editor-wrap .cm-image-handle').last().boundingBox();
+  await win.mouse.move(h.x + h.width / 2, h.y + h.height / 2);
+  await win.mouse.down();
+  await win.mouse.move(h.x - 100, h.y + 10, { steps: 5 });
+  await win.mouse.up();
+  await win.waitForTimeout(1500);
+  const w = (await text()).match(/pasted-[\d-]+\.png#w=(\d+)\)/);
+  if (!w || Math.abs(+w[1] - 200) > 15) throw new Error(`width not recorded: ${w?.[1]}`);
+  if (Math.abs((await img.boundingBox()).width - +w[1]) > 3) throw new Error('the picture is not drawn at its width');
+  await shot('picture');
+  // Double-click the handle: back to its own size.
+  await img.hover();
+  await win.locator('.editor-wrap .cm-image-handle').last().dblclick();
+  await win.waitForTimeout(1500);
+  if (/#w=/.test(await text())) throw new Error('width not cleared');
+});
+
 await step('tab menu: rename, save a copy, move, delete', async () => {
   const noteTabs = win.locator('[data-pane="notes"] .tabs > .tab');
   const pick = async (tabText, item) => {

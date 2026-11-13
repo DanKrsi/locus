@@ -243,6 +243,11 @@ const api: Api = {
     await fs.mkdir(dirname(full), { recursive: true });
     await fs.writeFile(full, text, 'utf8');
   },
+  async writeNewFile(path, bytes) {
+    const full = abs(path);
+    await fs.mkdir(dirname(full), { recursive: true });
+    await fs.writeFile(full, bytes, { flag: 'wx' });
+  },
   async exists(path, rev) {
     return rev ? git.blobExists(ws().root, path, rev) : exists(abs(path));
   },

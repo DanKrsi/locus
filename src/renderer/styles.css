@@ -822,3 +822,14 @@ svg.ico { width: 16px; height: 16px; flex: none; }
 .locus-dialog button.danger:hover { filter: brightness(0.93); }
 .tab.dragging { opacity: 0.5; }
 .tab.drop-before { box-shadow: inset 2px 0 0 var(--accent); }
+
+/* Pictures in notes: a corner handle sets the width */
+.cm-image-wrap { position: relative; display: inline-block; max-width: 100%; vertical-align: top; }
+.cm-image.sized { max-height: none; height: auto; }
+.cm-image-handle {
+  position: absolute; right: -5px; bottom: -1px; width: 12px; height: 12px;
+  border-radius: 50%; background: var(--accent); border: 2px solid var(--panel);
+  cursor: nwse-resize; opacity: 0; transition: opacity 0.12s;
+}
+.cm-image-wrap:hover .cm-image-handle, .cm-image-wrap.resizing .cm-image-handle { opacity: 1; }
+.cm-image-wrap.resizing .cm-image { outline: 2px solid var(--accent); outline-offset: 1px; }

@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import type { FileChange, Version } from '../shared/api';
 
 export const SNAPSHOT_REF = 'refs/locus/snapshots';
-const AUTO_PREFIX = 'Automatic version';
+export const AUTO_PREFIX = 'Automatic version';
 const MAX_BUFFER = 1024 * 1024 * 1024;
 
 export class GitError extends Error {}
@@ -168,17 +168,25 @@ async function isDirty(dir: string, path: string): Promise<boolean> {
 export async function ensureVersion(dir: string, path: string, managed: boolean): Promise<string | null> {
   const current = await head(dir);
   if (current && !(await isDirty(dir, path))) return current;
-  const message = `${AUTO_PREFIX} (cited ${gp(path)})`;
+  return autoVersion(dir, [path], managed, `${AUTO_PREFIX} (cited ${gp(path)})`);
+}
+
+/** Saves an automatic version of just these files (see ensureVersion for where it goes). */
+export async function autoVersion(dir: string, paths: string[], managed: boolean, message: string): Promise<string | null> {
+  const current = await head(dir);
+  const files = paths.map(gp);
   if (managed) {
-    await git(dir, ['add', '--', gp(path)]);
-    await git(dir, ['commit', '-m', message, '--', gp(path)]);
+    await git(dir, ['add', '--', ...files]);
+    const staged = await exec(['diff', '--cached', '--quiet', '--', ...files], dir);
+    if (staged.exitCode === 0 && current) return current;
+    await git(dir, ['commit', '-m', message, '--', ...files]);
     return head(dir);
   }
   const gitDir = (await git(dir, ['rev-parse', '--absolute-git-dir'])).trim();
   const env = { GIT_INDEX_FILE: join(gitDir, 'locus-index') };
   await fs.rm(env.GIT_INDEX_FILE, { force: true });
   if (current) await git(dir, ['read-tree', 'HEAD'], env);
-  await git(dir, ['add', '--', gp(path)], env);
+  await git(dir, ['add', '--', ...files], env);
   const tree = (await git(dir, ['write-tree'], env)).trim();
   await fs.rm(env.GIT_INDEX_FILE, { force: true });
   const parents: string[] = [];

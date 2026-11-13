@@ -9,7 +9,7 @@ import {
   type Reference,
 } from '../core/link';
 import { mapLines } from '../core/remap';
-import type { Citation, Settings, SharingInfo, SyncResult, Version, WorkspaceInfo } from '../shared/api';
+import type { Citation, NoteLinkUpdate, Settings, SharingInfo, SyncResult, Version, WorkspaceInfo } from '../shared/api';
 import { ConflictDialog, GitHubOpenDialog, ShareDialog } from './ShareDialogs';
 import { HistoryDialog } from './HistoryDialog';
 import { movedPath } from '../core/rewrite';
@@ -18,6 +18,8 @@ import { DocsPane } from './docs/DocsPane';
 import { FileBrowser } from './FileBrowser';
 import { invalidateLatest, loadBytes, mimeFor } from './files';
 import { locateQuote } from './viewers/pdf';
+import { checkLink, checkLinks, pinFor, updateFor, type CheckedLink } from './linkcheck';
+import { ReviewBar, UpkeepSummary, type ReviewChoice, type SummaryChoice } from './LinkUpkeep';
 import { Icon, Logo } from './icons';
 import { newId, revealOf, type DocTab } from './model';
 import { allLinks, insertReference, setActiveLink, type LinkInfo, type RefStatus } from './notes/editor';
@@ -557,6 +559,7 @@ export function App() {
           const left = i.ref.rev ?? i.ref.at;
           if (left) openCompare(resolvePath(i.ref, notePath()), left);
         },
+        update: (i) => void updateOneLink(i, notePath()),
       }),
   });
 
@@ -748,7 +751,13 @@ export function App() {
   const openSaveVersion = async () => {
     await notes.current?.saveAll();
     const changes = await api.uncommitted().catch(() => []);
-    if (!changes.length) return showToast(term(terminology, 'nothingToSave'));
+    if (!changes.length) {
+      // Nothing new to save, but links may still be waiting from an earlier "Not now".
+      const head = await api.head().catch(() => null);
+      const links = head ? await checkLinks(head).catch(() => []) : [];
+      if (links.length) return setUpkeep(links);
+      return showToast(term(terminology, 'nothingToSave'));
+    }
     const name = `${longDate(new Date().toISOString())} · ${changes.length} file${changes.length === 1 ? '' : 's'} changed`;
     setSaveName(name);
   };
@@ -760,6 +769,118 @@ export function App() {
     await refreshVersions();
     void refreshSharing(false);
     showToast(terminology === 'git' ? `Committed ${sha.slice(0, 7)}` : 'Version saved');
+    // Live links to files this version changed: follow the ones that only moved, ask about the rest.
+    const links = await checkLinks(sha).catch(() => []);
+    if (links.length) setUpkeep(links);
+  };
+
+  // ---------- Keeping links up to date ----------
+
+  /** Links the last saved version left behind, waiting for the summary's answer. */
+  const [upkeep, setUpkeep] = useState<CheckedLink[] | null>(null);
+  /** Going through links one by one: the links, where we are, what was decided so far. */
+  const [review, setReview] = useState<{ items: CheckedLink[]; index: number; decided: NoteLinkUpdate[]; tab?: string } | null>(null);
+  const reviewRef = useRef(review);
+  reviewRef.current = review;
+
+  const afterLinkWrite = async () => {
+    invalidateLatest();
+    statusCache.current.clear();
+    await notes.current?.reloadFromDisk();
+    notes.current?.refresh();
+    void loadCitations();
+    await refreshVersions();
+    void refreshSharing(false);
+  };
+
+  const applyLinkUpdates = async (updates: NoteLinkUpdate[]) => {
+    if (!updates.length) return;
+    await notes.current?.saveAll();
+    const n = await api.updateLinks(updates, `updated ${updates.length} link${updates.length === 1 ? '' : 's'}`).catch(() => 0);
+    await afterLinkWrite();
+    if (!n) return showToast("The links couldn't be updated");
+    setNotice({
+      text: `Updated ${n} link${n === 1 ? '' : 's'}.`,
+      actions: [
+        {
+          label: 'Undo',
+          run: async () => {
+            const r = await api.undoLinkUpdate().catch(() => ({ restored: 0, skipped: 0 }));
+            await afterLinkWrite();
+            showToast(r.skipped ? `Put back ${r.restored} note${r.restored === 1 ? '' : 's'}; ${r.skipped} changed since and ${r.skipped === 1 ? 'was' : 'were'} left alone` : 'Links put back as they were');
+          },
+        },
+      ],
+    });
+  };
+
+  /** Shows one link for review: its note on the left, cited and latest versions side by side on the right. */
+  const showReviewItem = (items: CheckedLink[], index: number, decided: NoteLinkUpdate[], oldTab?: string) => {
+    if (oldTab) closeDoc(oldTab);
+    const link = items[index];
+    void notes.current?.revealLine(link.cite.note, link.cite.line);
+    const moved = link.next.path !== link.cite.path;
+    const tab: DocTab = {
+      id: newId(),
+      path: link.next.path,
+      external: false,
+      kind: fileKind(link.next.path),
+      // A file that moved has no earlier version under its new name to put beside it.
+      compare: moved ? undefined : link.ref.at,
+      reveal: revealOf(link.next.loc),
+      revealLeft: moved ? undefined : { ...revealOf(link.ref.loc), follow: true },
+    };
+    setDocTabs((ts) => [...ts, tab]);
+    setActiveDoc(tab.id);
+    setReview({ items, index, decided, tab: tab.id });
+  };
+
+  const startReview = (items: CheckedLink[], decided: NoteLinkUpdate[]) => {
+    if (!items.length) return void applyLinkUpdates(decided);
+    showReviewItem(items, 0, decided);
+  };
+
+  const onSummary = (choice: SummaryChoice) => {
+    const links = upkeep ?? [];
+    setUpkeep(null);
+    if (choice === 'later') return;
+    const pins = links.filter((l) => l.verdict === 'deleted').map((l) => pinFor(l));
+    if (choice === 'update') startReview(links.filter((l) => l.verdict === 'review'), [...links.filter((l) => l.verdict === 'follow').map((l) => updateFor(l)), ...pins]);
+    else startReview(links.filter((l) => l.verdict !== 'deleted'), pins);
+  };
+
+  const onReview = (choice: ReviewChoice) => {
+    const r = reviewRef.current;
+    if (!r) return;
+    const link = r.items[r.index];
+    const decided = [...r.decided];
+    if (choice.kind === 'update') decided.push(updateFor(link, choice.loc ? { ...link.next, loc: choice.loc } : link.next));
+    else if (choice.kind === 'keep') decided.push(pinFor(link));
+    else if (choice.kind === 'selection') {
+      const target = r.tab ? handles.current.get(r.tab)?.citeTarget() : null;
+      if (!target) return showToast('Select the new place in the document on the right first');
+      // A new place has its own quote (or none): the old one no longer applies.
+      decided.push({ ...updateFor(link, { ...link.next, loc: target.loc }), newTitle: target.quote ?? null });
+    }
+    if (choice.kind === 'stop' || r.index + 1 >= r.items.length) {
+      if (r.tab) closeDoc(r.tab);
+      setReview(null);
+      void applyLinkUpdates(decided);
+    } else showReviewItem(r.items, r.index + 1, decided, r.tab);
+  };
+
+  /** "Update link to latest" on one link's hover card. */
+  const updateOneLink = async (info: LinkInfo, notePath: string) => {
+    await notes.current?.saveAll();
+    const path = resolvePath(info.ref, notePath);
+    // The latest content may not be in a version yet: the link needs one to point at.
+    const sha = (await api.exists(path).catch(() => false)) ? await api.ensureVersion(path).catch(() => null) : await api.head().catch(() => null);
+    const cites = await api.citations().catch(() => [] as Citation[]);
+    const cite = cites.find((c) => c.note === notePath && c.dest === info.dest) ?? { note: notePath, line: 1, label: info.label, path, dest: info.dest, quote: info.title };
+    const link = sha ? await checkLink(cite, sha).catch(() => null) : null;
+    if (!link) return showToast('This link is already up to date');
+    if (link.verdict === 'review') startReview([link], []);
+    else await applyLinkUpdates([link.verdict === 'deleted' ? pinFor(link) : updateFor(link)]);
   };
 
   // ---------- Keyboard ----------
@@ -878,6 +999,17 @@ export function App() {
           <div className="spacer" />
           <button className="icon" onClick={() => setNotice(null)}><Icon name="x" /></button>
         </div>
+      )}
+
+      {upkeep && <UpkeepSummary links={upkeep} onChoose={onSummary} />}
+      {review && (
+        <ReviewBar
+          link={review.items[review.index]}
+          index={review.index}
+          count={review.items.length}
+          canSelect={!['code', 'markdown'].includes(fileKind(review.items[review.index].next.path))}
+          onChoose={onReview}
+        />
       )}
 
       {tour && (

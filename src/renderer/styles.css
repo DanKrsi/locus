@@ -843,3 +843,21 @@ svg.ico { width: 16px; height: 16px; flex: none; }
 .tree-row .count { font-size: 12px; }
 
 .choice.demo { border-color: var(--accent); background: var(--accent-soft); }
+
+/* Link upkeep: the summary after a version is saved, and the bar for reviewing links one by one */
+.upkeep-row { display: flex; align-items: baseline; gap: 8px; line-height: 1.45; }
+.upkeep-row .dot { flex: none; width: 8px; height: 8px; border-radius: 50%; transform: translateY(-1px); }
+.upkeep-row .dot.ok { background: var(--accent); }
+.upkeep-row .dot.warn { background: var(--highlight); }
+.upkeep-row .dot.gone { background: var(--faint); }
+button.outline.strong { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.review-bar {
+  display: grid; gap: 6px; padding: 8px 14px;
+  background: var(--highlight-soft); border-bottom: 1px solid var(--border);
+}
+.review-what { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.review-what .label { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.review-how { font-size: 12.5px; }
+.review-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.review-lines { display: inline-flex; align-items: center; gap: 4px; }
+.review-lines input { width: 64px; }

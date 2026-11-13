@@ -28,6 +28,8 @@ export interface HoverContext {
   follow(info: LinkInfo): void;
   /** Compares the latest file with the version a reference is pinned to or was cited from. */
   compare(info: LinkInfo): void;
+  /** Moves a live link to the latest version (asking when what it cites changed). */
+  update?(info: LinkInfo): void;
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string): HTMLElementTagNameMap[K] {
@@ -131,7 +133,7 @@ export function renderHoverCard(info: LinkInfo, view: EditorView, ctx: HoverCont
   if (rev) {
     infoEl.append(el('div', 'link-kind', `Pinned · always shows the version from ${when(rev)}`));
   } else if (at) {
-    infoEl.append(el('div', 'link-kind', `Live · shows the latest version · cited ${when(at)}`));
+    infoEl.append(el('div', 'link-kind', `Live · cited from the version of ${when(at)} · follows the file when you save a version`));
   }
   if (ctx.status.changed) infoEl.append(el('div', 'link-changed', `${ctx.status.reason ?? 'Changed since it was cited'}.`));
   if (ctx.status.state === 'broken' && !ctx.status.changed) {
@@ -158,6 +160,7 @@ export function renderHoverCard(info: LinkInfo, view: EditorView, ctx: HoverCont
     button('Compare with latest', 'outline', () => ctx.compare(info));
     if (editable) button('Make live', 'outline', () => relink({ ...info.ref, at: rev, rev: undefined }));
   } else if (at) {
+    if (ctx.status.changed && editable && ctx.update) button('Update link to latest', 'outline', () => ctx.update!(info));
     if (ctx.status.changed) button('Compare with cited version', 'outline', () => ctx.compare(info));
     if (editable) button(ctx.status.changed ? 'Pin to cited version' : 'Pin to this version', 'outline', () => relink({ ...info.ref, rev: at, at: undefined }));
   }

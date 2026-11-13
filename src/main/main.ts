@@ -11,6 +11,7 @@ import { movedPath, rewriteLinks } from '../core/rewrite';
 import { canvasLinks, isCanvas, rewriteCanvas } from '../core/canvas';
 import { claudeStatus, connectClaude, refreshClaude, removeClaude, restartClaudeDesktop } from './claude';
 import { mapLines } from '../core/remap';
+import { updateLinks } from '../core/upkeep';
 import { fileKind } from '../core/link';
 import type { Citation, GitHubAccount } from '../shared/api';
 import * as share from './share';
@@ -206,6 +207,13 @@ async function documentsFolder(name: string): Promise<string> {
   return dest;
 }
 
+/** What the last link update rewrote, so it can be undone. */
+interface LinkUndo {
+  root: string;
+  notes: { note: string; before: string; after: string }[];
+}
+let lastLinkUpdate: LinkUndo | null = null;
+
 // ---------- API ----------
 
 const api: Api = {
@@ -329,6 +337,42 @@ const api: Api = {
       links += r.count;
     }
     return { updatedNotes, links };
+  },
+  async updateLinks(changes, message) {
+    const w = ws();
+    const byNote = new Map<string, typeof changes>();
+    for (const c of changes) byNote.set(c.note, [...(byNote.get(c.note) ?? []), c]);
+    const undo: LinkUndo = { root: w.root, notes: [] };
+    let links = 0;
+    for (const [note, list] of byNote) {
+      const before = await fs.readFile(abs(note), 'utf8').catch(() => null);
+      if (before === null) continue;
+      const r = updateLinks(note, before, list);
+      if (!r.count) continue;
+      await fs.writeFile(abs(note), r.text, 'utf8');
+      undo.notes.push({ note, before, after: r.text });
+      links += r.count;
+    }
+    if (undo.notes.length) {
+      await git.autoVersion(w.root, undo.notes.map((n) => n.note), w.managed, `${git.AUTO_PREFIX} (${message})`);
+      lastLinkUpdate = undo;
+    }
+    return links;
+  },
+  async undoLinkUpdate() {
+    const w = ws();
+    const undo = lastLinkUpdate?.root === w.root ? lastLinkUpdate : null;
+    lastLinkUpdate = null;
+    if (!undo) return { restored: 0, skipped: 0 };
+    const restored: string[] = [];
+    for (const n of undo.notes) {
+      // A note edited since keeps its edits.
+      if ((await fs.readFile(abs(n.note), 'utf8').catch(() => null)) !== n.after) continue;
+      await fs.writeFile(abs(n.note), n.before, 'utf8');
+      restored.push(n.note);
+    }
+    if (restored.length) await git.autoVersion(w.root, restored, w.managed, `${git.AUTO_PREFIX} (undid a link update)`);
+    return { restored: restored.length, skipped: undo.notes.length - restored.length };
   },
   async findMoved(path, at) {
     const root = ws().root;

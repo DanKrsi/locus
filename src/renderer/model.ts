@@ -10,6 +10,8 @@ export interface DocTab {
   rev?: string;
   kind: FileKind;
   reveal?: RevealRequest;
+  /** In a comparison: where the left side goes (when it differs from the right side's place). */
+  revealLeft?: RevealRequest;
   /** When set, the tab compares this version (left; LATEST for the current file) with rev/latest (right). */
   compare?: string;
 }

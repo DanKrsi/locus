@@ -275,14 +275,14 @@ function DocView({ tab, visible, hop, ...p }: Props & { tab: DocTab; visible: bo
     const loc = place.current ?? tab.reveal?.loc;
     if (!loc) return;
     const r = { loc, nonce: Date.now(), follow: true };
-    setSides({ left: r, right: r });
+    setSides({ left: tab.revealLeft ?? r, right: tab.revealLeft && tab.reveal ? tab.reveal : r });
   }, [tab.compare, tab.rev]);
   // Following a citation while comparing: the right side shows it, the left goes to the same place.
   const lastReveal = useRef(tab.reveal?.nonce);
   useEffect(() => {
     if (!tab.reveal || tab.reveal.nonce === lastReveal.current) return;
     lastReveal.current = tab.reveal.nonce;
-    if (tab.compare) setSides({ left: { loc: tab.reveal.loc, nonce: Date.now(), follow: true }, right: tab.reveal });
+    if (tab.compare) setSides({ left: tab.revealLeft ?? { loc: tab.reveal.loc, nonce: Date.now(), follow: true }, right: tab.reveal });
   }, [tab.reveal?.nonce]);
 
   const strip = !tab.external && (

@@ -25,6 +25,16 @@ export interface FileChange {
 }
 
 /** One reference found in a workspace note. */
+/** A link to rewrite in one note or flowchart. */
+export interface NoteLinkUpdate {
+  note: string;
+  dest: string;
+  label?: string;
+  newDest: string;
+  newLabel?: string;
+  newTitle?: string | null;
+}
+
 export interface Citation {
   note: string;
   line: number;
@@ -143,6 +153,13 @@ export interface Api {
   renameFile(from: string, to: string): Promise<{ updatedNotes: string[]; links: number }>;
   /** Where a file that existed at `at` lives now, if it was moved outside the app. */
   findMoved(path: string, at: string): Promise<string | null>;
+  /**
+   * Rewrites links in notes and flowcharts (after a version is saved) and saves the result as one
+   * automatic version. Returns how many links changed.
+   */
+  updateLinks(changes: NoteLinkUpdate[], message: string): Promise<number>;
+  /** Puts back the notes the last updateLinks rewrote, except any changed since. Returns how many were restored and skipped. */
+  undoLinkUpdate(): Promise<{ restored: number; skipped: number }>;
   /** Every reference in every note of the workspace. */
   citations(): Promise<Citation[]>;
   /** What a version changed compared with the one before it. */
@@ -182,7 +199,7 @@ export const API_METHODS: (keyof Api)[] = [
   'openWorkspace', 'createWorkspace', 'listFiles', 'readFile', 'readText', 'writeText', 'writeNewFile', 'exists', 'fileChangedSince', 'claudeStatus', 'connectClaude', 'restartClaudeDesktop', 'appVersion',
   'head', 'versions', 'changesSince', 'uncommitted', 'saveVersion', 'ensureVersion', 'diffHunks',
   'getSettings', 'setSettings', 'pickExternalFiles', 'readExternal', 'openExternally', 'setTitleBarColors',
-  'renameFile', 'findMoved', 'citations', 'versionChanges',
+  'renameFile', 'findMoved', 'citations', 'versionChanges', 'updateLinks', 'undoLinkUpdate',
   'exportPackage', 'importPackage', 'openDemo', 'sharingStatus', 'sync', 'conflictSides', 'resolveConflict', 'finishSync', 'abortSync',
   'githubSignInStart', 'githubSignInWait', 'githubSignOut', 'githubShare', 'githubInvite', 'githubPeople', 'githubRepos',
   'githubAcceptInvitation', 'githubClone', 'copyText', 'showInFolder', 'trashFile',

@@ -9,52 +9,49 @@ const plural = (n: number, one: string, many = one + 's') => `${n} ${n === 1 ? o
 
 export type SummaryChoice = 'update' | 'each' | 'later';
 
-/** How many links can follow, point at deleted files, or changed; and what to do about them. */
+/**
+ * How many links can follow, point at deleted files, or changed; and what to do about them.
+ * A bar under the header rather than a dialog: the answer can wait, and the user who carried on
+ * typing after saving keeps the keyboard.
+ */
 export function UpkeepSummary({ links, onChoose }: { links: CheckedLink[]; onChoose(c: SummaryChoice): void }) {
   const follow = links.filter((l) => l.verdict === 'follow').length;
   const deleted = links.filter((l) => l.verdict === 'deleted').length;
   const review = links.filter((l) => l.verdict === 'review').length;
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onChoose('later');
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
-  // Nothing is the default button, so a stray Enter does nothing.
   return (
-    <div className="backdrop">
-      <div className="locus-dialog upkeep-summary" style={{ width: 520 }}>
-        <div className="dialog-head"><h2>Links to files that changed</h2></div>
-        <div className="dialog-body" style={{ display: 'grid', gap: 8 }}>
-          <div className="muted">Files your notes link to have changed since they were cited.</div>
-          {follow > 0 && (
-            <div className="upkeep-row">
-              <span className="dot ok" />
-              <span><b>{plural(follow, 'link')}</b> can follow by {follow === 1 ? 'itself' : 'themselves'}: what {follow === 1 ? 'it cites' : 'they cite'} is unchanged or only moved.</span>
-            </div>
-          )}
-          {review > 0 && (
-            <div className="upkeep-row">
-              <span className="dot warn" />
-              <span><b>{plural(review, 'link')}</b> {review === 1 ? 'cites' : 'cite'} something that changed and {review === 1 ? 'needs' : 'need'} a look.</span>
-            </div>
-          )}
-          {deleted > 0 && (
-            <div className="upkeep-row">
-              <span className="dot gone" />
-              <span><b>{plural(deleted, 'link')}</b> {deleted === 1 ? 'points' : 'point'} at a deleted file and will keep showing the version {deleted === 1 ? 'it was' : 'they were'} cited from.</span>
-            </div>
-          )}
-        </div>
-        <div className="dialog-foot">
-          <button className="outline" onClick={() => onChoose('later')}>Not now</button>
-          <div className="spacer" />
-          <button className="outline" onClick={() => onChoose('each')}>Go through them one by one</button>
-          {follow + deleted > 0 && (
-            <button className="outline strong" onClick={() => onChoose('update')}>
-              {review > 0 ? `Update the ${follow + deleted} and review the rest` : `Update ${follow + deleted === 1 ? 'the link' : `the ${follow + deleted} links`}`}
-            </button>
-          )}
-        </div>
+    <div className="review-bar upkeep-summary" role="region" aria-label="Links to files that changed">
+      <div className="review-what">
+        <Icon name="link" /> <b>Links to files that changed</b>
+      </div>
+      <div className="upkeep-lines">
+        {follow > 0 && (
+          <div className="upkeep-row">
+            <span className="dot ok" />
+            <span><b>{plural(follow, 'link')}</b> can follow by {follow === 1 ? 'itself' : 'themselves'}: what {follow === 1 ? 'it cites' : 'they cite'} is unchanged or only moved.</span>
+          </div>
+        )}
+        {review > 0 && (
+          <div className="upkeep-row">
+            <span className="dot warn" />
+            <span><b>{plural(review, 'link')}</b> {review === 1 ? 'cites' : 'cite'} something that changed and {review === 1 ? 'needs' : 'need'} a look.</span>
+          </div>
+        )}
+        {deleted > 0 && (
+          <div className="upkeep-row">
+            <span className="dot gone" />
+            <span><b>{plural(deleted, 'link')}</b> {deleted === 1 ? 'points' : 'point'} at a deleted file and will keep showing the version {deleted === 1 ? 'it was' : 'they were'} cited from.</span>
+          </div>
+        )}
+      </div>
+      <div className="review-actions">
+        {follow + deleted > 0 && (
+          <button className="outline strong" onClick={() => onChoose('update')}>
+            {review > 0 ? `Update the ${follow + deleted} and review the rest` : `Update ${follow + deleted === 1 ? 'the link' : `the ${follow + deleted} links`}`}
+          </button>
+        )}
+        <button className="outline" onClick={() => onChoose('each')}>Go through them one by one</button>
+        <div className="spacer" />
+        <button className="outline" onClick={() => onChoose('later')}>Not now</button>
       </div>
     </div>
   );

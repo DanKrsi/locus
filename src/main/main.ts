@@ -45,8 +45,10 @@ const DEFAULT_SETTINGS: Settings = {
   motion: 'system',
   noteZoom: 1,
   docZoom: 1,
-  editorTabLimit: 0,
-  viewerTabLimit: 0,
+  // A week of work otherwise leaves every document ever opened loaded in the background. The
+  // tab looked at longest ago is closed, and reopening it is a click; no limit is still a choice.
+  editorTabLimit: 12,
+  viewerTabLimit: 8,
 };
 
 const settingsFile = () => join(app.getPath('userData'), 'settings.json');

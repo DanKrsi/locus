@@ -225,10 +225,11 @@ to notes are left alone: a note is always read as it is now.
   by itself, Locus updates them there and then and says so in a notice with **Undo**. The summary
   only appears when something needs a person: a link that cites something that changed, or one
   whose file was deleted.
-- **The summary** says how many links can follow by themselves, how many cite something that
-  changed, and how many point at deleted files. **Update the N and review the rest**, **Go
-  through them one by one**, or **Not now**. No button is the default, so a stray Enter does
-  nothing. After **Not now**, pressing Save version again brings the summary back.
+- **The summary** is a bar under the header, not a dialog: it says how many links can follow by
+  themselves, how many cite something that changed, and how many point at deleted files, and
+  offers **Update the N and review the rest**, **Go through them one by one**, or **Not now**.
+  Nothing is taken over while it waits, so typing carries on. After **Not now**, pressing Save
+  version again brings the summary back.
 - **Reviewing a link**: a bar under the header names the link and what happened. The note opens
   at the link on the left; on the right the cited version and the latest version sit side by
   side, the latest at the proposed place (code shows as a difference view). **Update the link**
@@ -383,7 +384,8 @@ opens the same dialog any time, with each app's status and a Connect / Update / 
 - **Motion**: Match Windows (the default), Full or Reduced. Reduced moves straight to a link's
   place: no glide, no slide between versions, no pulse.
 - **Tabs:** a tab limit for the editor (notes and flowcharts) and for the viewer, each "No limit"
-  (the default) or "At most N". Opening one more tab than the limit closes the tab on that side
+  or "At most N". A new installation starts at 12 notes and 8 documents, because an open document
+  stays loaded; "No limit" is still a choice. Opening one more tab than the limit closes the tab on that side
   viewed longest ago (a note is saved first); the tab in front is never closed. Lowering the limit
   trims straight away.
 

@@ -1856,7 +1856,7 @@ function SettingsDialog({
           </section>
           <section>
             <div style={{ fontWeight: 600, marginBottom: 6 }}>Tabs</div>
-            <div className="muted" style={{ marginBottom: 8 }}>When a side is full, opening another file closes the one you looked at longest ago.</div>
+            <div className="muted" style={{ marginBottom: 8 }}>When a side is full, opening another file closes the one you looked at longest ago. Documents are kept to a few by default, because each one stays loaded while its tab is open.</div>
             <TabLimit label="Editor (notes and flowcharts)" value={settings.editorTabLimit ?? 0} onChange={(n) => onChange({ editorTabLimit: n })} />
             <TabLimit label="Viewer (documents)" value={settings.viewerTabLimit ?? 0} onChange={(n) => onChange({ viewerTabLimit: n })} />
           </section>

@@ -763,6 +763,79 @@ await step('tab menu: rename, save a copy, move, delete', async () => {
   await noteTabs.filter({ hasText: 'review.md' }).first().click();
 });
 
+await step('the citation editor moves a link without showing markdown', async () => {
+  await win.locator('[data-pane="notes"] .tabs > .tab', { hasText: 'review.md' }).first().click();
+  await win.locator('.cm-ref', { hasText: 'Table 5' }).scrollIntoViewIfNeeded();
+  await hoverLink('Table 5');
+  await win.locator('.hover-card').getByRole('button', { name: 'Edit', exact: true }).click();
+  const dlg = win.locator('.citation-editor');
+  await dlg.waitFor({ timeout: 10000 });
+  if ((await win.getByLabel('Points at').inputValue()) !== 'area') throw new Error('the editor did not open on the area');
+  await shot('citation-editor');
+  // Only files that can hold an area are offered.
+  await dlg.getByRole('button', { name: 'Change…' }).click();
+  await win.getByText('Choose a document').waitFor({ timeout: 5000 });
+  if (await win.locator('.tree-row', { hasText: 'client.py' }).count()) throw new Error('a code file was offered for an area');
+  await win.locator('.tree-row', { hasText: 'BDS-100' }).first().waitFor();
+  await win.keyboard.press('Escape');
+  await dlg.waitFor();
+  // Switch to a plain page: the area and its quote go, and the preview follows.
+  await win.getByLabel('Points at').selectOption('page');
+  await win.getByLabel('Page', { exact: true }).fill('7');
+  await win.locator('.ce-preview .pdf-thumb, .ce-preview canvas, .ce-preview img').first().waitFor({ timeout: 15000 });
+  await dlg.getByRole('button', { name: 'Save' }).click();
+  await dlg.waitFor({ state: 'detached', timeout: 5000 });
+  await win.waitForFunction(() => window.api.readText('/notes/review.md').then((t) => /\[Table 5\]\(<?[^)>]*#page=7&at=[0-9a-f]{10}>?\)/.test(t)), null, { timeout: 10000 });
+});
+
+await step('Pick in the document: draw the area on the right', async () => {
+  await win.locator('.cm-ref', { hasText: 'Table 5' }).scrollIntoViewIfNeeded();
+  await hoverLink('Table 5');
+  await win.locator('.hover-card').getByRole('button', { name: 'Edit', exact: true }).click();
+  await win.locator('.citation-editor').waitFor({ timeout: 10000 });
+  await win.getByRole('button', { name: 'Pick in the document' }).click();
+  const bar = win.locator('.pick-bar');
+  await bar.waitFor({ timeout: 10000 });
+  if (await win.locator('.citation-editor').isVisible()) throw new Error('the editor stayed in the way');
+  // The document glides to the link's place first; drawing before it settles would miss.
+  await win.waitForTimeout(1500);
+  // Draw a box with the Area tool.
+  await win.locator('.viewer:not(.hidden) .pdf-page canvas').first().waitFor({ timeout: 20000 });
+  await win.getByRole('button', { name: 'Area' }).click();
+  // Drag inside the part of the page that is on screen.
+  const view = await win.locator('.viewer:not(.hidden) .pdf-scroll').boundingBox();
+  await win.mouse.move(view.x + 120, view.y + 140);
+  await win.mouse.down();
+  await win.mouse.move(view.x + 330, view.y + 250, { steps: 8 });
+  await win.mouse.up();
+  const cite = win.locator('.viewer:not(.hidden) button.cite').first();
+  await cite.filter({ hasText: 'Cite area' }).waitFor({ timeout: 5000 });
+  await bar.getByRole('button', { name: 'Use this place' }).click();
+  const dlg = win.locator('.citation-editor');
+  await dlg.waitFor({ timeout: 5000 });
+  if ((await win.getByLabel('Points at').inputValue()) !== 'area') throw new Error('the picked area did not come back');
+  await dlg.getByRole('button', { name: 'Save' }).click();
+  await win.waitForFunction(() => window.api.readText('/notes/review.md').then((t) => /\[Table 5\]\(<?[^)>]*#page=\d+&viewrect=[\d,]+&at=[0-9a-f]{10}>?\)/.test(t)), null, { timeout: 10000 });
+});
+
+await step('Link to a section, and the shortcuts list', async () => {
+  await win.locator('.editor-wrap .cm-content').first().click();
+  await win.keyboard.press('Control+End');
+  await win.keyboard.type('\n\nSee ');
+  await win.keyboard.press('Control+Alt+KeyL');
+  await win.getByPlaceholder('Find a section by name').fill('Loads');
+  await win.locator('.tree-row', { hasText: 'Loads' }).first().waitFor({ timeout: 5000 });
+  await win.keyboard.press('Enter');
+  await win.locator('.cm-renaming').waitFor({ timeout: 5000 });
+  await win.keyboard.press('Enter');
+  await win.keyboard.press('Control+S');
+  await win.waitForFunction(() => window.api.readText('/notes/review.md').then((t) => /See \[Loads\]\(#loads\)/.test(t)), null, { timeout: 10000 });
+  await win.keyboard.press('F1');
+  await win.getByText('Keyboard shortcuts').waitFor({ timeout: 5000 });
+  await shot('shortcuts');
+  await win.keyboard.press('Escape');
+});
+
 await step('tab limits close the tab viewed longest ago', async () => {
   const docTabs = win.locator('[data-pane="docs"] .tabs > .tab');
   const noteTabs = win.locator('[data-pane="notes"] .tabs > .tab');

@@ -37,6 +37,8 @@ export interface NotesHandle {
   /** Zooms the active flowchart's view; false when the active tab isn't a flowchart. */
   zoomFlow(dir: 1 | -1 | 0): boolean;
   activePath(): string | null;
+  /** The active note as it is on screen, unsaved changes included. */
+  activeText(): string;
   open(path: string): Promise<EditorView | null>;
   newNote(): Promise<EditorView | null>;
   newFlowchart(): Promise<void>;
@@ -66,6 +68,8 @@ interface Props {
   toast(msg: string): void;
   onTour(): void;
   touring: boolean;
+  /** Opens the section-link dialog (the bookmark button, Ctrl+Alt+L). */
+  onLinkSection(): void;
   /** Zoom of the notes editor, separate from the documents'. */
   zoom: number;
   onZoom(z: number): void;
@@ -456,6 +460,7 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
       return !!h;
     },
     activePath: () => active,
+    activeText: () => (active && !isCanvas(active) ? textOnScreen(active) : ''),
     open,
     newNote,
     newFlowchart,
@@ -650,6 +655,11 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
         {tool('table', 'Table (Ctrl+T)', (v) => insertTable(v))}
         {tool('hr', 'Horizontal rule', (v) => insertBlock(v, '---'))}
         {tool('link', 'Web link (Ctrl+K)', insertLink)}
+        <div className="sep" />
+        <div className="sep" />
+        <button className="icon" title="Link to a section of a note (Ctrl+Alt+L)" onMouseDown={(e) => e.preventDefault()} onClick={p.onLinkSection}>
+          <Icon name="bookmark" />
+        </button>
         <div className="sep" />
         {tool('undo', 'Undo (Ctrl+Z)', editorUndo, false, !fmt.canUndo)}
         {tool('redo', 'Redo (Ctrl+Y)', editorRedo, false, !fmt.canRedo)}

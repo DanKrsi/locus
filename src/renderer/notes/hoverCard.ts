@@ -10,6 +10,7 @@ import {
   formatTime,
   parseA1Range,
   resolvePath,
+  type Location,
   type Reference,
 } from '../../core/link';
 import type { Terminology } from '../../shared/api';
@@ -32,6 +33,8 @@ export interface HoverContext {
   update?(info: LinkInfo): void;
   /** Draws a new box for a link to an area of a PDF page. */
   redraw?(info: LinkInfo): void;
+  /** Opens the citation editor for this link. */
+  edit?(info: LinkInfo, view: EditorView): void;
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string): HTMLElementTagNameMap[K] {
@@ -57,9 +60,8 @@ export function sourceOf(info: LinkInfo, notePath: string): FileSource {
   return { path: external ? info.ref.path : resolvePath(info.ref, notePath), external, rev: info.ref.rev };
 }
 
-async function buildPreview(info: LinkInfo, src: FileSource): Promise<HTMLElement | null> {
+export async function buildPreview(loc: Location, src: FileSource): Promise<HTMLElement | null> {
   const kind = fileKind(src.path);
-  const { loc } = info.ref;
   const data = await loadBytes(src);
   if (kind === 'pdf') return renderThumb(data, loc.page ?? 1, 150, loc.viewrect);
   if (kind === 'code' || kind === 'markdown') {
@@ -113,7 +115,7 @@ export function renderHoverCard(info: LinkInfo, view: EditorView, ctx: HoverCont
   const kind = fileKind(src.path);
   if (kind === 'pdf' || kind === 'code' || kind === 'markdown' || kind === 'sheet' || kind === 'image') {
     card.append(preview);
-    buildPreview(info, src)
+    buildPreview(info.ref.loc, src)
       .then((node) => (node ? preview.replaceChildren(node) : preview.remove()))
       .catch(() => preview.remove());
   }
@@ -171,7 +173,8 @@ export function renderHoverCard(info: LinkInfo, view: EditorView, ctx: HoverCont
   if (editable && ctx.redraw && kind === 'pdf' && info.ref.loc.viewrect && !rev) button('Redraw area', 'outline', () => ctx.redraw!(info));
   if (editable) {
     button('Rename', 'outline', () => renameLink(view, info));
-    button('Edit target', 'outline', () => revealLink(view, info));
+    if (ctx.edit) button('Edit', 'outline', () => ctx.edit!(info, view));
+    else button('Edit target', 'outline', () => revealLink(view, info));
     button('Remove link', 'danger-text', () => removeLink(view, info));
   }
   infoEl.append(actions);

@@ -192,7 +192,7 @@ function parseRect(text: string): Rect | undefined {
   return { x: n[0], y: n[1], w: n[2], h: n[3] };
 }
 
-function parseTime(text: string): number | undefined {
+export function parseTime(text: string): number | undefined {
   if (/^\d+(\.\d+)?$/.test(text)) return Number(text);
   const parts = text.split(':').map(Number);
   if (parts.length < 2 || parts.some((p) => !Number.isFinite(p))) return undefined;
@@ -367,6 +367,32 @@ export function splitLinkTarget(inner: string): { dest: string; title?: string }
 }
 
 /** GitHub-style heading slug. */
+export interface Heading {
+  text: string;
+  slug: string;
+  level: number;
+  /** 1-based line in the note. */
+  line: number;
+}
+
+/** The headings of a markdown note, in order, skipping fenced code. */
+export function headings(md: string): Heading[] {
+  const out: Heading[] = [];
+  let fence: string | null = null;
+  md.split(/\r?\n/).forEach((text, i) => {
+    const f = text.match(/^ {0,3}(```+|~~~+)/);
+    if (f) {
+      if (!fence) fence = f[1][0];
+      else if (f[1][0] === fence) fence = null;
+      return;
+    }
+    if (fence) return;
+    const m = text.match(/^ {0,3}(#{1,6})\s+(.*?)\s*#*\s*$/);
+    if (m && m[2]) out.push({ text: m[2], slug: slugify(m[2]), level: m[1].length, line: i + 1 });
+  });
+  return out;
+}
+
 export function slugify(heading: string): string {
   return heading
     .trim()

@@ -2,9 +2,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   basename,
   defaultLabel,
+  escapeLabel,
   fileKind,
   formatReference,
   resolvePath,
+  type Heading,
   type Location,
   type Reference,
 } from '../core/link';
@@ -21,9 +23,13 @@ import { locateQuote } from './viewers/pdf';
 import { checkLink, checkLinks, pinFor, updateFor, type CheckedLink } from './linkcheck';
 import { linkNoteId, withLinkNoteId } from '../core/noteid';
 import { ReviewBar, UpkeepSummary, type ReviewChoice, type SummaryChoice } from './LinkUpkeep';
+import { CitationEditor, type CitationTarget } from './CitationEditor';
+import { SectionLink, Shortcuts } from './SectionLink';
+import type { CiteTarget } from './viewers/types';
 import { Icon, Logo } from './icons';
 import { newId, revealOf, type DocTab } from './model';
-import { allLinks, insertReference, setActiveLink, type LinkInfo, type RefStatus } from './notes/editor';
+import { allLinks, insertReference, replaceLink, setActiveLink, type LinkInfo, type RefStatus } from './notes/editor';
+import type { EditorView } from '@codemirror/view';
 import { renderHoverCard } from './notes/hoverCard';
 import { NotesPane, type NotesHandle } from './notes/NotesPane';
 import { longDate, term, versionBadge } from './terms';
@@ -73,6 +79,9 @@ export function App() {
   const [activeDoc, setActiveDoc] = useState<string | null>(null);
   const [browser, setBrowser] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
+  /** The section-link dialog: the note it was opened from, and that note as it is on screen. */
+  const [sectionLink, setSectionLink] = useState<{ notePath: string; text: string } | null>(null);
   const [saveName, setSaveName] = useState<string | null>(null);
   const [toast, setToast] = useState<{ text: string; id: number } | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
@@ -569,6 +578,7 @@ export function App() {
         },
         update: (i) => void updateOneLink(i, notePath()),
         redraw: (i) => void updateOneLink(i, notePath(), true),
+        edit: (i, view) => setEditing({ info: i, notePath: notePath(), view, initial: { path: resolvePath(i.ref, notePath()), rev: i.ref.rev, loc: i.ref.loc, quote: i.title } }),
       }),
   });
 
@@ -848,6 +858,91 @@ export function App() {
     if (links.length) setUpkeep(links);
   };
 
+  const openSectionLink = () => {
+    const notePath = notes.current?.activePath();
+    if (!notePath || !notes.current?.activeView()) return showToast('Open a note on the left first');
+    setSectionLink({ notePath, text: notes.current.activeText() });
+  };
+
+  const insertSectionLink = async (path: string | null, h: Heading) => {
+    setSectionLink(null);
+    const view = notes.current?.activeView();
+    if (!view) return;
+    if (!path) {
+      // A heading of this note: a plain #heading link, which can never break.
+      insertReference(view, (l) => `[${escapeLabel(l)}](#${h.slug})`, h.text);
+      return;
+    }
+    const id = await api.ensureNoteId(path).catch(() => null);
+    const ref: Reference = { path, pathKind: 'root', loc: { heading: h.slug }, extra: id ? [`id=${id}`] : [] };
+    insertReference(view, (l) => formatReference(l, ref), h.text);
+  };
+
+  // ---------- The citation editor ----------
+
+  const [editing, setEditing] = useState<{ info: LinkInfo; notePath: string; view: EditorView; initial: CitationTarget } | null>(null);
+  /** Choosing the place in the viewer, or the document in the browser, for the editor. */
+  const [picking, setPicking] = useState(false);
+  const pickResolve = useRef<((t: CiteTarget | null) => void) | null>(null);
+  const [pickFile, setPickFile] = useState<{ accept(path: string): boolean; rev?: string } | null>(null);
+  const fileResolve = useRef<((f: { path: string; rev?: string } | null) => void) | null>(null);
+
+  const pickInDocument = (target: CitationTarget) =>
+    new Promise<CiteTarget | null>((resolve) => {
+      pickResolve.current = resolve;
+      openDoc(target.path, false, target.rev, target.loc);
+      setPicking(true);
+    });
+
+  const finishPick = (use: boolean) => {
+    if (use) {
+      const got = handles.current.get(live.current.activeDoc ?? '')?.citeTarget();
+      if (!got) return showToast('Choose the place in the document on the right first');
+      pickResolve.current?.(got);
+    } else pickResolve.current?.(null);
+    pickResolve.current = null;
+    setPicking(false);
+  };
+
+  const changeDocument = (current: CitationTarget, accept: (path: string) => boolean) =>
+    new Promise<{ path: string; rev?: string } | null>((resolve) => {
+      fileResolve.current = resolve;
+      setBrowserRev(current.rev);
+      setPickFile({ accept, rev: current.rev });
+    });
+
+  const finishPickFile = (chosen: { path: string; rev?: string } | null) => {
+    fileResolve.current?.(chosen);
+    fileResolve.current = null;
+    setPickFile(null);
+    setBrowserRev(undefined);
+  };
+
+  /** Writes the edited link back into its note. */
+  const saveCitation = async (target: CitationTarget) => {
+    const e = editing;
+    setEditing(null);
+    if (!e) return;
+    const samePath = target.path === resolvePath(e.info.ref, e.notePath);
+    let rev: string | undefined;
+    let at: string | undefined;
+    if (target.rev) rev = shortSha(target.rev);
+    else {
+      const sha = await api.ensureVersion(target.path).catch(() => null);
+      // A link that was pinned stays pinned, now to the latest version.
+      if (sha && e.info.ref.rev) rev = shortSha(sha);
+      else if (sha) at = shortSha(sha);
+    }
+    const isNote = fileKind(target.path) === 'markdown' || isCanvas(target.path);
+    const noteId = isNote && !rev ? await api.ensureNoteId(target.path).catch(() => null) : null;
+    const extra = samePath ? e.info.ref.extra.filter((x) => !x.startsWith('id=')) : [];
+    const ref: Reference = { path: target.path, pathKind: 'root', loc: target.loc, rev, at, extra: noteId ? withLinkNoteId(extra, noteId) : extra };
+    replaceLink(e.view, e.info, formatReference(e.info.label, ref, target.quote));
+    statusCache.current.clear();
+    notes.current?.refresh();
+    void refreshVersions();
+  };
+
   // ---------- Keeping links up to date ----------
 
   /** Links the last saved version left behind, waiting for the summary's answer. */
@@ -977,6 +1072,12 @@ export function App() {
       } else if (e.ctrlKey && e.shiftKey && k === 'l') {
         e.preventDefault();
         void cite();
+      } else if (e.ctrlKey && e.altKey && k === 'l') {
+        e.preventDefault();
+        openSectionLink();
+      } else if (e.key === 'F1') {
+        e.preventDefault();
+        setShowShortcuts((s) => !s);
       } else if (e.ctrlKey && !e.shiftKey && k === 'p') {
         e.preventDefault();
         openBrowser();
@@ -1066,6 +1167,7 @@ export function App() {
         >
           <Icon name={isDark ? 'sun' : 'moon'} />
         </button>
+        <button className="icon" title="Keyboard shortcuts (F1)" onClick={() => setShowShortcuts(true)}><Icon name="keyboard" /></button>
         <button className="icon" title="Settings" onClick={() => setShowSettings(true)}><Icon name="settings" /></button>
       </div>
 
@@ -1078,6 +1180,53 @@ export function App() {
           <div className="spacer" />
           <button className="icon" onClick={() => setNotice(null)}><Icon name="x" /></button>
         </div>
+      )}
+
+      {showShortcuts && <Shortcuts onClose={() => setShowShortcuts(false)} />}
+      {sectionLink && (
+        <SectionLink
+          notePath={sectionLink.notePath}
+          noteText={sectionLink.text}
+          onInsert={(path, h) => void insertSectionLink(path, h)}
+          onClose={() => setSectionLink(null)}
+        />
+      )}
+      {editing && (
+        <CitationEditor
+          initial={editing.initial}
+          hidden={picking || !!pickFile}
+          terminology={terminology}
+          onPickInDocument={pickInDocument}
+          onChangeDocument={changeDocument}
+          onSave={(t) => void saveCitation(t)}
+          onClose={() => setEditing(null)}
+        />
+      )}
+      {picking && (
+        <div className="review-bar pick-bar" role="region" aria-label="Pick a place">
+          <div className="review-what">
+            <Icon name="area" /> <b>Choose the place in the document on the right</b>
+            <span className="muted">Draw an area, select cells or lines, or go to the page, slide or time.</span>
+          </div>
+          <div className="review-actions">
+            <button className="primary" onClick={() => finishPick(true)}>Use this place</button>
+            <button className="outline" onClick={() => finishPick(false)}>Cancel</button>
+          </div>
+        </div>
+      )}
+      {pickFile && (
+        <FileBrowser
+          title="Choose a document"
+          accept={pickFile.accept}
+          terminology={terminology}
+          versions={versions}
+          rev={browserRev}
+          onRevChange={setBrowserRev}
+          onOpen={(path, rev) => finishPickFile({ path, rev })}
+          onOpenExternal={() => undefined}
+          onClose={() => finishPickFile(null)}
+          onRename={renameFile}
+        />
       )}
 
       {upkeep && <UpkeepSummary links={upkeep} onChoose={onSummary} />}
@@ -1162,6 +1311,7 @@ export function App() {
               toast={showToast}
               onTour={toggleTour}
               touring={!!tour}
+              onLinkSection={openSectionLink}
               zoom={settings.noteZoom ?? 1}
               onZoom={(z) => setZoom('noteZoom', z)}
               onSaved={() => {

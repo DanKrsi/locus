@@ -1,7 +1,7 @@
 # Master plan: catching up with Folio and going past it
 
 Drafted 13 November 2026 from the Folio 0.3.0 overview, checked against Locus 0.2.12 (spec and
-code). Status: **phases 1 and 2 built (0.3.0, 0.4.0)**; phase 3 is next.
+code). Status: **phases 1 to 3 built (0.3.0, 0.4.0, 0.5.0)**; phase 4 (export) is next.
 
 ## 1. Where Locus stands
 
@@ -92,9 +92,16 @@ slide that moved within the deck); a block of spreadsheet cells that moved elsew
 found; marks on the version strip for edited, moved and "not saved"; the review of links inside
 flowcharts uses the same bar but the flowchart doesn't flash the box.
 
-### Phase 3: edit a link without seeing markdown (M)
+### Phase 3: edit a link without seeing markdown (M) — done in 0.5.0
 
-The citation editor, replacing **Edit target**, with "Pick in the document".
+- [x] The citation editor, opened by **Edit** on a hover card: what it points at, which document
+  and version, where inside it, and a preview. **Pick in the document** steps aside so the place
+  can be chosen in the viewer.
+- [x] **Link to a section** (Ctrl+Alt+L), of this note as it is on screen or of any other note.
+- [x] The keyboard shortcuts list (F1, and a button in the header).
+
+**Edit target** (the raw markdown of one link) is still there as a fallback for links the editor
+can't describe, such as a web link.
 
 ### Phase 4: share with anyone (L)
 

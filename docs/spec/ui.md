@@ -45,7 +45,7 @@ percentage returns to 100% (Ctrl+0 stays "normal text" in notes). Both levels ar
 ## 3. Header
 
 Logo + name · workspace name (click → open another workspace) · **Open** · **Save version** ·
-sync pill and **Share** (when shared) · light/dark toggle · settings ⚙. **Open** is the only way
+sync pill and **Share** (when shared) · light/dark toggle · keyboard shortcuts (F1) · settings ⚙. **Open** is the only way
 to open files (the panes have no Open buttons of their own); Ctrl+O and Ctrl+P open it too.
 
 Where a file opens depends on its type. Notes (`.md`) and flowcharts (`.canvas`) ask first:
@@ -127,8 +127,8 @@ demo` and opens on its **Start here** note; later the same folder is reopened.
   "Pinned · always shows the version from Mar 3") · what changed, if anything · quote in italics
   · buttons **Open**, **Compare with latest** and **Make live** (pinned), **Update link to
   latest** and **Compare with cited version** (live, changed), **Pin to this version** / **Pin
-  to cited version** (live), **Redraw area** (a box on a PDF page), **Rename**, **Edit target**,
-  **Remove link**.
+  to cited version** (live), **Redraw area** (a box on a PDF page), **Rename**, **Edit** (the citation
+  editor, §4.4), **Remove link**.
 - Click → opens the document on the right at the location, highlighted, and always placed the
   same way: the cited area, lines, cells or slide centred in the view (one taller than the view
   starts at its top; a page alone shows the top of the page), as far as the document can scroll.
@@ -145,10 +145,37 @@ demo` and opens on its **Start here** note; later the same folder is reopened.
 - Inserts the reference at the cursor (see link-format §3 for the label rules) and opens an
   inline rename box over the label: label pre-selected, 2px accent border, hint
   "Enter to name · Esc keeps '<default>'". Typing replaces, Enter confirms.
-- Not yet: dragging a selection from the viewer into the note; **Link to a section** (a picker
-  of a note's headings).
+- Not yet: dragging a selection from the viewer into the note.
 
-### 4.5 Keeping links up to date
+### 4.4 The citation editor
+
+**Edit** on a hover card opens a dialog that changes a link without ever showing markdown:
+
+- **Points at**: the whole file, a page, an area on a page, lines, a slide, cells, a section or a
+  time; only what the file can hold is offered.
+- **Document**: a chip with the file name and folder, and **Change…**, which opens the file
+  browser showing only files that can hold the chosen kind of place.
+- **Version**: Latest, or any saved version of that file. Choosing an older version pins the
+  link; with Latest it keeps the kind it had (live stays live, pinned stays pinned to the newest
+  version).
+- **Place**: the page, first and last line, slide, range or section, or a time. **Pick in the
+  document** steps the dialog aside, opens the document on the right and waits: draw an area,
+  select cells or lines, or go to the page, slide or time, then **Use this place**.
+- **Lands on**: a preview of what the reader will see, the same one the hover card shows.
+- A place typed by hand drops the link's quote, because the quote described the old place; a
+  place picked in the document takes the quote from what was selected there. The label is never
+  changed by the editor (**Rename** does that).
+- **Save** writes the link back into the note; **Cancel** leaves it as it was.
+
+### 4.5 Link to a section
+
+The bookmark button on the toolbar, or **Ctrl+Alt+L**. It lists the headings of **this note as it
+is on screen** (headings typed but not saved included), or of any other note picked from the
+drop-down. Typing filters the list; ↑ ↓ move and Enter (or a click) inserts the link at the
+cursor and opens the rename box. A heading of the same note becomes a plain `#heading` link,
+which can never break; a heading of another note records that note's identity (link-format §2.5).
+
+### 4.6 Keeping links up to date
 
 The right pane shows files as they are now, so a file edited in another program shows at once. A
 live link records the version it was cited from and is brought forward each time a version is
@@ -193,12 +220,12 @@ to notes are left alone: a note is always read as it is now.
   latest version into each such link, gives linked notes an identity, and turns a link to the note
   it is written in into a plain `#heading` link. Pictures and outside files are skipped.
 
-### 4.3 Tour mode
+### 4.7 Tour mode
 
 Steps through the note's references in order with ←/→ (or PageUp/PageDown); the viewer
 follows and the current reference is highlighted in the note. Esc exits.
 
-### 4.4 Flowcharts
+### 4.8 Flowcharts
 
 The left pane also opens flowcharts: `.canvas` files in the open JSON Canvas format (the one
 Obsidian's Canvas uses), so they open in Obsidian too. Locus adds fields Obsidian ignores: box
@@ -351,7 +378,9 @@ copies. Single-file `.locus` package (git bundle) for sharing without accounts.
 | Table | Ctrl+T |
 | Nest / un-nest a list item | Tab / Shift+Tab |
 | Cite what's shown on the right | Ctrl+Shift+L |
+| Link to a section of a note | Ctrl+Alt+L |
 | Search open document | Ctrl+F |
 | Zoom the pane you're in (notes or documents) | Ctrl+= / Ctrl+− or Ctrl+mouse wheel |
 | Tour mode | Ctrl+Shift+T |
 | Save version | Ctrl+Shift+S |
+| Keyboard shortcuts | F1 |

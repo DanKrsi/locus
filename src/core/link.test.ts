@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   defaultLabel,
+  headings,
   formatReference,
   parseA1Range,
   parseDestination,
@@ -63,4 +64,16 @@ test('default labels', () => {
 
 test('web links are left alone', () => {
   assert.equal(parseDestination('https://example.com/a#b')!.pathKind, 'web');
+});
+
+test('headings are read in order, with their slugs, skipping fenced code', () => {
+  const md = ['# Title', 'text', '```', '# not a heading', '```', '## Loads & forces', '#notaheading', '### Deep ###'].join('\n');
+  assert.deepEqual(
+    headings(md).map((h) => [h.text, h.slug, h.level, h.line]),
+    [
+      ['Title', 'title', 1, 1],
+      ['Loads & forces', 'loads--forces', 2, 6],
+      ['Deep', 'deep', 3, 8],
+    ],
+  );
 });

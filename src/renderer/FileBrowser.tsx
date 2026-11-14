@@ -25,6 +25,9 @@ interface Props {
   onRename(from: string, to: string): Promise<void>;
   /** Opens the version history. */
   onHistory?(): void;
+  /** Picking a document for a link: the dialog's title, and which files can be chosen. */
+  title?: string;
+  accept?(path: string): boolean;
 }
 
 export function FileBrowser(p: Props) {
@@ -130,14 +133,15 @@ export function FileBrowser(p: Props) {
   }, []);
 
   const shown = useMemo(() => {
+    const allowed = p.accept ? files.filter((f) => p.accept!(f.path)) : files;
     const q = filter.trim().toLowerCase();
-    if (!q) return files;
-    return files.filter((f) => f.path.toLowerCase().includes(q)).sort((a, b) => {
+    if (!q) return allowed;
+    return allowed.filter((f) => f.path.toLowerCase().includes(q)).sort((a, b) => {
       const an = basename(a.path).toLowerCase().includes(q) ? 0 : 1;
       const bn = basename(b.path).toLowerCase().includes(q) ? 0 : 1;
       return an - bn || a.path.localeCompare(b.path);
     });
-  }, [files, filter]);
+  }, [files, filter, p.accept]);
 
   const folders = useMemo(() => {
     const count = new Map<string, number>();
@@ -242,8 +246,8 @@ export function FileBrowser(p: Props) {
     <div className="backdrop" onMouseDown={(e) => e.target === e.currentTarget && p.onClose()}>
       <div className="locus-dialog" onKeyDown={(e) => e.key === 'Escape' && p.onClose()}>
         <div className="dialog-head">
-          <h2>Open</h2>
-          <span className="muted" style={{ fontSize: 12.5 }}>notes and flowcharts: edit or view · anything else: viewer</span>
+          <h2>{p.title ?? 'Open'}</h2>
+          {!p.title && <span className="muted" style={{ fontSize: 12.5 }}>notes and flowcharts: edit or view · anything else: viewer</span>}
           <div className="spacer" />
           <span className="muted" style={{ fontSize: 12.5 }}>{term(p.terminology, 'showFolderAs')}</span>
           <select value={p.rev ?? ''} onChange={(e) => p.onRevChange(e.target.value || undefined)} style={{ maxWidth: 280 }}>
@@ -288,15 +292,17 @@ export function FileBrowser(p: Props) {
               <Icon name="history" /> {term(p.terminology, 'history')}
             </button>
           )}
-          <button
-            className="outline"
-            onClick={async () => {
-              const paths = await api.pickExternalFiles();
-              if (paths.length) p.onOpenExternal(paths);
-            }}
-          >
-            <Icon name="folderOpen" /> Browse this computer…
-          </button>
+          {!p.accept && (
+            <button
+              className="outline"
+              onClick={async () => {
+                const paths = await api.pickExternalFiles();
+                if (paths.length) p.onOpenExternal(paths);
+              }}
+            >
+              <Icon name="folderOpen" /> Browse this computer…
+            </button>
+          )}
           <div className="spacer" />
           <button className="outline" onClick={p.onClose}>Cancel</button>
         </div>

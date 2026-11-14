@@ -861,3 +861,20 @@ button.outline.strong { border-color: var(--accent); color: var(--accent); font-
 .review-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .review-lines { display: inline-flex; align-items: center; gap: 4px; }
 .review-lines input { width: 64px; }
+
+/* The citation editor */
+.ce-row { display: flex; align-items: center; gap: 10px; }
+.ce-label { flex: none; width: 86px; font-weight: 600; font-size: 13px; color: var(--muted); }
+.ce-chip { display: inline-flex; align-items: center; gap: 6px; min-width: 0; flex: 1; padding: 4px 10px; border: 1px solid var(--border); border-radius: 999px; background: var(--panel-2); overflow: hidden; white-space: nowrap; }
+.ce-chip b { overflow: hidden; text-overflow: ellipsis; }
+.ce-place { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; flex: 1; }
+.ce-place label { display: inline-flex; align-items: center; gap: 4px; }
+.ce-place input[type="number"] { width: 70px; }
+.ce-preview-row { align-items: flex-start; }
+.ce-preview { flex: 1; min-width: 0; max-height: 220px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; padding: 8px; background: var(--panel-2); }
+.ce-preview .preview { max-width: 100%; }
+.pick-bar { position: relative; z-index: 60; }
+
+.shortcuts { width: 100%; border-collapse: collapse; }
+.shortcuts td { padding: 4px 0; vertical-align: top; }
+.shortcuts td:last-child { text-align: right; white-space: nowrap; padding-left: 16px; }

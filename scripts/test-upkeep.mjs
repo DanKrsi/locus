@@ -171,6 +171,36 @@ await step('a link finds its note after the note is renamed outside the app', as
   await win.locator('[data-pane="notes"] .tab.active', { hasText: 'basis-renamed.md' }).waitFor({ timeout: 10000 });
 });
 
+await step('a cited file that moves is still read at the version it was cited from', async () => {
+  // Moving a file rewrites the links to its new name, but they still point at a version from
+  // before the move, where only the old name existed.
+  const head = (await api('versions'))[0].sha.slice(0, 10);
+  await api('writeText', '/notes/moved.md', `# Moved\n\nSee [the solver](/src/solver.py#L1-L2&at=${head}).\n`);
+  const r = await api('renameFile', '/src/solver.py', '/src/core/solver.py');
+  if (r.links < 1) throw new Error('the link was not rewritten to the new name');
+  const dest = (await api('readText', '/notes/moved.md')).match(/\]\(([^)]+)\)/)[1];
+  if (!dest.startsWith('/src/core/solver.py')) throw new Error(`link says ${dest}`);
+
+  const was = await api('readText', '/src/core/solver.py', head);
+  if (!was || !was.includes('def ')) throw new Error('the cited version could not be read under the new name');
+  if (!(await api('exists', '/src/core/solver.py', head))) throw new Error('the cited version is reported missing');
+  if (await api('fileChangedSince', '/src/core/solver.py', head)) throw new Error('a move alone is reported as a change');
+  if ((await api('diffHunks', '/src/core/solver.py', head)).length) throw new Error('a move alone shows as edited lines');
+});
+
+await step('a moved file opens from its link without claiming it changed', async () => {
+  await openNote('moved.md');
+  await win.locator('.editor-wrap .cm-ref', { hasText: 'the solver' }).first().click();
+  await win.locator('[data-pane="docs"] .tab.active', { hasText: 'solver.py' }).waitFor({ timeout: 10000 });
+  await win.waitForTimeout(600);
+  const notice = await win.locator('.notice', { hasText: 'cited' }).count();
+  if (notice) throw new Error('a file that only moved is reported as changed since it was cited');
+  await shot('moved-file-link');
+  // Put it back, links and all, so the steps after this one find the file where they left it.
+  await api('renameFile', '/src/core/solver.py', '/src/solver.py');
+  if (!(await api('readText', '/notes/moved.md')).includes('(/src/solver.py#L1-L2')) throw new Error('moving it back did not bring the link back');
+});
+
 await step('Record: links made by hand get a version written into them', async () => {
   await api('writeText', '/notes/byhand.md', '# By hand\n\nSee [the solver](/src/solver.py#L1-L2).\n');
   await openNote('byhand.md');

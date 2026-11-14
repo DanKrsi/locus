@@ -145,6 +145,10 @@ files is refused rather than written into.
   live link whose content changed opens the latest version with a notice saying so, with
   **Compare** and **Show the cited version**; a quoted PDF passage that moved is found on its
   new page.
+- A file that was moved or renamed is read in older versions under the name it had then: links
+  carry the name a file goes by now, so every version of it, the comparison and the check in §4.6
+  follow the rename back. A move on its own is not an edit, and is never reported as one. Where
+  the move has not been saved as a version yet, the file is matched by its contents instead.
 
 ### 4.2 Citing
 

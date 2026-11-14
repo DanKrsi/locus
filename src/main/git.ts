@@ -1,6 +1,7 @@
 // Version history through the git bundled with the app (dugite), so users never install git.
 import { exec } from './gitexec';
 import { promises as fs } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { FileChange, Version } from '../shared/api';
 
@@ -64,20 +65,94 @@ async function refExists(dir: string, ref: string): Promise<boolean> {
   return gitOk(dir, ['rev-parse', '--verify', '--quiet', ref]);
 }
 
+/**
+ * Every rename between a version and the files as they are now, newest name to the name then.
+ * Rename detection needs the whole tree, so this is asked for once per version and held for a
+ * moment: a run of links being checked all want the same answer.
+ */
+const renameCache = new Map<string, { at: number; renames: Promise<Map<string, string>> }>();
+
+function renamesSince(dir: string, rev: string): Promise<Map<string, string>> {
+  const key = `${dir}\u0000${rev}`;
+  const hit = renameCache.get(key);
+  if (hit && Date.now() - hit.at < 2000) return hit.renames;
+  const renames = git(dir, ['-c', 'core.quotepath=off', 'diff', '--name-status', '-M', '-z', rev, '--'])
+    .then((out) => new Map(parseNameStatus(out).filter((c) => c.kind === 'renamed').map((c) => [c.path, c.from!])))
+    .catch(() => new Map<string, string>());
+  if (renameCache.size > 8) renameCache.clear();
+  renameCache.set(key, { at: Date.now(), renames });
+  return renames;
+}
+
+/** Every file in a version by content, so a file moved but not yet saved can be found by its bytes. */
+const treeCache = new Map<string, Promise<Map<string, string[]>>>();
+
+function blobsIn(dir: string, rev: string): Promise<Map<string, string[]>> {
+  const key = `${dir}\u0000${rev}`;
+  const hit = treeCache.get(key);
+  if (hit) return hit;
+  const blobs = git(dir, ['-c', 'core.quotepath=off', 'ls-tree', '-r', '-z', rev])
+    .then((out) => {
+      const byBlob = new Map<string, string[]>();
+      for (const line of out.split('\0').filter(Boolean)) {
+        const m = line.match(/^\d+ blob ([0-9a-f]+)\t(.*)$/s);
+        if (m) byBlob.set(m[1], [...(byBlob.get(m[1]) ?? []), wp(m[2])]);
+      }
+      return byBlob;
+    })
+    .catch(() => new Map<string, string[]>());
+  if (treeCache.size > 8) treeCache.clear();
+  treeCache.set(key, blobs);
+  return blobs;
+}
+
+const EMPTY_BLOB = 'e69de29bb2d1d6434b8b29ae775ad8c2e48c5391';
+
+/** The name a file now at `path` went by in `rev`, when it has been renamed or moved since. */
+async function renamedFrom(dir: string, path: string, rev: string): Promise<string | null> {
+  const renamed = (await renamesSince(dir, rev)).get(path);
+  if (renamed) return renamed;
+  // Moved but not saved as a version yet: a rename git cannot see, so go by the content itself.
+  const hash = await exec(['hash-object', '--', gp(path)], dir);
+  if (hash.exitCode !== 0) return null;
+  const blob = hash.stdout.trim();
+  if (blob === EMPTY_BLOB) return null; // every empty file has these bytes: no evidence of anything
+  const same = (await blobsIn(dir, rev)).get(blob);
+  if (!same?.length) return null;
+  const name = path.slice(path.lastIndexOf('/'));
+  return same.find((p) => p.endsWith(name)) ?? same[0];
+}
+
+/**
+ * What `path` was called in `rev`: itself when it was already there under that name, the name it
+ * has since been renamed from, or null when the file was not in that version at all. A link keeps
+ * up with a file that moves, so the path it carries is the name now, not the name back then.
+ */
+export async function pathAt(dir: string, path: string, rev: string): Promise<string | null> {
+  if (await gitOk(dir, ['cat-file', '-e', `${rev}:${gp(path)}`])) return path;
+  return renamedFrom(dir, path, rev);
+}
+
 export async function readBlob(dir: string, path: string, rev: string): Promise<Buffer> {
-  const r = await exec(['cat-file', 'blob', `${rev}:${gp(path)}`], dir, { encoding: 'buffer', maxBuffer: MAX_BUFFER });
+  const read = (p: string) => exec(['cat-file', 'blob', `${rev}:${gp(p)}`], dir, { encoding: 'buffer', maxBuffer: MAX_BUFFER });
+  let r = await read(path);
+  if (r.exitCode !== 0) {
+    const was = await renamedFrom(dir, path, rev);
+    if (was) r = await read(was);
+  }
   if (r.exitCode !== 0) throw new GitError(`No such file in that version: ${path}`);
   return r.stdout;
 }
 
 export async function blobExists(dir: string, path: string, rev: string): Promise<boolean> {
-  return gitOk(dir, ['cat-file', '-e', `${rev}:${gp(path)}`]);
+  return (await pathAt(dir, path, rev)) !== null;
 }
 
 /** Whether the working file differs from the file in a version (true if either is missing). */
 export async function changedSince(dir: string, path: string, rev: string): Promise<boolean> {
+  const was = (await pathAt(dir, path, rev)) ?? path;
   const [then, now] = await Promise.all([
-    exec(['rev-parse', '--verify', '--quiet', `${rev}:${gp(path)}`], dir),
+    exec(['rev-parse', '--verify', '--quiet', `${rev}:${gp(was)}`], dir),
     exec(['hash-object', '--', gp(path)], dir),
   ]);
   if (then.exitCode !== 0 || now.exitCode !== 0) return true;
@@ -198,7 +273,9 @@ export async function autoVersion(dir: string, paths: string[], managed: boolean
 }
 
 export async function diffHunks(dir: string, path: string, from: string) {
-  const out = await git(dir, ['diff', '-U0', '--no-color', from, '--', gp(path)]);
+  // A file that moved is diffed against the name it had in that version, or every line reads as new.
+  const was = await renamedFrom(dir, path, from);
+  const out = was ? await diffMoved(dir, path, was, from) : await git(dir, ['diff', '-U0', '--no-color', from, '--', gp(path)]);
   const hunks: { oldStart: number; oldLines: number; newStart: number; newLines: number }[] = [];
   for (const m of out.matchAll(/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/gm)) {
     hunks.push({
@@ -209,6 +286,23 @@ export async function diffHunks(dir: string, path: string, from: string) {
     });
   }
   return hunks;
+}
+
+/** The diff of a file against the version it was cited from, under the name it had back then. */
+async function diffMoved(dir: string, path: string, was: string, from: string): Promise<string> {
+  if (!(await changedSince(dir, path, from))) return ''; // moved, not edited: nothing to map
+  if (await gitOk(dir, ['ls-files', '--error-unmatch', '--', gp(path)]))
+    return git(dir, ['diff', '-U0', '--no-color', '-M', from, '--', gp(was), gp(path)]);
+  // Moved but not saved as a version yet: git cannot pair the old name with a file it does not
+  // track, so the old version goes in a file of its own and the two files are compared.
+  const temp = join(await fs.mkdtemp(join(tmpdir(), 'locus-diff-')), path.slice(path.lastIndexOf('/') + 1));
+  try {
+    await fs.writeFile(temp, await readBlob(dir, was, from));
+    const r = await exec(['diff', '-U0', '--no-color', '--no-index', '--', temp, join(dir, path.slice(1))], dir, { maxBuffer: MAX_BUFFER });
+    return r.stdout;
+  } finally {
+    await fs.rm(join(temp, '..'), { recursive: true, force: true });
+  }
 }
 
 export async function resolveRev(dir: string, rev: string): Promise<string> {

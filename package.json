@@ -38,7 +38,9 @@
     "@codemirror/search": "^6.7.2",
     "@codemirror/state": "^6.7.6",
     "@codemirror/view": "^6.43.15",
+    "@lezer/common": "^1.5.4",
     "@lezer/highlight": "^1.2.5",
+    "@lezer/markdown": "^1.8.1",
     "@modelcontextprotocol/sdk": "^1.32.1",
     "@thednp/dommatrix": "^3.1.2",
     "@types/node": "^26.6.5",
@@ -70,7 +72,7 @@
   "build": {
     "appId": "io.github.dankrsi.locus",
     "productName": "Locus",
-    "copyright": "Copyright © 2026 Daniel Krsikapa",
+    "copyright": "Copyright \u00a9 2026 Daniel Krsikapa",
     "directories": {
       "output": "release",
       "buildResources": "build"

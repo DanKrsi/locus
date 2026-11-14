@@ -169,6 +169,12 @@ export interface Api {
   /** What a version changed compared with the one before it. */
   versionChanges(sha: string): Promise<FileChange[]>;
 
+  /**
+   * Exports a note as a web page or a PDF: `markdown` is what the tab shows, pictures are put
+   * inside the file and links are rewritten to open the files on this computer. Asks where to
+   * save unless `file` is given. Returns the file, or null if cancelled.
+   */
+  exportNotePage(notePath: string, markdown: string, kind: 'html' | 'pdf', file?: string): Promise<string | null>;
   /** Saves the workspace with its history as one file. Asks where when `file` is omitted. */
   exportPackage(file?: string): Promise<string | null>;
   /** Unpacks a package into a new folder and opens it. Asks for missing paths. */
@@ -204,7 +210,7 @@ export const API_METHODS: (keyof Api)[] = [
   'head', 'versions', 'changesSince', 'uncommitted', 'saveVersion', 'ensureVersion', 'diffHunks',
   'getSettings', 'setSettings', 'pickExternalFiles', 'readExternal', 'openExternally', 'setTitleBarColors',
   'renameFile', 'findMoved', 'citations', 'versionChanges', 'updateLinks', 'undoLinkUpdate', 'ensureNoteId', 'findNoteById',
-  'exportPackage', 'importPackage', 'openDemo', 'sharingStatus', 'sync', 'conflictSides', 'resolveConflict', 'finishSync', 'abortSync',
+  'exportNotePage', 'exportPackage', 'importPackage', 'openDemo', 'sharingStatus', 'sync', 'conflictSides', 'resolveConflict', 'finishSync', 'abortSync',
   'githubSignInStart', 'githubSignInWait', 'githubSignOut', 'githubShare', 'githubInvite', 'githubPeople', 'githubRepos',
   'githubAcceptInvitation', 'githubClone', 'copyText', 'showInFolder', 'trashFile',
 ];

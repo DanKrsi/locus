@@ -878,6 +878,18 @@ export function App() {
     insertReference(view, (l) => formatReference(l, ref), h.text);
   };
 
+  /** Export a note as a web page or a PDF: what is on screen, with its pictures inside it. */
+  const exportNote = async (notePath: string, text: string, kind: 'html' | 'pdf') => {
+    showToast(kind === 'pdf' ? 'Making the PDF…' : 'Making the web page…');
+    try {
+      const file = await api.exportNotePage(notePath, text, kind);
+      if (!file) return;
+      setNotice({ text: `Exported ${basename(file)}.`, actions: [{ label: 'Show in folder', run: () => void api.showInFolder(file) }] });
+    } catch (e) {
+      showToast(String((e as Error).message).replace(/^Error invoking remote method 'api': (Error: )?/, ''));
+    }
+  };
+
   // ---------- The citation editor ----------
 
   const [editing, setEditing] = useState<{ info: LinkInfo; notePath: string; view: EditorView; initial: CitationTarget } | null>(null);
@@ -1327,6 +1339,7 @@ export function App() {
                 void refreshSharing(false);
               }}
               linksTo={(path) => citations.filter((c) => c.path === path && c.note !== path).length}
+              onExport={(path, text, kind) => void exportNote(path, text, kind)}
             />
           </div>
           <div

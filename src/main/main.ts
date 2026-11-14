@@ -16,6 +16,7 @@ import { addNoteId, newNoteId, readNoteId } from '../core/noteid';
 import { fileKind } from '../core/link';
 import type { Citation, GitHubAccount } from '../shared/api';
 import * as share from './share';
+import { noteToPage } from './export';
 import * as gh from './github';
 
 const RENDERER_DIR = join(__dirname, '..', 'renderer');
@@ -216,6 +217,24 @@ interface LinkUndo {
   notes: { note: string; before: string; after: string }[];
 }
 let lastLinkUpdate: LinkUndo | null = null;
+
+/**
+ * Prints an exported note to PDF in a window of its own, with no print dialog. The page is
+ * written to a temporary file first: it carries its pictures inside it and can be large.
+ */
+async function printToPdf(html: string, file: string): Promise<void> {
+  const temp = join(app.getPath('temp'), `locus-export-${Date.now()}.html`);
+  await fs.writeFile(temp, html, 'utf8');
+  const w = new BrowserWindow({ show: false, webPreferences: { javascript: false, sandbox: true, nodeIntegration: false, contextIsolation: true } });
+  try {
+    await w.loadFile(temp);
+    const pdf = await w.webContents.printToPDF({ pageSize: 'Letter', printBackground: true, margins: { top: 0.7, bottom: 0.7, left: 0.7, right: 0.7 } });
+    await fs.writeFile(file, pdf);
+  } finally {
+    w.destroy();
+    await fs.rm(temp, { force: true });
+  }
+}
 
 // ---------- API ----------
 
@@ -428,6 +447,22 @@ const api: Api = {
         return { ...c, lines: { start: m.start, end: m.end } };
       }),
     );
+  },
+  async exportNotePage(notePath, markdown, kind, file) {
+    const w = ws();
+    const page = await noteToPage(markdown, { root: w.root, notePath }, w.name);
+    if (!file) {
+      const r = await dialog.showSaveDialog(win!, {
+        title: kind === 'pdf' ? 'Export as PDF' : 'Export as a web page',
+        defaultPath: join(app.getPath('documents'), `${page.title}.${kind}`),
+        filters: [kind === 'pdf' ? { name: 'PDF', extensions: ['pdf'] } : { name: 'Web page', extensions: ['html'] }],
+      });
+      if (r.canceled || !r.filePath) return null;
+      file = r.filePath;
+    }
+    if (kind === 'html') await fs.writeFile(file, page.html, 'utf8');
+    else await printToPdf(page.html, file);
+    return file;
   },
   async exportPackage(file) {
     const w = ws();

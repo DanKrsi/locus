@@ -705,6 +705,13 @@ export function App() {
 
   const checkMovedLinksRef = useRef(checkMovedLinks);
   checkMovedLinksRef.current = checkMovedLinks;
+  const checkUnrecordedRef = useRef(checkUnrecorded);
+  checkUnrecordedRef.current = checkUnrecorded;
+
+  // The Record banner waits its turn: another notice has something more pressing to say.
+  useEffect(() => {
+    if (!notice && ws) void checkUnrecordedRef.current();
+  }, [notice, ws]);
 
   const applyMovedFixes = () => {
     const view = notes.current?.activeView();

@@ -75,7 +75,8 @@ demo` and opens on its **Start here** note; later the same folder is reopened.
 - Note tabs (● = unsaved), middle-click closes, drag to reorder (both panes), + new note.
 - **Right-click a tab**: Save, Rename…, Move to… (new folders are created), Save as… (what is on
   screen goes into a new file and the tab moves to it; the old file keeps what was last saved),
-  Save a copy…, Copy link to this note, Show in folder, Close, Close others, Delete…. Rename and
+  Save a copy…, Copy link to this note, Export as a web page…, Export as PDF…, Export for
+  someone without Locus… (§7), Show in folder, Close, Close others, Delete…. Rename and
   Move rewrite every link to the file. Delete asks first (Cancel is the default), says how many
   links in other notes will be left pointing at nothing, warns about unsaved changes, and sends
   the file to the Recycle Bin. Document tabs on the right offer Copy path, Show in folder, Close,
@@ -356,14 +357,55 @@ opens the same dialog any time, with each app's status and a Connect / Update / 
   viewed longest ago (a note is saved first); the tab in front is never closed. Lowering the limit
   trims straight away.
 
-## 7. Sharing (later milestone)
+## 7. Export
+
+Right-click a note's tab. An export is of **what is on screen**, unsaved changes included, and
+never changes the note.
+
+### 7.1 As a web page or a PDF
+
+One file: the note formatted as it looks in the app, with its pictures inside it, and its links
+still working. A link opens the file it cites on this computer: a PDF at its page, a note at its
+heading, anything else at the file. A section link stays inside the page. The recorded version
+isn't part of the link, so what opens is the file as it is now. The PDF is printed by Locus
+itself, with no print dialog (Letter paper, 0.7 inch margins).
+
+### 7.2 For someone without Locus
+
+A folder they can open with no install and no server. The dialog first asks **what the folder
+should also carry as plain files**: *only the files this note links to* (one folder, one pile) or
+*the whole workspace* (folders kept, as a code tour needs). It then says exactly what goes in:
+how many notes, how many files, how many of those an older version, how many from outside the
+workspace, and any link whose file can't be found; and roughly how big it will be. Nothing is
+written until a folder is chosen.
+
+**What the folder holds**, named `<note> (Locus)`:
+
+- **`START HERE - <note>.html`**, the one thing to double-click.
+- **`Locus viewer/`**: the viewer (about 6 MB) and every cited file as a script the page loads.
+  A page opened from a disk cannot read its neighbours, so each file travels as a script instead.
+- **Plain copies** in their original formats: `Original files/` (one pile, with an older version
+  named like `client (version Mar 3, 2026).py`), or the workspace with its folders kept plus an
+  `Outside the workspace/` folder. Notes and flowcharts are left out of the plain copies.
+
+**What the viewer does**: the note on the left, formatted as in Locus, with the notes it links to
+in their own tabs; clicking a link opens what it cites on the right in the app's own viewers, at
+the exact place (PDF page and area, code lines, spreadsheet range, slide, picture, a time in a
+recording). Tabs carry a date badge for a cited older version. Nothing can be edited, cited or
+compared, and there is no version strip. A file the viewer can't draw (a flowchart, a Word
+document) offers **Save a copy**. A link whose file was left out says so instead of opening.
+
+**Limits**: at most 400 notes and 1.5 GB per export. Only the versions links cite are included,
+not the whole history. The viewer is tested in Chrome and Edge.
+
+## 8. Sharing (later milestone)
 
 Share → sign in with GitHub (device code) → private repo created → invite by username/email →
 copy open link. Sync pill: Synced / Changes to share / Updates available. Conflicts on notes
 are shown side by side (Keep mine / Keep theirs / Keep both); binary conflicts keep both
 copies. Single-file `.locus` package (git bundle) for sharing without accounts.
 
-## 8. Keyboard shortcuts
+## 9. Keyboard shortcuts
 
 | Action | Keys |
 |---|---|

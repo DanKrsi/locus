@@ -1,7 +1,7 @@
 # Master plan: catching up with Folio and going past it
 
 Drafted 13 November 2026 from the Folio 0.3.0 overview, checked against Locus 0.2.12 (spec and
-code). Status: **phases 1 to 3 built (0.3.0, 0.4.0, 0.5.0)**; phase 4 (export) is next.
+code). Status: **phases 1 to 4 built (0.3.0 to 0.6.0)**; phase 5 is a list to pick from.
 
 ## 1. Where Locus stands
 
@@ -103,11 +103,16 @@ flowcharts uses the same bar but the flowchart doesn't flash the box.
 **Edit target** (the raw markdown of one link) is still there as a fallback for links the editor
 can't describe, such as a web link.
 
-### Phase 4: share with anyone (L)
+### Phase 4: share with anyone (L) — done in 0.6.0
 
-1. Export a note as PDF and as a web page.
-2. Export a folder for someone without Locus, with the browser viewer. The largest single piece
-   in this plan.
+- [x] Export a note as a web page or a PDF: the note as it looks, pictures inside the file, links
+  that open the cited documents on this computer.
+- [x] Export a folder for someone without Locus: the note, the files it cites and a viewer built
+  from the app's own viewers, running from a disk with no install and no server.
+
+Not done, and not in Folio either: hover cards in the viewer; flowcharts in the viewer (they are
+carried as plain copies, as Folio does). The viewer always carries the files the note links to;
+the choice in the dialog is only about the plain copies beside them.
 
 ### Phase 5: past Folio (pick and order as wanted)
 

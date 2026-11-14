@@ -8,7 +8,8 @@ import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 
 const repo = resolve(import.meta.dirname, '..');
-const exe = join(repo, 'release', 'win-unpacked', 'Locus.exe');
+const buildDir = process.env.LOCUS_BUILD ?? 'release';
+const exe = join(repo, buildDir, 'win-unpacked', 'Locus.exe');
 const workspace = resolve(repo, '..', 'locus-test-workspace');
 const out = join(repo, 'test-output', 'packaged');
 await rm(out, { recursive: true, force: true });
@@ -61,6 +62,15 @@ await step('share as a file', async () => {
   await callApi('exportPackage', file);
   if (!existsSync(file)) throw new Error('package not written');
 });
+await step('the viewer ships inside the app, so exports work from an installed copy', async () => {
+  const dest = join(out, 'export');
+  const md = await callApi('readText', '/notes/review.md');
+  const done = await callApi('writeExport', '/notes/review.md', md, 'linked', dest);
+  const viewer = join(dest, 'Locus viewer', 'viewer.js');
+  if (!existsSync(viewer)) throw new Error('the viewer was not copied');
+  if (done.failed.length) throw new Error(`could not copy: ${done.failed.join(', ')}`);
+});
+
 await step('the demo workspace ships inside the app and opens', async () => {
   const info = await callApi('openDemo', join(out, 'demo'));
   if (!existsSync(join(info.root, 'notes', 'Start here.md'))) throw new Error('the demo note is missing');
@@ -71,7 +81,7 @@ await win.screenshot({ path: join(out, 'packaged.png') });
 await app.close();
 
 // The Claude Code setup runs the bundled MCP server on Locus itself, with only the bundled git.
-const unpacked = join(repo, 'release', 'win-unpacked', 'resources');
+const unpacked = join(repo, buildDir, 'win-unpacked', 'resources');
 await step('Claude files are packaged', async () => {
   for (const p of ['app.asar.unpacked/plugin/server/server.mjs', 'app.asar.unpacked/plugin/skills/locus/SKILL.md'])
     if (!existsSync(join(unpacked, p))) throw new Error(`missing ${p}`);

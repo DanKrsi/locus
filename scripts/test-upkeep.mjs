@@ -33,6 +33,8 @@ const step = async (name, fn) => {
     await shot(`fail-${name.replace(/\W+/g, '-')}`).catch(() => undefined);
   }
 };
+win.on('pageerror', (e) => console.log('     PAGE ERROR:', String(e).split('\n')[0]));
+win.on('console', (m) => m.type() === 'error' && console.log('     CONSOLE:', m.text().slice(0, 200)));
 const api = (m, ...a) => win.evaluate(([m, a]) => window.api[m](...a), [m, a]);
 const note = () => api('readText', '/notes/review.md');
 const link = (text, label) => text.match(new RegExp(`\\[${label.replace(/[()]/g, '\\$&')}\\]\\(([^) ]+)`))?.[1];
@@ -129,6 +131,9 @@ await step('a pinned link is not asked about again; the other still is', async (
 });
 
 const openNote = async (name) => {
+  // A notice in the way would cover the Open dialog.
+  await win.locator('.notice .icon').click({ timeout: 2000 }).catch(() => undefined);
+  await win.locator('.notice').waitFor({ state: 'detached', timeout: 5000 }).catch(() => undefined);
   await win.keyboard.press('Control+O');
   await win.getByPlaceholder('Find a file by name').fill(name);
   await win.locator('.tree-row', { hasText: name }).first().waitFor();
@@ -168,7 +173,6 @@ await step('a link finds its note after the note is renamed outside the app', as
 
 await step('Record: links made by hand get a version written into them', async () => {
   await api('writeText', '/notes/byhand.md', '# By hand\n\nSee [the solver](/src/solver.py#L1-L2).\n');
-  await win.locator('.notice .icon').click().catch(() => undefined);
   await openNote('byhand.md');
   const notice = win.locator('.notice', { hasText: "doesn't record a version" });
   await notice.waitFor({ timeout: 10000 });

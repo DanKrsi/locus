@@ -12,6 +12,7 @@ npm run smoke             # drive the app against it and save screenshots to tes
 npm run test:sharing      # package, sync and conflicts against a local stand-in for GitHub
 npm run test:mcp          # call every MCP tool against the test workspace
 npm run build:plugin      # rebuild plugin/server/server.mjs (commit it)
+npm run build:viewer      # the viewer that ships inside an exported folder
 npm run build:extension   # pack release/locus.mcpb for Claude Desktop
 npm run dist              # build the Windows installer into release/
 npm run test:isolated     # test the shipped plugin and extension outside the repo

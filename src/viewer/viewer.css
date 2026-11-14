@@ -1,0 +1,33 @@
+/* The viewer is the app's panes with everything that edits taken out. */
+.viewer-app .cite-split,
+.viewer-app .toolbar .icon[title^='Highlight an area'] {
+  display: none;
+}
+.viewer-app .note-page {
+  flex: 1;
+  overflow: auto;
+  background: var(--panel);
+}
+.viewer-app .note-page .note {
+  color: var(--text);
+}
+/* The note's stylesheet styles a whole page; here it shares the window with the viewers. */
+.viewer-app .note-page body,
+.viewer-app .note-page .export-head {
+  all: unset;
+}
+.viewer-app .note-page .note {
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 24px 28px 64px;
+}
+.viewer-app .note-page a[data-path] {
+  cursor: pointer;
+}
+.viewer-app .note-page a[data-missing] {
+  color: var(--danger);
+  text-decoration: underline wavy;
+}
+.viewer-app .header .ws-name {
+  font-weight: 600;
+}

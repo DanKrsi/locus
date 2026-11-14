@@ -10,7 +10,7 @@
   "scripts": {
     "build:main": "node scripts/build-main.mjs",
     "build:renderer": "vite build",
-    "build": "npm run build:main && npm run build:renderer",
+    "build": "npm run build:main && npm run build:renderer && npm run build:viewer",
     "start": "npm run build && electron .",
     "typecheck": "tsc --noEmit",
     "test": "node --test src/core/*.test.ts src/renderer/notes/*.test.ts",
@@ -24,7 +24,8 @@
     "test:sharing": "npm run build && node scripts/make-test-workspace.mjs && node scripts/test-sharing.mjs",
     "dist": "npm run build && npm run build:plugin && electron-builder --win nsis",
     "sample": "npm run build && npm run build:mcp && node scripts/make-sample.mjs",
-    "test:claude": "npm run build && npm run build:plugin && node scripts/test-claude-setup.mjs"
+    "test:claude": "npm run build && npm run build:plugin && node scripts/test-claude-setup.mjs",
+    "build:viewer": "vite build --config vite.viewer.config.ts"
   },
   "dependencies": {
     "dugite": "^3.3.0"

@@ -878,3 +878,8 @@ button.outline.strong { border-color: var(--accent); color: var(--accent); font-
 .shortcuts { width: 100%; border-collapse: collapse; }
 .shortcuts td { padding: 4px 0; vertical-align: top; }
 .shortcuts td:last-child { text-align: right; white-space: nowrap; padding-left: 16px; }
+
+/* Export for someone without Locus */
+.export-summary { border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); padding: 10px 12px; }
+.export-summary ul { margin: 0; padding-left: 18px; display: grid; gap: 3px; }
+.export-summary li.warn { color: var(--danger); list-style: none; margin-left: -18px; display: flex; align-items: center; gap: 6px; }

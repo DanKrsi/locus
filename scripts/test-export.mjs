@@ -1,8 +1,8 @@
 // Exports from the real app and checks what comes out: a web page and a PDF of a note, and the
 // folder for someone without Locus.
 // Usage: npm run build && node scripts/make-test-workspace.mjs && node scripts/test-export.mjs
-import { _electron as electron } from 'playwright';
-import { readFile, mkdir, rm, writeFile } from 'node:fs/promises';
+import { _electron as electron, chromium } from 'playwright';
+import { readFile, readdir, mkdir, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
 const repo = resolve(import.meta.dirname, '..');
@@ -89,6 +89,98 @@ await step('a note exports as a PDF', async () => {
   if (bytes.length < 20000) throw new Error(`suspiciously small: ${bytes.length} bytes`);
 });
 
+await step('the folder for someone without Locus is written', async () => {
+  const md = await api('readText', '/notes/review.md');
+  const summary = await api('planExport', '/notes/review.md', md, 'linked');
+  if (summary.notes < 2) throw new Error(`expected the linked note too: ${JSON.stringify(summary)}`);
+  if (summary.files < 3) throw new Error(`expected the cited files: ${JSON.stringify(summary)}`);
+  if (!summary.versions) throw new Error('expected a link to an older version');
+  const dest = join(out, 'folder');
+  const done = await api('writeExport', '/notes/review.md', md, 'linked', dest);
+  if (done.failed.length) throw new Error(`could not copy: ${done.failed.join(', ')}`);
+  const names = await readdir(dest);
+  if (!names.some((n) => n.startsWith('START HERE - review'))) throw new Error(`no start page: ${names.join(', ')}`);
+  if (!names.includes('Locus viewer') || !names.includes('Original files')) throw new Error(names.join(', '));
+  const copies = await readdir(join(dest, 'Original files'));
+  if (!copies.some((n) => /^Bracket loads \(version .+\)\.xlsx$/.test(n))) throw new Error(`no version copy: ${copies.join(', ')}`);
+  if (copies.some((n) => /\.(md|canvas)$/.test(n))) throw new Error('notes should not be in the plain copies');
+});
+
+await step('the dialog says what goes in before writing anything', async () => {
+  await win.keyboard.press('Control+O');
+  await win.getByPlaceholder('Find a file by name').fill('review');
+  await win.locator('.tree-row', { hasText: 'review.md' }).first().waitFor();
+  await win.keyboard.press('Enter');
+  await win.locator('.open-choice').waitFor({ timeout: 5000 });
+  await win.keyboard.press('e');
+  await win.locator('[data-pane="notes"] .tab.active', { hasText: 'review.md' }).waitFor({ timeout: 10000 });
+  await win.locator('[data-pane="notes"] .tabs > .tab', { hasText: 'review.md' }).first().click({ button: 'right' });
+  await win.locator('.context-menu').getByRole('menuitem', { name: 'Export for someone without Locus…' }).click();
+  const dlg = win.locator('.export-dialog');
+  await dlg.waitFor({ timeout: 5000 });
+  await dlg.locator('.export-summary li').first().waitFor({ timeout: 15000 });
+  const text = await dlg.locator('.export-summary').innerText();
+  if (!/notes/.test(text) || !/files the note cites/.test(text)) throw new Error(`summary: ${text}`);
+  if (!/older version/.test(text)) throw new Error(`no older version mentioned: ${text}`);
+  if (!/can't be found/.test(text)) throw new Error(`the broken link was not reported: ${text}`);
+  await win.screenshot({ path: join(out, 'export-dialog.png') });
+  // The other choice is worked out afresh.
+  const linked = text.match(/About \d+ [KMG]B/)?.[0];
+  await dlg.getByText('The whole workspace').click();
+  await win.waitForTimeout(1500);
+  const whole = (await dlg.locator('.export-summary').innerText()).match(/About \d+ [KMG]B/)?.[0];
+  if (!linked || !whole) throw new Error(`sizes: ${linked} then ${whole}`);
+  await dlg.getByRole('button', { name: 'Cancel' }).click();
+  await dlg.waitFor({ state: 'detached' });
+});
+
 await app.close();
+
+// The folder is opened the way the recipient opens it: a page on a disk, in a plain browser.
+const CHROME = process.env.LOCUS_CHROME ?? 'C:/Users/danie/AppData/Local/ms-playwright/chromium-1208/chrome-win64/chrome.exe';
+const browser = await chromium.launch({ executablePath: CHROME });
+const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+const problems = [];
+page.on('pageerror', (e) => problems.push(String(e)));
+page.on('console', (m) => m.type() === 'error' && problems.push(m.text()));
+const start = (await readdir(join(out, 'folder'))).find((n) => n.startsWith('START HERE'));
+await page.goto('file:///' + join(out, 'folder', start).replace(/\\/g, '/'));
+
+await step('the viewer opens the note with no server and no install', async () => {
+  await page.locator('.note h1', { hasText: 'Retry handling review' }).waitFor({ timeout: 20000 });
+  if (!(await page.locator('.note a[data-path]').count())) throw new Error('the links lost what they point at');
+  await page.screenshot({ path: join(out, 'viewer-opened.png') });
+});
+
+await step('a link opens the PDF at the cited page', async () => {
+  await page.locator('.note a', { hasText: 'BDS-100 p5' }).click();
+  await page.locator('[data-pane="docs"] .pdf-page canvas').first().waitFor({ timeout: 30000 });
+  await page.waitForTimeout(1500);
+  const shown = await page.locator('[data-pane="docs"] .toolbar input').first().inputValue();
+  if (shown !== '5') throw new Error(`the PDF opened at page ${shown}`);
+  await page.screenshot({ path: join(out, 'viewer-pdf.png') });
+});
+
+await step('a code link opens the lines, and an older version is marked', async () => {
+  await page.locator('.note a', { hasText: 'a fixed sleep' }).click();
+  await page.locator('[data-pane="docs"] .cm-cited-line').first().waitFor({ timeout: 20000 });
+  const tab = page.locator('[data-pane="docs"] .tab.active');
+  if (!(await tab.locator('.badge').count())) throw new Error('no version badge on a pinned link');
+  await page.screenshot({ path: join(out, 'viewer-code.png') });
+});
+
+await step('a spreadsheet link opens the cells', async () => {
+  await page.locator('.note a', { hasText: 'Bracket loads Margins' }).click();
+  await page.locator('[data-pane="docs"] .cell.cited, [data-pane="docs"] .cited-box').first().waitFor({ timeout: 20000 });
+  await page.screenshot({ path: join(out, 'viewer-sheet.png') });
+});
+
+await step('nothing in the viewer failed', async () => {
+  // The worker warning PDF.js prints when it falls back is not a failure.
+  const real = problems.filter((p) => !/Warning|deprecat/i.test(p));
+  if (real.length) throw new Error(real.slice(0, 3).join(' | '));
+});
+
+await browser.close();
 console.log(failures ? `\n${failures} failure(s)` : '\nall passed');
 process.exit(failures ? 1 : 0);

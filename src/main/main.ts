@@ -17,6 +17,7 @@ import { fileKind } from '../core/link';
 import type { Citation, GitHubAccount } from '../shared/api';
 import * as share from './share';
 import { noteToPage } from './export';
+import { planExport, writeExport, LIMITS } from './exportFolder';
 import * as gh from './github';
 
 const RENDERER_DIR = join(__dirname, '..', 'renderer');
@@ -234,6 +235,11 @@ async function printToPdf(html: string, file: string): Promise<void> {
     w.destroy();
     await fs.rm(temp, { force: true });
   }
+}
+
+/** The viewer that ships inside Locus and is copied into every export. */
+async function viewerBundle(): Promise<string> {
+  return fs.readFile(join(app.getAppPath(), 'dist', 'viewer', 'viewer.js'), 'utf8');
 }
 
 // ---------- API ----------
@@ -463,6 +469,38 @@ const api: Api = {
     if (kind === 'html') await fs.writeFile(file, page.html, 'utf8');
     else await printToPdf(page.html, file);
     return file;
+  },
+  async planExport(notePath, markdown, scope) {
+    const w = ws();
+    const plan = await planExport({ root: w.root, notePath, markdown, scope });
+    return {
+      notes: plan.notes.length,
+      files: plan.files.filter((f) => !f.missing).length,
+      versions: plan.files.filter((f) => f.rev && !f.missing).length,
+      outside: plan.files.filter((f) => f.outside && !f.missing).length,
+      missing: plan.files.filter((f) => f.missing).length,
+      bytes: plan.bytes,
+      tooBig: plan.tooBig,
+    };
+  },
+  async writeExport(notePath, markdown, scope, dest) {
+    const w = ws();
+    const name = `${basename(notePath).replace(/\.md$/i, '')} (Locus)`;
+    if (!dest) {
+      const r = await dialog.showOpenDialog(win!, {
+        title: 'Where should the folder go?',
+        properties: ['openDirectory', 'createDirectory'],
+        buttonLabel: 'Export here',
+        defaultPath: app.getPath('documents'),
+      });
+      if (r.canceled || !r.filePaths[0]) return null;
+      dest = join(r.filePaths[0], name);
+      for (let i = 2; await exists(dest); i++) dest = join(r.filePaths[0], `${name} (${i})`);
+    }
+    const ctx = { root: w.root, notePath, markdown, scope };
+    const plan = await planExport(ctx);
+    if (plan.tooBig) throw new Error(`That would come to ${Math.round(plan.bytes / 1e6)} MB; the limit is ${Math.round(LIMITS.bytes / 1e6)} MB.`);
+    return writeExport(ctx, plan, dest, await viewerBundle(), w.name);
   },
   async exportPackage(file) {
     const w = ws();

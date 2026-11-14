@@ -82,7 +82,7 @@ interface Props {
   /** How many links in other notes point at this file. */
   linksTo(path: string): number;
   /** Exports a note as a web page or a PDF; `text` is what the tab shows now. */
-  onExport(path: string, text: string, kind: 'html' | 'pdf'): void;
+  onExport(path: string, text: string, kind: 'html' | 'pdf' | 'folder'): void;
 }
 
 /** An open flowchart (.canvas file); its editor reports changes as file text. */
@@ -376,6 +376,7 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
       'sep',
       { label: 'Export as a web page…', disabled: isCanvas(path), run: () => p.onExport(path, textOnScreen(path), 'html') },
       { label: 'Export as PDF…', disabled: isCanvas(path), run: () => p.onExport(path, textOnScreen(path), 'pdf') },
+      { label: 'Export for someone without Locus…', disabled: isCanvas(path), run: () => p.onExport(path, textOnScreen(path), 'folder') },
       'sep',
       { label: 'Show in folder', run: () => void save(path).then(() => api.showInFolder(path)) },
       'sep',

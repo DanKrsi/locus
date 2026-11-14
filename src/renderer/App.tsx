@@ -25,6 +25,7 @@ import { linkNoteId, withLinkNoteId } from '../core/noteid';
 import { ReviewBar, UpkeepSummary, type ReviewChoice, type SummaryChoice } from './LinkUpkeep';
 import { CitationEditor, type CitationTarget } from './CitationEditor';
 import { SectionLink, Shortcuts } from './SectionLink';
+import { ExportDialog } from './ExportDialog';
 import type { CiteTarget } from './viewers/types';
 import { Icon, Logo } from './icons';
 import { newId, revealOf, type DocTab } from './model';
@@ -878,8 +879,30 @@ export function App() {
     insertReference(view, (l) => formatReference(l, ref), h.text);
   };
 
+  /** The note being exported for someone without Locus, with what its tab shows. */
+  const [exporting, setExporting] = useState<{ notePath: string; markdown: string } | null>(null);
+
+  const exportFolder = async (scope: 'linked' | 'workspace') => {
+    const e = exporting;
+    setExporting(null);
+    if (!e) return;
+    showToast('Putting the folder together…');
+    try {
+      const done = await api.writeExport(e.notePath, e.markdown, scope);
+      if (!done) return;
+      const failed = done.failed.length ? ` ${done.failed.length} file${done.failed.length === 1 ? '' : 's'} could not be copied.` : '';
+      setNotice({
+        text: `Exported ${basename(done.folder)}: ${done.notes} note${done.notes === 1 ? '' : 's'} and ${done.files} file${done.files === 1 ? '' : 's'}.${failed}`,
+        actions: [{ label: 'Show in folder', run: () => void api.showInFolder(done.folder) }],
+      });
+    } catch (err) {
+      showToast(String((err as Error).message).replace(/^Error invoking remote method 'api': (Error: )?/, ''));
+    }
+  };
+
   /** Export a note as a web page or a PDF: what is on screen, with its pictures inside it. */
-  const exportNote = async (notePath: string, text: string, kind: 'html' | 'pdf') => {
+  const exportNote = async (notePath: string, text: string, kind: 'html' | 'pdf' | 'folder') => {
+    if (kind === 'folder') return setExporting({ notePath, markdown: text });
     showToast(kind === 'pdf' ? 'Making the PDF…' : 'Making the web page…');
     try {
       const file = await api.exportNotePage(notePath, text, kind);
@@ -1195,6 +1218,14 @@ export function App() {
       )}
 
       {showShortcuts && <Shortcuts onClose={() => setShowShortcuts(false)} />}
+      {exporting && (
+        <ExportDialog
+          notePath={exporting.notePath}
+          markdown={exporting.markdown}
+          onExport={(scope) => void exportFolder(scope)}
+          onClose={() => setExporting(null)}
+        />
+      )}
       {sectionLink && (
         <SectionLink
           notePath={sectionLink.notePath}

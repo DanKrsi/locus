@@ -35,6 +35,26 @@ export interface NoteLinkUpdate {
   newTitle?: string | null;
 }
 
+/** What an export would carry, to show before it is written. */
+export interface ExportSummary {
+  notes: number;
+  files: number;
+  /** Files a link cites at an older version. */
+  versions: number;
+  outside: number;
+  /** Links whose file could not be found. */
+  missing: number;
+  bytes: number;
+  tooBig: boolean;
+}
+
+export interface ExportDone {
+  folder: string;
+  files: number;
+  notes: number;
+  failed: string[];
+}
+
 export interface Citation {
   note: string;
   line: number;
@@ -175,6 +195,10 @@ export interface Api {
    * save unless `file` is given. Returns the file, or null if cancelled.
    */
   exportNotePage(notePath: string, markdown: string, kind: 'html' | 'pdf', file?: string): Promise<string | null>;
+  /** What an export for someone without Locus would hold. */
+  planExport(notePath: string, markdown: string, scope: 'linked' | 'workspace'): Promise<ExportSummary>;
+  /** Writes that export into a new folder, asking where unless `dest` is given. */
+  writeExport(notePath: string, markdown: string, scope: 'linked' | 'workspace', dest?: string): Promise<ExportDone | null>;
   /** Saves the workspace with its history as one file. Asks where when `file` is omitted. */
   exportPackage(file?: string): Promise<string | null>;
   /** Unpacks a package into a new folder and opens it. Asks for missing paths. */
@@ -210,7 +234,7 @@ export const API_METHODS: (keyof Api)[] = [
   'head', 'versions', 'changesSince', 'uncommitted', 'saveVersion', 'ensureVersion', 'diffHunks',
   'getSettings', 'setSettings', 'pickExternalFiles', 'readExternal', 'openExternally', 'setTitleBarColors',
   'renameFile', 'findMoved', 'citations', 'versionChanges', 'updateLinks', 'undoLinkUpdate', 'ensureNoteId', 'findNoteById',
-  'exportNotePage', 'exportPackage', 'importPackage', 'openDemo', 'sharingStatus', 'sync', 'conflictSides', 'resolveConflict', 'finishSync', 'abortSync',
+  'exportNotePage', 'planExport', 'writeExport', 'exportPackage', 'importPackage', 'openDemo', 'sharingStatus', 'sync', 'conflictSides', 'resolveConflict', 'finishSync', 'abortSync',
   'githubSignInStart', 'githubSignInWait', 'githubSignOut', 'githubShare', 'githubInvite', 'githubPeople', 'githubRepos',
   'githubAcceptInvitation', 'githubClone', 'copyText', 'showInFolder', 'trashFile',
 ];

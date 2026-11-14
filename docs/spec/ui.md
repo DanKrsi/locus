@@ -133,6 +133,9 @@ files is refused rather than written into.
 - Broken references: red wavy underline with the reason; `moved` ones offer **Fix links**. A
   link to a note that was renamed or moved outside the app is not broken: it finds the note by
   its identity, and **Fix links** writes the new path.
+- Renaming or moving a file from the file browser updates the links to it and saves that move as
+  an automatic version of its own, so the file can still be read under its old name in every
+  version that had it, however much it is rewritten afterwards.
 - A link whose file has left the workspace while the version it cites can still be read is not
   broken either: it opens that version, and is drawn in grey with a dotted underline that says
   so when hovered. Red is kept for a link with nothing behind it at all.

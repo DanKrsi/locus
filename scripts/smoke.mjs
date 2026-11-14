@@ -269,6 +269,13 @@ await step('editing keeps the formatted view: link labels edit as text', async (
 await step('live or pinned: choose when citing, switch from the hover card', async () => {
   const viewer = win.locator('.viewer:not(.hidden)');
   const lineOf = async () => (await reviewText()).split('\n').find((l) => l.includes('Pinned citation:')) ?? '';
+  const lineBecomes = async (re, what) => {
+    for (let i = 0; i < 40; i++) {
+      if (re.test(await lineOf())) return;
+      await win.waitForTimeout(250);
+    }
+    throw new Error(`${what}: ${await lineOf()}`);
+  };
   // Pick "Pinned" in the Cite button's menu, then cite.
   await viewer.locator('.cite-more').first().click();
   await win.locator('.cite-mode-menu .menu-item', { hasText: 'Pinned' }).click();
@@ -281,7 +288,7 @@ await step('live or pinned: choose when citing, switch from the hover card', asy
   await win.keyboard.type('Pinned p5');
   await win.keyboard.press('Enter');
   await win.keyboard.press('Control+S');
-  if (!/&rev=[0-9a-f]{10}/.test(await lineOf())) throw new Error('not pinned: ' + (await lineOf()));
+  await lineBecomes(/&rev=[0-9a-f]{10}/, 'not pinned');
   // Back to Live for the rest of the run.
   await viewer.locator('.cite-more').first().click();
   await win.locator('.cite-mode-menu .menu-item', { hasText: 'Live' }).click();
@@ -293,14 +300,15 @@ await step('live or pinned: choose when citing, switch from the hover card', asy
   await win.mouse.move(5, 500);
   await win.locator('.editor-wrap .cm-content').first().focus();
   await win.keyboard.press('Control+S');
-  if (!/&at=[0-9a-f]{10}/.test(await lineOf()) || /rev=/.test(await lineOf())) throw new Error('not made live: ' + (await lineOf()));
+  await lineBecomes(/&at=[0-9a-f]{10}/, 'not made live');
+  if (/rev=/.test(await lineOf())) throw new Error('still pinned: ' + (await lineOf()));
   await hoverLink('Pinned p5');
   await win.locator('.hover-card .link-kind', { hasText: 'Live' }).waitFor({ timeout: 5000 });
   await win.locator('.hover-card').getByRole('button', { name: 'Pin to this version' }).click();
   await win.mouse.move(5, 500);
   await win.locator('.editor-wrap .cm-content').first().focus();
   await win.keyboard.press('Control+S');
-  if (!/&rev=[0-9a-f]{10}/.test(await lineOf())) throw new Error('not pinned again: ' + (await lineOf()));
+  await lineBecomes(/&rev=[0-9a-f]{10}/, 'not pinned again');
 });
 
 await step('a live link whose file changed says so in its hover card and when opened', async () => {

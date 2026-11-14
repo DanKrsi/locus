@@ -136,14 +136,20 @@ ignore it and show the picture at its own size.
 ## 5. Automatic versions
 
 - **Simple mode / app-managed workspaces**: an automatic version is a normal commit with the
-  message `Automatic version (cited <file>)`.
+  message `Automatic version (cited <file>)`, `Automatic version (updated N links)` or
+  `Automatic version (moved <old> to <new>)`.
 - **Repos with their own history (developer mode)**: automatic versions are written as
   commits on `refs/locus/snapshots` (not on any branch), so the developer's branch history
   stays clean. Sharing pushes `refs/locus/*` along with branches.
 
 ## 6. Keeping links healthy
 
-- Renaming or moving a file **inside the app** rewrites every reference in the workspace.
+- Renaming or moving a file **inside the app** rewrites every reference in the workspace, and the
+  move is recorded there and then as `Automatic version (moved <old> to <new>)`, holding the file
+  under both names and the notes whose links followed it. A move saved on its own is a move git
+  can still see later: left to be saved beside a week of edits, a file that is renamed and then
+  rewritten reads as one file gone and another arrived, and the versions its links cite can no
+  longer be read.
 - Files moved outside the app are detected through git rename detection at the next version;
   the app offers to fix the affected links. Notes are found by their identity (§2.5).
 - After a version is saved, live links whose file changed are brought forward: `at=` becomes the

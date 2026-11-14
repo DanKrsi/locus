@@ -380,6 +380,12 @@ const api: Api = {
       updatedNotes.push(newNote);
       links += r.count;
     }
+    // A move recorded on its own is a move git can still see later. Left to be saved with a
+    // week of other edits, a file that is renamed and then rewritten looks like one file gone
+    // and another arrived, and the versions its links cite can no longer be read.
+    await git
+      .autoVersion(ws().root, [from, to, ...updatedNotes], ws().managed, `${git.AUTO_PREFIX} (moved ${from.slice(1)} to ${to.slice(1)})`)
+      .catch(() => null);
     return { updatedNotes, links };
   },
   async updateLinks(changes, message) {

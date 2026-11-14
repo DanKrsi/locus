@@ -134,10 +134,6 @@ Everything here is on Folio's own "not built" list, or absent from it:
 
 From a week of deliberate mess in the demo workspace (`npm run test:chaos`), still open:
 
-- **Record a move as its own small version.** A file renamed and rewritten within one saved
-  version is a rename git cannot see afterwards, so the version a link cites can no longer be
-  read. Committing the rename on its own when Locus makes it (or keeping a small ledger of moves)
-  would keep every link readable through any amount of later rewriting.
 - **Ask git fewer times.** Each question about a file costs a process (~100-400 ms on Windows),
   and the check after Save version asks several per link. Batching the questions, or keeping one
   git process open, would take the check well under a second even in a large workspace.

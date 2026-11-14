@@ -233,6 +233,22 @@ await step('a link to a deleted file still opens the version it cites, and is no
   await shot('deleted-file-link');
 });
 
+await step('a file renamed and then rewritten is still readable at the version it was cited from', async () => {
+  const head = (await api('versions'))[0].sha.slice(0, 10);
+  await api('writeText', '/notes/twice.md', `# Twice\n\nSee [the solver](/src/solver.py#L1-L2&at=${head}).\n`);
+  const before = (await api('versions')).length;
+  await api('renameFile', '/src/solver.py', '/src/engine/solver.py');
+  const versions = await api('versions');
+  if (versions.length !== before + 1) throw new Error('the move was not recorded as a version of its own');
+  if (!/moved src\/solver\.py to src\/engine\/solver\.py/.test(versions[0].message)) throw new Error(`version says: ${versions[0].message}`);
+  // Now rewrite it completely, so the two versions no longer look like the same file.
+  await api('writeText', '/src/engine/solver.py', '# rewritten\n' + 'x = 1\n'.repeat(60));
+  await api('saveVersion', 'Rewrote the solver');
+  const was = await api('readText', '/src/engine/solver.py', head);
+  if (!was.includes('def ')) throw new Error('the cited version could not be read once the file was rewritten');
+  if (!(await api('exists', '/src/engine/solver.py', head))) throw new Error('the cited version is reported missing');
+});
+
 await app.close();
 console.log(failures ? `\n${failures} failure(s)` : '\nall passed');
 process.exit(failures ? 1 : 0);

@@ -121,24 +121,27 @@ function renameInHistory(dir: string, path: string, rev: string): Promise<string
   const hit = historyCache.get(key);
   if (hit && Date.now() - hit.at < 2000) return hit.name;
   const name = (async () => {
-    const [after, out] = await Promise.all([
-      git(dir, ['rev-list', `${rev}..HEAD`]).catch(() => ''),
-      git(dir, ['-c', 'core.quotepath=off', 'log', '--follow', '--name-status', '--format=%H', '--', gp(path)]).catch(() => ''),
-    ]);
+    // Moves in a workspace that has its own history are kept on the snapshot ref, not the branch.
+    const tips = (await refExists(dir, SNAPSHOT_REF)) ? ['HEAD', SNAPSHOT_REF] : ['HEAD'];
+    const after = await git(dir, ['rev-list', ...tips, `^${rev}`]).catch(() => '');
     const since = new Set(after.split('\n').filter(Boolean));
     if (!since.size) return null;
-    let now = gp(path);
-    let counts = false;
-    for (const line of out.split('\n')) {
-      const l = line.replace(/\r$/, '');
-      if (/^[0-9a-f]{40}$/.test(l)) {
-        counts = since.has(l); // only renames made after the version being read
-        continue;
+    for (const tip of tips) {
+      const out = await git(dir, ['-c', 'core.quotepath=off', 'log', '--follow', '--name-status', '--format=%H', tip, '--', gp(path)]).catch(() => '');
+      let now = gp(path);
+      let counts = false;
+      for (const line of out.split('\n')) {
+        const l = line.replace(/\r$/, '');
+        if (/^[0-9a-f]{40}$/.test(l)) {
+          counts = since.has(l); // only renames made after the version being read
+          continue;
+        }
+        const m = /^R\d*\t(.+)\t(.+)$/.exec(l);
+        if (counts && m && m[2] === now) now = m[1];
       }
-      const m = /^R\d*\t(.+)\t(.+)$/.exec(l);
-      if (counts && m && m[2] === now) now = m[1];
+      if (now !== gp(path)) return wp(now);
     }
-    return now === gp(path) ? null : wp(now);
+    return null;
   })().catch(() => null);
   if (historyCache.size > 32) historyCache.clear();
   historyCache.set(key, { at: Date.now(), name });

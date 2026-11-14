@@ -23,6 +23,7 @@
     "test:isolated": "npm run build:plugin && npm run build:extension && node scripts/test-isolated.mjs",
     "test:sharing": "npm run build && node scripts/make-test-workspace.mjs && node scripts/test-sharing.mjs",
     "dist": "npm run build && npm run build:plugin && electron-builder --win nsis",
+    "fetch-release": "node scripts/fetch-release.mjs",
     "sample": "npm run build && npm run build:mcp && node scripts/make-sample.mjs",
     "test:claude": "npm run build && npm run build:plugin && node scripts/test-claude-setup.mjs",
     "build:viewer": "vite build --config vite.viewer.config.ts"

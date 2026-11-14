@@ -15,6 +15,7 @@ npm run build:plugin      # rebuild plugin/server/server.mjs (commit it)
 npm run build:viewer      # the viewer that ships inside an exported folder
 npm run build:extension   # pack release/locus.mcpb for Claude Desktop
 npm run dist              # build the Windows installer into release/
+npm run fetch-release     # download a published release's installer into release/
 npm run test:isolated     # test the shipped plugin and extension outside the repo
 ```
 
@@ -35,6 +36,18 @@ The [Release workflow](../.github/workflows/release.yml) builds the installer on
 publishes the release with `Locus-Setup-<version>.exe` and the demo `build/Locus-demo.locus` (which
 also ships inside the installer; rebuild it with `npm run sample` and **Share → Send as a file**). To release a tag that already exists, run the workflow from the
 Actions tab and enter the tag.
+
+The installer is built on the runner, so nothing lands in `release/` here. To keep the published
+file (the very one people download, rather than a local build of the same code):
+
+```
+npm run fetch-release                  # the version in package.json
+npm run fetch-release -- latest        # whatever is newest
+npm run fetch-release -- v0.6.1 --all  # that tag, installer and demo
+```
+
+It checks the size against the release, writes through a `.part` file so a broken download is
+never left looking finished, and skips a file that is already there.
 
 ## Where things are
 

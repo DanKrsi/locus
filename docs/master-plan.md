@@ -134,9 +134,6 @@ Everything here is on Folio's own "not built" list, or absent from it:
 
 From a week of deliberate mess in the demo workspace (`npm run test:chaos`), still open:
 
-- **Ask git fewer times.** Each question about a file costs a process (~100-400 ms on Windows),
-  and the check after Save version asks several per link. Batching the questions, or keeping one
-  git process open, would take the check well under a second even in a large workspace.
 - **A tab limit by default.** Opening documents all week leaves every one of them loaded.
 - **The link summary is modal.** It is right after an explicit save, but a quieter bar would not
   take the keyboard away from someone who kept typing.

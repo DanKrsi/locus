@@ -134,6 +134,41 @@ export async function checkLink(cite: Citation, head: string): Promise<CheckedLi
 const AT_ONCE = 16;
 
 /**
+ * Which files have changed since each version the links were cited from: one question to git per
+ * version, instead of asking about every link in turn. Most links cite a file nothing has touched,
+ * and those are then settled without a single call of their own.
+ */
+async function filesTouchedSince(cites: Citation[]): Promise<Map<string, Set<string>>> {
+  const revs = new Set<string>();
+  for (const cite of cites) {
+    const ref = parseDestination(cite.dest);
+    if (ref?.at && !ref.rev) revs.add(ref.at);
+  }
+  const out = new Map<string, Set<string>>();
+  await Promise.all(
+    [...revs].map(async (rev) => {
+      const changes = await api.changesSince(rev).catch(() => null);
+      if (!changes) return; // could not tell: every link citing this version is checked the long way
+      const paths = new Set<string>();
+      for (const c of changes) {
+        paths.add(c.path);
+        if (c.from) paths.add(c.from);
+      }
+      out.set(rev, paths);
+    }),
+  );
+  return out;
+}
+
+/** Whether anything has happened to this link's file since it was cited. */
+function worthChecking(cite: Citation, touched: Map<string, Set<string>>): boolean {
+  const ref = parseDestination(cite.dest);
+  if (!ref?.at || ref.rev) return true; // pinned or odd: checkLink says no, cheaply
+  const paths = touched.get(ref.at);
+  return !paths || paths.has(cite.path);
+}
+
+/**
  * Checks every live link in the workspace against the latest saved version. The user is waiting
  * on this with a version just saved, so the links are checked together rather than one at a time,
  * and the same link in two notes is only worked out once.
@@ -141,9 +176,10 @@ const AT_ONCE = 16;
 export async function checkLinks(head: string): Promise<CheckedLink[]> {
   answers.clear(); // a fresh look: what was asked during the last check may have changed since
   const cites = await api.citations().catch(() => [] as Citation[]);
+  const touched = await filesTouchedSince(cites);
   const keyOf = (c: Citation) => `${c.path}|${c.dest}|${c.quote ?? ''}`;
   const first = new Map<string, Citation>();
-  for (const cite of cites) if (!first.has(keyOf(cite))) first.set(keyOf(cite), cite);
+  for (const cite of cites) if (!first.has(keyOf(cite)) && worthChecking(cite, touched)) first.set(keyOf(cite), cite);
   const keys = [...first.keys()];
   const done = new Map<string, CheckedLink | null>();
   let next = 0;

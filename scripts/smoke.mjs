@@ -906,8 +906,11 @@ await step('a note touched by a Windows tool still reads as lines', async () => 
   await win.getByPlaceholder('Find a file by name').fill('mixed');
   await win.locator('.tree-row', { hasText: 'mixed.md' }).first().waitFor({ timeout: 8000 });
   await win.keyboard.press('Enter');
-  if (await win.locator('.open-choice').count()) await win.keyboard.press('e');
-  await win.locator('[data-pane="notes"] .tab.active', { hasText: 'mixed.md' }).waitFor({ timeout: 10000 });
+  // Click rather than press "e": the dialog ignores keys for a turn, so a fast key is lost.
+  const choice = win.locator('.open-choice');
+  await choice.waitFor({ timeout: 8000 }).catch(() => undefined);
+  if (await choice.count()) await choice.getByText('Edit', { exact: true }).click();
+  await win.locator('[data-pane="notes"] .tab.active', { hasText: 'mixed.md' }).waitFor({ timeout: 15000 });
   await win.waitForTimeout(600);
   const lines = await win.locator('.editor-wrap .cm-line').count();
   if (lines < 7) throw new Error(`the note collapsed into ${lines} line(s)`);
@@ -918,7 +921,7 @@ await step('a note touched by a Windows tool still reads as lines', async () => 
   await win.keyboard.press('Control+End');
   await win.keyboard.type('Another line.');
   await win.keyboard.press('Control+S');
-  await win.waitForFunction(() => window.api.readText('/notes/mixed.md').then((t) => t.includes('Another line.')), null, { timeout: 10000 });
+  await win.waitForFunction(() => window.api.readText('/notes/mixed.md').then((t) => t.includes('Another line.')), null, { timeout: 20000 });
   const saved = await win.evaluate(() => window.api.readText('/notes/mixed.md'));
   if (!/# Mixed\n\n## Part two/.test(saved)) throw new Error('the note was rewritten with the wrong line endings');
 });

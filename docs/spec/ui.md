@@ -204,7 +204,9 @@ live link records the version it was cited from and is brought forward each time
 saved, so it never drifts far from the file.
 
 **After Save version** (and when Save version finds nothing new to save but links are waiting),
-Locus checks every live link whose file changed since it was cited:
+Locus checks every live link whose file changed since it was cited. It asks which files have
+changed once per version the links were cited from, so a workspace of hundreds of links where one
+file was edited answers in about a second:
 
 | File | Follows by itself when | Needs a look when |
 |---|---|---|

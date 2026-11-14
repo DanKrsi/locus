@@ -113,6 +113,16 @@ export function App() {
   const notes = useRef<NotesHandle>(null);
   const handles = useRef(new Map<string, ViewerHandle>());
   const statusCache = useRef(new Map<string, RefStatus>());
+  /**
+   * Bumped whenever what is known about the links is thrown away. A check that was already
+   * running belongs to the world as it was, so its answer is dropped rather than written over
+   * the answer to the same question asked since.
+   */
+  const statusGeneration = useRef(0);
+  const forgetStatuses = () => {
+    statusCache.current.clear();
+    statusGeneration.current++;
+  };
   const live = useRef({ settings, versions, docTabs, activeDoc, ws, tour, citeMode });
   live.current = { settings, versions, docTabs, activeDoc, ws, tour, citeMode };
   const terminology = settings?.terminology ?? 'simple';
@@ -234,7 +244,7 @@ export function App() {
     const v = await api.versions().catch(() => [] as Version[]);
     setVersions(v);
     setVersionsKey((k) => k + 1);
-    statusCache.current.clear();
+    forgetStatuses();
     notes.current?.refresh();
   }, []);
 
@@ -252,7 +262,7 @@ export function App() {
     setConflicts(null);
     setLastSynced(Date.now());
     invalidateLatest();
-    statusCache.current.clear();
+    forgetStatuses();
     await notes.current?.reloadFromDisk();
     notes.current?.refresh();
     void refreshVersions();
@@ -343,7 +353,7 @@ export function App() {
     if (s.activeNote && !s.notes.includes(s.activeNote)) s.activeNote = s.notes[0] ?? null;
     const activeDoc = restored.indexOf(s.docs[s.activeDoc]);
     const tabs: DocTab[] = restored.map((d) => ({ id: newId(), ...d, kind: fileKind(d.path) }));
-    statusCache.current.clear();
+    forgetStatuses();
     invalidateLatest();
     setBrowserRev(undefined);
     setNotice(null);
@@ -385,7 +395,7 @@ export function App() {
     const onFocus = () => {
       if (!live.current.ws) return;
       invalidateLatest();
-      statusCache.current.clear();
+      forgetStatuses();
       notes.current?.reloadFromDisk();
       notes.current?.refresh();
       void loadCitations();
@@ -470,11 +480,11 @@ export function App() {
     if (await api.exists(path).catch(() => false)) return ref.at ? changeSinceCited(path, ref, info.title) : { state: 'ok' };
     const noteId = linkNoteId(ref.extra);
     if (noteId && (await api.findNoteById(noteId).catch(() => null))) return { state: 'ok' };
+    // The file has left the workspace. While the version it was cited from can still be read, the
+    // link opens that and is not broken: it is a link into the past, and says so when hovered.
     const existed = ref.at ? await api.exists(path, ref.at).catch(() => false) : false;
-    return {
-      state: 'broken',
-      reason: existed ? `${path.slice(1)} was moved or deleted since it was cited` : `File not found: ${path.slice(1)}`,
-    };
+    if (existed) return { state: 'gone', reason: `${basename(path)} is no longer in the workspace; this shows the version it was cited from` };
+    return { state: 'broken', reason: `File not found: ${path.slice(1)}` };
   };
 
   /**
@@ -504,8 +514,10 @@ export function App() {
     const key = `${notePath}|${info.dest}`;
     const cached = statusCache.current.get(key);
     if (cached) return cached;
+    const asked = statusGeneration.current;
     statusCache.current.set(key, { state: 'unknown' });
     checkRef(info, notePath).then((s) => {
+      if (asked !== statusGeneration.current) return; // the files changed while this was looking
       statusCache.current.set(key, s);
       if (s.state !== 'ok' || s.badge || s.changed) notes.current?.refresh();
     });
@@ -639,17 +651,21 @@ export function App() {
     const view = notes.current?.activeView();
     const notePath = notes.current?.activePath();
     if (!view || !notePath) return;
+    // Each link that has lost its file costs a few git calls to chase, so they are chased at the
+    // same time: the offer to fix them should come up while the user is still wondering.
     const fixes = new Map<string, string>();
-    for (const l of allLinks(view.state)) {
+    const looking = allLinks(view.state).map(async (l) => {
       const ref = l.ref;
-      if (ref.rev || !ref.path || (ref.pathKind !== 'root' && ref.pathKind !== 'relative')) continue;
+      if (ref.rev || !ref.path || (ref.pathKind !== 'root' && ref.pathKind !== 'relative')) return;
       const noteId = linkNoteId(ref.extra);
-      if (!ref.at && !noteId) continue;
+      if (!ref.at && !noteId) return;
       const path = resolvePath(ref, notePath);
-      if (await api.exists(path).catch(() => true)) continue;
+      if (await api.exists(path).catch(() => true)) return;
       const to = noteId ? await api.findNoteById(noteId).catch(() => null) : await api.findMoved(path, ref.at!).catch(() => null);
       if (to) fixes.set(l.dest, to);
-    }
+    });
+    await Promise.all(looking);
+    if (notes.current?.activePath() !== notePath) return; // the user moved on while we looked
     movedFixes.current = fixes;
     if (!fixes.size) return void checkUnrecorded();
     const n = allLinks(view.state).filter((l) => fixes.has(l.dest)).length;
@@ -713,7 +729,7 @@ export function App() {
     }
     if (!changes.length) return;
     view.dispatch({ changes });
-    statusCache.current.clear();
+    forgetStatuses();
     notes.current?.refresh();
     void refreshVersions();
     showToast(`Recorded ${changes.length} link${changes.length === 1 ? '' : 's'}`);
@@ -740,7 +756,7 @@ export function App() {
         insert: formatReference(l.label, { ...l.ref, path: movedFixes.current.get(l.dest)!, pathKind: 'root' }, l.title),
       }));
     view.dispatch({ changes });
-    statusCache.current.clear();
+    forgetStatuses();
     notes.current?.refresh();
     showToast(`Fixed ${changes.length} link${changes.length === 1 ? '' : 's'}`);
   };
@@ -757,7 +773,7 @@ export function App() {
         }),
       );
       invalidateLatest();
-      statusCache.current.clear();
+      forgetStatuses();
       await notes.current?.reloadFromDisk();
       notes.current?.refresh();
       void loadCitations();
@@ -856,6 +872,8 @@ export function App() {
 
   // ---------- Versions ----------
 
+  const offerUpkeepRef = useRef<(links: CheckedLink[]) => void>(() => undefined);
+
   const openSaveVersion = async () => {
     await notes.current?.saveAll();
     const changes = await api.uncommitted().catch(() => []);
@@ -863,7 +881,7 @@ export function App() {
       // Nothing new to save, but links may still be waiting from an earlier "Not now".
       const head = await api.head().catch(() => null);
       const links = head ? await checkLinks(head).catch(() => []) : [];
-      if (links.length) return setUpkeep(links);
+      if (links.length) return offerUpkeepRef.current(links);
       return showToast(term(terminology, 'nothingToSave'));
     }
     const name = `${longDate(new Date().toISOString())} · ${changes.length} file${changes.length === 1 ? '' : 's'} changed`;
@@ -879,7 +897,7 @@ export function App() {
     showToast(terminology === 'git' ? `Committed ${sha.slice(0, 7)}` : 'Version saved');
     // Live links to files this version changed: follow the ones that only moved, ask about the rest.
     const links = await checkLinks(sha).catch(() => []);
-    if (links.length) setUpkeep(links);
+    offerUpkeepRef.current(links);
   };
 
   const openSectionLink = () => {
@@ -996,7 +1014,7 @@ export function App() {
     const extra = samePath ? e.info.ref.extra.filter((x) => !x.startsWith('id=')) : [];
     const ref: Reference = { path: target.path, pathKind: 'root', loc: target.loc, rev, at, extra: noteId ? withLinkNoteId(extra, noteId) : extra };
     replaceLink(e.view, e.info, formatReference(e.info.label, ref, target.quote));
-    statusCache.current.clear();
+    forgetStatuses();
     notes.current?.refresh();
     void refreshVersions();
   };
@@ -1012,7 +1030,7 @@ export function App() {
 
   const afterLinkWrite = async () => {
     invalidateLatest();
-    statusCache.current.clear();
+    forgetStatuses();
     await notes.current?.reloadFromDisk();
     notes.current?.refresh();
     void loadCitations();
@@ -1040,6 +1058,18 @@ export function App() {
       ],
     });
   };
+
+  /**
+   * What the link check found. When every link can follow its file by itself there is nothing to
+   * decide, so they are updated then and there (with Undo) instead of stopping the user with a
+   * summary; anything that needs a look, or points at a deleted file, still asks.
+   */
+  const offerUpkeep = (links: CheckedLink[]) => {
+    if (!links.length) return;
+    if (links.every((l) => l.verdict === 'follow')) return void applyLinkUpdates(links.map((l) => updateFor(l)));
+    setUpkeep(links);
+  };
+  offerUpkeepRef.current = offerUpkeep;
 
   /** Shows one link for review: its note on the left, cited and latest versions side by side on the right. */
   const showReviewItem = (items: CheckedLink[], index: number, decided: NoteLinkUpdate[], oldTab?: string) => {
@@ -1172,13 +1202,13 @@ export function App() {
 
   // Version dates arrive after notes may have drawn their badges; redraw them once known.
   useEffect(() => {
-    statusCache.current.clear();
+    forgetStatuses();
     notes.current?.refresh();
   }, [versions]);
 
   // Re-render badges when the terminology changes.
   useEffect(() => {
-    statusCache.current.clear();
+    forgetStatuses();
     notes.current?.refresh();
   }, [terminology]);
 
@@ -1378,7 +1408,7 @@ export function App() {
               onRename={renameFile}
               onDeleted={() => {
                 invalidateLatest();
-                statusCache.current.clear();
+                forgetStatuses();
                 notes.current?.refresh();
                 void loadCitations();
                 void refreshSharing(false);

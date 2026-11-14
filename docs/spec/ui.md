@@ -118,6 +118,10 @@ files is refused rather than written into.
   right; the same button again clears it), or delete the row, column or table.
 - The file on disk is the source of truth: only edited lines change; line endings and
   encoding are preserved. Autosave after a pause, with a small "Saved" toast.
+- Windows and Unix line endings both count as line breaks, whichever way a file mixes them — a
+  checkout that converted them, a script that appended a line, another editor. The file is
+  written back with the ending it mostly used, so a Windows file stays a Windows file and a
+  stray ending never turns a note into one long line.
 
 ### 4.1 References in the note
 
@@ -129,6 +133,9 @@ files is refused rather than written into.
 - Broken references: red wavy underline with the reason; `moved` ones offer **Fix links**. A
   link to a note that was renamed or moved outside the app is not broken: it finds the note by
   its identity, and **Fix links** writes the new path.
+- A link whose file has left the workspace while the version it cites can still be read is not
+  broken either: it opens that version, and is drawn in grey with a dotted underline that says
+  so when hovered. Red is kept for a link with nothing behind it at all.
 - **Hover card** (~400ms): preview (page thumbnail with the area drawn, code lines with
   numbers, mini table of cells) · file name and folder · location description · kind
   ("Live · cited from the version of Mar 3 · follows the file when you save a version" or
@@ -209,6 +216,10 @@ Locus checks every live link whose file changed since it was cited:
 A link whose file was deleted stays on the version it was cited from (it becomes pinned). Links
 to notes are left alone: a note is always read as it is now.
 
+- **Nothing to decide, nothing to answer**: when every link the check found can follow its file
+  by itself, Locus updates them there and then and says so in a notice with **Undo**. The summary
+  only appears when something needs a person: a link that cites something that changed, or one
+  whose file was deleted.
 - **The summary** says how many links can follow by themselves, how many cite something that
   changed, and how many point at deleted files. **Update the N and review the rest**, **Go
   through them one by one**, or **Not now**. No button is the default, so a stray Enter does

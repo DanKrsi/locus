@@ -27,6 +27,28 @@ export interface CheckedLink {
 
 const short = (sha: string) => sha.slice(0, 10);
 
+/**
+ * Answers held for a moment. A note usually cites the same file several times, and each question
+ * about it costs a git call, so one run of the check would otherwise ask the same thing ten times.
+ */
+const answers = new Map<string, { at: number; value: Promise<unknown> }>();
+
+function ask<T>(key: string, get: () => Promise<T>): Promise<T> {
+  const hit = answers.get(key);
+  if (hit && Date.now() - hit.at < 2000) return hit.value as Promise<T>;
+  const value = get();
+  if (answers.size > 400) answers.clear();
+  answers.set(key, { at: Date.now(), value });
+  return value;
+}
+
+const exists = (path: string, rev?: string) => ask(`e|${path}|${rev ?? ''}`, () => api.exists(path, rev).catch(() => false));
+const changed = (path: string, rev: string) => ask(`c|${path}|${rev}`, () => api.fileChangedSince(path, rev).catch(() => false));
+const moved = (path: string, at: string) => ask(`m|${path}|${at}`, () => api.findMoved(path, at).catch(() => null));
+const hunks = (path: string, at: string) => ask(`h|${path}|${at}`, () => api.diffHunks(path, at).catch(() => []));
+const bytes = (path: string, rev?: string) =>
+  ask(`b|${path}|${rev ?? ''}`, () => (rev ? api.readFile(path, rev) : loadBytes({ path, external: false })).catch(() => null));
+
 /** The text of the cited cells, row by row, or null when the range can't be found. */
 async function cellText(data: Uint8Array, path: string, loc: Location): Promise<string | null> {
   if (!loc.sheet) return null;
@@ -59,25 +81,25 @@ export async function checkLink(cite: Citation, head: string): Promise<CheckedLi
   const latest = (loc: Location, to = path): Reference => ({ ...ref, path: to, pathKind: 'root', loc, at: short(head), rev: undefined });
 
   let now = path;
-  if (!(await api.exists(path).catch(() => false))) {
-    const moved = await api.findMoved(path, at).catch(() => null);
-    if (!moved) {
-      if (!(await api.exists(path, at).catch(() => false))) return null; // never existed: a broken link, not ours to fix
+  if (!(await exists(path))) {
+    const to = await moved(path, at);
+    if (!to) {
+      if (!(await exists(path, at))) return null; // never existed: a broken link, not ours to fix
       return { ...base, verdict: 'deleted', next: { ...ref, rev: at, at: undefined }, reason: 'the file was deleted' };
     }
-    now = moved;
-    const [was, is] = await Promise.all([api.readFile(path, at), api.readFile(moved)]);
-    if (sameBytes(was, is)) return { ...base, verdict: 'follow', next: latest(ref.loc, moved), reason: 'the file was moved' };
-    return { ...base, verdict: 'review', next: latest(ref.loc, moved), reason: 'the file was moved and edited' };
+    now = to;
+    const [was, is] = await Promise.all([bytes(path, at), bytes(to)]);
+    if (was && is && sameBytes(was, is)) return { ...base, verdict: 'follow', next: latest(ref.loc, to), reason: 'the file was moved' };
+    return { ...base, verdict: 'review', next: latest(ref.loc, to), reason: 'the file was moved and edited' };
   }
-  if (!(await api.fileChangedSince(path, at).catch(() => false))) return null;
+  if (!(await changed(path, at))) return null;
 
   const { loc } = ref;
   const whole = !loc.lines && loc.page === undefined && loc.slide === undefined && !loc.sheet && loc.time === undefined && !loc.rect;
   if (whole) return { ...base, verdict: 'follow', next: latest(loc), reason: 'the whole file is cited' };
 
   if (loc.lines) {
-    const m = mapLines(await api.diffHunks(path, at).catch(() => []), loc.lines.start, loc.lines.end);
+    const m = mapLines(await hunks(path, at), loc.lines.start, loc.lines.end);
     const next = latest({ ...loc, lines: { start: m.start, end: m.end } });
     if (m.status === 'same') return { ...base, verdict: 'follow', next, reason: 'the cited lines are untouched' };
     if (m.status === 'moved') return { ...base, verdict: 'follow', next, reason: 'the cited lines only moved' };
@@ -86,8 +108,8 @@ export async function checkLink(cite: Citation, head: string): Promise<CheckedLi
 
   if (kind === 'pdf' && loc.page !== undefined) {
     if (cite.quote) {
-      const found = await loadBytes({ path: now, external: false })
-        .then((data) => locateQuote(data, cite.quote!, loc.page!))
+      const found = await bytes(now)
+        .then((data) => (data ? locateQuote(data, cite.quote!, loc.page!) : null))
         .catch(() => null);
       if (found) return { ...base, verdict: 'follow', next: latest({ ...loc, page: found.page, viewrect: loc.viewrect ? found.rect : undefined }), reason: found.page === loc.page ? 'the quoted text is still there' : `the quoted text is now on page ${found.page}` };
       return { ...base, verdict: 'review', next: latest(loc), reason: 'the quoted text was reworded or removed' };
@@ -97,8 +119,8 @@ export async function checkLink(cite: Citation, head: string): Promise<CheckedLi
 
   if (kind === 'sheet' && loc.sheet) {
     const [was, is] = await Promise.all([
-      api.readFile(path, at).then((d) => cellText(d, path, loc)).catch(() => null),
-      loadBytes({ path: now, external: false }).then((d) => cellText(d, now, loc)).catch(() => null),
+      bytes(path, at).then((d) => (d ? cellText(d, path, loc) : null)).catch(() => null),
+      bytes(now).then((d) => (d ? cellText(d, now, loc) : null)).catch(() => null),
     ]);
     if (is !== null && !loc.sheet.sheet) return { ...base, verdict: 'follow', next: latest(loc), reason: 'the named range still resolves' };
     if (was !== null && was === is) return { ...base, verdict: 'follow', next: latest(loc), reason: 'the cited cells hold the same values' };
@@ -108,16 +130,34 @@ export async function checkLink(cite: Citation, head: string): Promise<CheckedLi
   return { ...base, verdict: 'review', next: latest(loc), reason: `${basename(path)} changed` };
 }
 
-/** Checks every live link in the workspace against the latest saved version. */
+/** How many links are checked at once: enough to be quick, few enough not to flood git. */
+const AT_ONCE = 16;
+
+/**
+ * Checks every live link in the workspace against the latest saved version. The user is waiting
+ * on this with a version just saved, so the links are checked together rather than one at a time,
+ * and the same link in two notes is only worked out once.
+ */
 export async function checkLinks(head: string): Promise<CheckedLink[]> {
+  answers.clear(); // a fresh look: what was asked during the last check may have changed since
   const cites = await api.citations().catch(() => [] as Citation[]);
-  const seen = new Map<string, Promise<CheckedLink | null>>();
+  const keyOf = (c: Citation) => `${c.path}|${c.dest}|${c.quote ?? ''}`;
+  const first = new Map<string, Citation>();
+  for (const cite of cites) if (!first.has(keyOf(cite))) first.set(keyOf(cite), cite);
+  const keys = [...first.keys()];
+  const done = new Map<string, CheckedLink | null>();
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(AT_ONCE, keys.length) }, async () => {
+      while (next < keys.length) {
+        const key = keys[next++];
+        done.set(key, await checkLink(first.get(key)!, head).catch(() => null));
+      }
+    }),
+  );
   const out: CheckedLink[] = [];
   for (const cite of cites) {
-    // The same link in the same note (or in two notes) is checked once and decided once.
-    const key = `${cite.path}|${cite.dest}|${cite.quote ?? ''}`;
-    if (!seen.has(key)) seen.set(key, checkLink(cite, head).catch(() => null));
-    const r = await seen.get(key)!;
+    const r = done.get(keyOf(cite));
     if (r) out.push({ ...r, cite });
   }
   return out;

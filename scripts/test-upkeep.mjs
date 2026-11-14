@@ -120,14 +120,15 @@ await step('one by one: keep a link on its old version, then stop', async () => 
   if (await win.locator('[data-pane="docs"] .tabs > .tab').count()) throw new Error('a review tab was left open');
 });
 
-await step('a pinned link is not asked about again; the other still is', async () => {
+await step('a pinned link is not asked about again; the one left over just follows', async () => {
   await win.locator('.notice .icon').click();
   await win.keyboard.press('Control+Shift+S');
-  const dlg = win.locator('.upkeep-summary');
-  await dlg.waitFor({ timeout: 15000 });
-  const text = await dlg.innerText();
-  if ((text.match(/\b1 link\b/g) ?? []).length !== 1) throw new Error(`summary: ${text}`);
-  await win.getByRole('button', { name: 'Not now' }).click();
+  // Nothing to decide any more: the link that can follow is updated, with Undo, and no dialog.
+  await win.locator('.notice', { hasText: 'Updated 1 link' }).waitFor({ timeout: 20000 });
+  if (await win.locator('.upkeep-summary').count()) throw new Error('a summary asked about a link that could follow by itself');
+  const text = await note();
+  if (!/a fixed sleep\]\([^)]*&rev=/.test(text)) throw new Error('the pinned link lost its version');
+  await win.locator('.notice .icon').click();
 });
 
 const openNote = async (name) => {
@@ -139,7 +140,8 @@ const openNote = async (name) => {
   await win.locator('.tree-row', { hasText: name }).first().waitFor();
   await win.keyboard.press('Enter');
   await win.locator('.open-choice').waitFor({ timeout: 5000 });
-  await win.keyboard.press('e');
+  // Click rather than press "e": the dialog ignores keys for a turn, so a fast key is lost.
+  await win.locator('.open-choice').getByText('Edit', { exact: true }).click();
   await win.locator('[data-pane="notes"] .tab.active', { hasText: name }).waitFor({ timeout: 10000 });
 };
 
@@ -209,6 +211,26 @@ await step('Record: links made by hand get a version written into them', async (
   await notice.getByRole('button', { name: 'Record' }).click();
   await win.keyboard.press('Control+S');
   await win.waitForFunction(() => window.api.readText('/notes/byhand.md').then((t) => /solver\.py#L1-L2&at=[0-9a-f]{10}\)/.test(t)), null, { timeout: 10000 });
+});
+
+await step('a link to a deleted file still opens the version it cites, and is not drawn broken', async () => {
+  const head = (await api('versions'))[0].sha.slice(0, 10);
+  await api('writeText', '/notes/gone.md', `# Gone\n\nSee [the client](/src/net/client.py#L1-L3&at=${head}).\n`);
+  await openNote('gone.md');
+  await rm(join(workspace, 'src', 'net', 'client.py'));
+  await win.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await win.waitForTimeout(2500);
+  const ref = win.locator('.editor-wrap .cm-ref', { hasText: 'the client' }).first();
+  await ref.waitFor({ timeout: 10000 });
+  // The check behind the mark is asynchronous; it redraws the link when it knows.
+  await win.locator('.editor-wrap .cm-ref.gone', { hasText: 'the client' }).first().waitFor({ timeout: 15000 });
+  const classes = await ref.evaluate((el) => el.className);
+  if (/broken/.test(classes)) throw new Error('a link whose cited version is still readable is drawn broken');
+  await ref.click();
+  await win.locator('[data-pane="docs"] .tab.active', { hasText: 'client.py' }).waitFor({ timeout: 10000 });
+  const notice = await win.locator('.notice').first().innerText().catch(() => '');
+  if (!/no longer in the workspace/i.test(notice)) throw new Error(`expected a word about the deleted file, got "${notice.trim()}"`);
+  await shot('deleted-file-link');
 });
 
 await app.close();

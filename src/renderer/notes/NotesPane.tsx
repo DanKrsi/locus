@@ -3,6 +3,7 @@ import type { EditorView } from '@codemirror/view';
 import { basename, dirname, formatReference, slugify, stem } from '../../core/link';
 import { api } from '../api';
 import { decodeText } from '../files';
+import { withEol } from '../../core/text';
 import { Icon, type IconName } from '../icons';
 import { newId, type NoteTab } from '../model';
 import {
@@ -100,6 +101,8 @@ interface Doc {
   path: string;
   view: EditorView;
   bom: boolean;
+  /** The line ending the file had, so saving keeps it. */
+  eol: string;
   savedText: string;
   /** The note's hidden identity (the last line of the file), kept out of the editor. */
   noteId?: string;
@@ -155,7 +158,7 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
         .readText(path)
         .then((t) => splitNoteId(t).id)
         .catch(() => undefined);
-      await api.writeText(path, (d.bom ? '﻿' : '') + joinNoteId(text, d.noteId, text.includes('\r\n') ? '\r\n' : '\n'));
+      await api.writeText(path, (d.bom ? '﻿' : '') + withEol(joinNoteId(text, d.noteId, '\n'), d.eol));
       d.savedText = text;
       p.onSaved(path);
     }
@@ -231,11 +234,10 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
         p.toast(`Couldn't open ${basename(path)}`);
         return null;
       }
-      const doc = { path, bom, savedText: text, noteId } as Doc;
+      const doc = { path, bom, eol, savedText: text, noteId } as Doc;
       const cb = p.callbacks(() => doc.path);
       doc.view = createNoteEditor(host, {
         doc: text,
-        eol,
         zoom: zoomRef.current,
         ...cb,
         onSave: () => void save(doc.path, true),

@@ -34,10 +34,9 @@ export function NoteViewer({ data, reveal, onCite, handle, zoom = 1, callbacks, 
   zoomRef.current = zoom;
 
   useEffect(() => {
-    const { text, eol } = decodeText(data);
+    const { text } = decodeText(data);
     const view = createNoteEditor(host.current!, {
       doc: text,
-      eol,
       readOnly: true,
       zoom: zoomRef.current,
       ...callbacks,

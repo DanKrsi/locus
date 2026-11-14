@@ -7,7 +7,9 @@ import { PDFDocument } from 'pdf-lib';
 import { demoFlowText } from './flow-demo.mjs';
 
 const repo = resolve(import.meta.dirname, '..');
-const out = join(repo, 'test-output');
+// LOCUS_TEST_OUT puts this run's screenshots and user data somewhere else (a second run, or when
+// a leftover app still holds the usual folder).
+const out = process.env.LOCUS_TEST_OUT ? resolve(process.env.LOCUS_TEST_OUT) : join(repo, 'test-output');
 const userData = join(out, 'user-data');
 const workspace = resolve(repo, '..', 'locus-test-workspace');
 
@@ -887,6 +889,30 @@ await step('restored tabs that no longer exist are dropped', async () => {
   const tabs = await win.locator('[data-pane="docs"] .tabs > .tab').count();
   if (tabs !== 1) throw new Error(`expected 1 restored document tab, got ${tabs}`);
   if (await win.getByText("Couldn't open").count()) throw new Error('a stale tab still shows an error');
+});
+
+await step('a note touched by a Windows tool still reads as lines', async () => {
+  // One Windows line ending among Unix ones: a checkout, a script or another editor leaves these.
+  await writeFile(join(workspace, 'notes', 'mixed.md'), '# Mixed\n\n## Part two\n\n- one\n- two\n\nEdited elsewhere.\r\n', 'utf8');
+  await win.keyboard.press('Control+O');
+  await win.getByPlaceholder('Find a file by name').fill('mixed');
+  await win.locator('.tree-row', { hasText: 'mixed.md' }).first().waitFor({ timeout: 8000 });
+  await win.keyboard.press('Enter');
+  if (await win.locator('.open-choice').count()) await win.keyboard.press('e');
+  await win.locator('[data-pane="notes"] .tab.active', { hasText: 'mixed.md' }).waitFor({ timeout: 10000 });
+  await win.waitForTimeout(600);
+  const lines = await win.locator('.editor-wrap .cm-line').count();
+  if (lines < 7) throw new Error(`the note collapsed into ${lines} line(s)`);
+  if (await win.locator('.editor-wrap .cm-line', { hasText: '## Part two' }).count()) throw new Error('heading marks are showing as text');
+  await shot('mixed-endings');
+  // Typing and saving keeps the file as lines, and as the kind of file it was.
+  await win.locator('.editor-wrap .cm-content:visible').first().click();
+  await win.keyboard.press('Control+End');
+  await win.keyboard.type('Another line.');
+  await win.keyboard.press('Control+S');
+  await win.waitForFunction(() => window.api.readText('/notes/mixed.md').then((t) => t.includes('Another line.')), null, { timeout: 10000 });
+  const saved = await win.evaluate(() => window.api.readText('/notes/mixed.md'));
+  if (!/# Mixed\n\n## Part two/.test(saved)) throw new Error('the note was rewritten with the wrong line endings');
 });
 
 const noteText = await win.evaluate(() => window.api.readText('/notes/review.md'));

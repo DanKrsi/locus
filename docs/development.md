@@ -10,6 +10,7 @@ npm run sample            # build ../locus-sample, the demo workspace
 npm run test-workspace    # create ../locus-test-workspace with sample history
 npm run smoke             # drive the app against it and save screenshots to test-output/
 npm run test:sharing      # package, sync and conflicts against a local stand-in for GitHub
+npm run test:chaos        # a messy week in the demo workspace: does any link break?
 npm run test:mcp          # call every MCP tool against the test workspace
 npm run build:plugin      # rebuild plugin/server/server.mjs (commit it)
 npm run build:viewer      # the viewer that ships inside an exported folder
@@ -18,6 +19,14 @@ npm run dist              # build the Windows installer into release/
 npm run fetch-release     # download a published release's installer into release/
 npm run test:isolated     # test the shipped plugin and extension outside the repo
 ```
+
+`test:chaos` is a read of how the app behaves rather than a pass/fail suite. It makes a fresh demo
+workspace and plays a user having a rough week in it — renaming and moving documents, editing code,
+duplicating a workbook, swapping a PDF for another edition, deleting a cited recording, moving a
+folder in Explorer, renaming the note everything points at, restarting mid-sentence — and after
+every step it prints what the app said and lists any link a user would call broken. Screenshots of
+each step land in `test-output/chaos/`. Run it on a machine with nothing else driving the app: a
+second copy sharing the same user data will close the first.
 
 The installer installs for the current user (no admin rights), adds Start menu and desktop
 shortcuts, opens `.locus` files and handles `locus://` links. Everything it needs, git included,

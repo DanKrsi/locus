@@ -1,7 +1,8 @@
 # Master plan: catching up with Folio and going past it
 
 Drafted 13 November 2026 from the Folio 0.3.0 overview, checked against Locus 0.2.12 (spec and
-code). Status: **phases 1 to 4 built (0.3.0 to 0.6.0)**; phase 5 is a list to pick from.
+code). Status: **phases 1 to 4 built (0.3.0 to 0.6.0)**; phase 5 is a list to pick from, with what a
+week of deliberate mess in the demo workspace turned up (0.6.3) added to it.
 
 ## 1. Where Locus stands
 
@@ -130,6 +131,19 @@ Everything here is on Folio's own "not built" list, or absent from it:
 - Automatic updates and a signed installer.
 - Word documents.
 - Drag a selection into the note to cite it.
+
+From a week of deliberate mess in the demo workspace (`npm run test:chaos`), still open:
+
+- **Record a move as its own small version.** A file renamed and rewritten within one saved
+  version is a rename git cannot see afterwards, so the version a link cites can no longer be
+  read. Committing the rename on its own when Locus makes it (or keeping a small ledger of moves)
+  would keep every link readable through any amount of later rewriting.
+- **Ask git fewer times.** Each question about a file costs a process (~100-400 ms on Windows),
+  and the check after Save version asks several per link. Batching the questions, or keeping one
+  git process open, would take the check well under a second even in a large workspace.
+- **A tab limit by default.** Opening documents all week leaves every one of them loaded.
+- **The link summary is modal.** It is right after an explicit save, but a quieter bar would not
+  take the keyboard away from someone who kept typing.
 
 ## 4. How each phase is done
 

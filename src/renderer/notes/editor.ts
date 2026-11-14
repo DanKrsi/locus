@@ -50,12 +50,15 @@ export interface LinkInfo {
   image: boolean;
 }
 
-/** A link's state; `changed` marks a live link whose cited content changed since (reason says how). */
-export type RefStatus = { state: 'ok' | 'broken' | 'unknown'; reason?: string; badge?: string; changed?: boolean };
+/**
+ * A link's state; `changed` marks a live link whose cited content changed since (reason says how).
+ * `gone` is a file that has left the workspace but whose cited version can still be shown, so the
+ * link still works and is not drawn as broken.
+ */
+export type RefStatus = { state: 'ok' | 'broken' | 'gone' | 'unknown'; reason?: string; badge?: string; changed?: boolean };
 
 export interface NoteEditorOptions {
   doc: string;
-  eol: string;
   onChange(): void;
   onSave(): void;
   onFollow(info: LinkInfo): void;
@@ -344,9 +347,9 @@ class RefWidget extends WidgetType {
   }
   toDOM(view: EditorView) {
     const span = document.createElement('span');
-    const broken = this.status.state === 'broken';
-    span.className = 'cm-ref' + (broken ? ' broken' : '') + (this.active ? ' active' : '');
-    if (broken && this.status.reason) span.title = this.status.reason;
+    const state = this.status.state;
+    span.className = 'cm-ref' + (state === 'broken' ? ' broken' : state === 'gone' ? ' gone' : '') + (this.active ? ' active' : '');
+    if (state !== 'ok' && this.status.reason) span.title = this.status.reason;
     span.innerHTML = iconSvg(kindIcon(fileKind(this.info.ref.path)));
     span.append(this.info.label, ...refBadges(this.status));
     span.addEventListener('mousedown', (e) => {
@@ -737,13 +740,15 @@ function buildDecorations(view: EditorView, opts: NoteEditorOptions): Preview {
               return false;
             }
             // The label is ordinary text; only "[" and "](target)" are hidden.
-            const cls = web ? 'cm-weblink' : 'cm-ref' + (status!.state === 'broken' ? ' broken' : '') + (active ? ' active' : '');
+            // A web link has no status to read: only workspace links can be broken or gone.
+            const mark = web ? '' : status!.state === 'broken' ? ' broken' : status!.state === 'gone' ? ' gone' : '';
+            const cls = web ? 'cm-weblink' : 'cm-ref' + mark + (active ? ' active' : '');
             conceal(
               web ? hide : Decoration.replace({ widget: new LinkIconWidget(kindIcon(fileKind(info.ref.path)), cls, opts.onFollow) }),
               info.from,
               info.labelFrom,
             );
-            const title = web ? info.dest : status!.state === 'broken' ? status!.reason : undefined;
+            const title = web ? info.dest : mark ? status!.reason : undefined;
             decos.push(Decoration.mark({ class: cls + ' cm-link-label', attributes: title ? { title } : undefined }).range(info.labelFrom, info.labelTo));
             conceal(status?.badge || status?.changed ? Decoration.replace({ widget: new LinkBadgeWidget(status) }) : hide, info.labelTo, info.to);
             return false;
@@ -1049,7 +1054,6 @@ export function createNoteEditor(parent: HTMLElement, opts: NoteEditorOptions): 
   const state = EditorState.create({
     doc: opts.doc,
     extensions: [
-      EditorState.lineSeparator.of(opts.eol),
       EditorState.readOnly.of(!!opts.readOnly),
       editorZoom(opts.zoom ?? 1),
       history(),

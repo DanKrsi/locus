@@ -1,6 +1,7 @@
 // Loads file bytes (working copy, a past version, or an external file) with a small cache,
 // so viewers and hover-card previews share one read.
 import { api } from './api';
+import { hasBom, readText } from '../core/text';
 
 export interface FileSource {
   path: string;
@@ -31,10 +32,9 @@ export function invalidateLatest() {
 }
 
 export function decodeText(bytes: Uint8Array): { text: string; bom: boolean; eol: string } {
-  const bom = bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf;
-  const text = new TextDecoder('utf-8', { ignoreBOM: true }).decode(bom ? bytes.subarray(3) : bytes);
-  const eol = text.includes('\r\n') ? '\r\n' : '\n';
-  return { text, bom, eol };
+  const bom = hasBom(bytes);
+  const raw = new TextDecoder('utf-8', { ignoreBOM: true }).decode(bom ? bytes.subarray(3) : bytes);
+  return { ...readText(raw), bom };
 }
 
 const MIME: Record<string, string> = {

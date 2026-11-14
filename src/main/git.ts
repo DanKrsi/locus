@@ -108,10 +108,51 @@ function blobsIn(dir: string, rev: string): Promise<Map<string, string[]>> {
 
 const EMPTY_BLOB = 'e69de29bb2d1d6434b8b29ae775ad8c2e48c5391';
 
+/** Renames read out of the history, which git follows commit by commit. */
+const historyCache = new Map<string, { at: number; name: Promise<string | null> }>();
+
+/**
+ * The name a file had in `rev`, from the history. Comparing the two versions directly only finds
+ * a rename while the file still looks like what it was; the history saw each step as it happened,
+ * so it still knows the old name after the file has been rewritten since.
+ */
+function renameInHistory(dir: string, path: string, rev: string): Promise<string | null> {
+  const key = `${dir}\u0000${rev}\u0000${path}`;
+  const hit = historyCache.get(key);
+  if (hit && Date.now() - hit.at < 2000) return hit.name;
+  const name = (async () => {
+    const [after, out] = await Promise.all([
+      git(dir, ['rev-list', `${rev}..HEAD`]).catch(() => ''),
+      git(dir, ['-c', 'core.quotepath=off', 'log', '--follow', '--name-status', '--format=%H', '--', gp(path)]).catch(() => ''),
+    ]);
+    const since = new Set(after.split('\n').filter(Boolean));
+    if (!since.size) return null;
+    let now = gp(path);
+    let counts = false;
+    for (const line of out.split('\n')) {
+      const l = line.replace(/\r$/, '');
+      if (/^[0-9a-f]{40}$/.test(l)) {
+        counts = since.has(l); // only renames made after the version being read
+        continue;
+      }
+      const m = /^R\d*\t(.+)\t(.+)$/.exec(l);
+      if (counts && m && m[2] === now) now = m[1];
+    }
+    return now === gp(path) ? null : wp(now);
+  })().catch(() => null);
+  if (historyCache.size > 32) historyCache.clear();
+  historyCache.set(key, { at: Date.now(), name });
+  return name;
+}
+
 /** The name a file now at `path` went by in `rev`, when it has been renamed or moved since. */
 async function renamedFrom(dir: string, path: string, rev: string): Promise<string | null> {
   const renamed = (await renamesSince(dir, rev)).get(path);
   if (renamed) return renamed;
+  // Renamed in one version and rewritten in a later one: the two versions no longer look alike,
+  // but the history watched it happen.
+  const known = await renameInHistory(dir, path, rev);
+  if (known) return known;
   // Moved but not saved as a version yet: a rename git cannot see, so go by the content itself.
   const hash = await exec(['hash-object', '--', gp(path)], dir);
   if (hash.exitCode !== 0) return null;

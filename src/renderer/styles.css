@@ -401,6 +401,8 @@ svg.ico { width: 16px; height: 16px; flex: none; }
 .cm-ref:hover { background: var(--accent-soft); text-decoration: underline; }
 .cm-ref svg { width: 14px; height: 14px; vertical-align: -2px; margin-right: 3px; }
 .cm-ref.broken { color: var(--danger); text-decoration: underline wavy var(--danger); }
+/* The file has left the workspace, but the link still opens the version it was cited from. */
+.cm-ref.gone { color: var(--muted); text-decoration: underline dotted var(--muted); }
 .cm-ref.active { background: var(--mark-soft); outline: 2px solid var(--mark); }
 .cm-ref .badge { margin-left: 4px; font-weight: 500; vertical-align: 1px; }
 /* A reference in a note: icon widget, editable label text, then the version badge. */

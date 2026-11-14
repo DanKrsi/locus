@@ -603,7 +603,6 @@ function Editor(p: Props) {
   const ctx: Ctx = {
     opts: {
       doc: '',
-      eol: '\n',
       onChange: () => undefined,
       onSave: () => p.onSave(),
       ...p.callbacks,

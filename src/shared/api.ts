@@ -205,6 +205,8 @@ export interface Api {
   importPackage(file?: string, dest?: string): Promise<WorkspaceInfo | null>;
   /** Opens the demo workspace that ships with the app, unpacking it into Documents the first time. */
   openDemo(dest?: string): Promise<WorkspaceInfo>;
+  /** Puts a fresh copy of the demo workspace in a folder of the user's choosing, and opens it. */
+  createDemo(dest?: string): Promise<WorkspaceInfo | null>;
   sharingStatus(fetch: boolean): Promise<SharingInfo>;
   sync(): Promise<SyncResult>;
   conflictSides(path: string): Promise<{ mine: Uint8Array | null; theirs: Uint8Array | null; theirsAuthor: string }>;
@@ -234,7 +236,7 @@ export const API_METHODS: (keyof Api)[] = [
   'head', 'versions', 'changesSince', 'uncommitted', 'saveVersion', 'ensureVersion', 'diffHunks',
   'getSettings', 'setSettings', 'pickExternalFiles', 'readExternal', 'openExternally', 'setTitleBarColors',
   'renameFile', 'findMoved', 'citations', 'versionChanges', 'updateLinks', 'undoLinkUpdate', 'ensureNoteId', 'findNoteById',
-  'exportNotePage', 'planExport', 'writeExport', 'exportPackage', 'importPackage', 'openDemo', 'sharingStatus', 'sync', 'conflictSides', 'resolveConflict', 'finishSync', 'abortSync',
+  'exportNotePage', 'planExport', 'writeExport', 'exportPackage', 'importPackage', 'openDemo', 'createDemo', 'sharingStatus', 'sync', 'conflictSides', 'resolveConflict', 'finishSync', 'abortSync',
   'githubSignInStart', 'githubSignInWait', 'githubSignOut', 'githubShare', 'githubInvite', 'githubPeople', 'githubRepos',
   'githubAcceptInvitation', 'githubClone', 'copyText', 'showInFolder', 'trashFile',
 ];

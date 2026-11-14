@@ -1,7 +1,7 @@
 {
   "name": "locus",
   "productName": "Locus",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Write markdown notes that link to exact places in PDFs, code, spreadsheets and their versions.",
   "license": "MIT",
   "private": true,
@@ -73,7 +73,7 @@
   "build": {
     "appId": "io.github.dankrsi.locus",
     "productName": "Locus",
-    "copyright": "Copyright \u00a9 2026 Daniel Krsikapa",
+    "copyright": "Copyright © 2026 Daniel Krsikapa",
     "directories": {
       "output": "release",
       "buildResources": "build"

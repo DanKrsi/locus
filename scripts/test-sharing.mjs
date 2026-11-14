@@ -73,6 +73,34 @@ await step('import the package: files, history and pinned links come along', asy
   if (!checks) throw new Error('pinned link does not resolve in the imported copy');
 });
 
+await step('create a demo workspace in a folder of your own', async () => {
+  const mine = join(out, 'my demo');
+  const info = await callApi('createDemo', mine);
+  if (!info || !info.root.endsWith('my demo')) throw new Error('the demo did not open where it was put');
+  if (!existsSync(join(mine, 'notes', 'Start here.md'))) throw new Error('the demo note is missing');
+  if (Number(gitIn(mine, 'rev-list', '--count', 'HEAD')) < 3) throw new Error("the demo's history did not come along");
+  if (gitIn(mine, 'remote')) throw new Error('the demo copy should not keep a remote');
+  // A second copy stands on its own: the first is not touched or moved.
+  const again = await callApi('createDemo', join(out, 'my demo 2'));
+  if (!again || !existsSync(join(mine, 'notes', 'Start here.md'))) throw new Error('the second copy disturbed the first');
+});
+
+await step('a folder with files in it is refused, so nothing is overwritten', async () => {
+  const taken = join(out, 'taken');
+  await mkdir(taken, { recursive: true });
+  await writeFile(join(taken, 'my thesis.md'), '# Mine\n');
+  const err = await callApi('createDemo', taken).then(() => null, (e) => String(e.message));
+  if (!err || !/isn't empty/.test(err)) throw new Error(`expected a refusal, got ${err}`);
+  if (!existsSync(join(taken, 'my thesis.md'))) throw new Error('the file in the folder was lost');
+});
+
+await step('settings offer the demo while a workspace is open', async () => {
+  await win.locator('.header button[title="Settings"]').click();
+  await win.locator('.locus-dialog').getByRole('button', { name: /Create a demo workspace/ }).waitFor({ timeout: 5000 });
+  await shot('settings-demo');
+  await win.locator('.dialog-foot').getByRole('button', { name: 'Done' }).click();
+});
+
 await step('reopen the original and connect an online copy', async () => {
   execFileSync('git', ['init', '--bare', '-b', 'main', remote]);
   gitIn(workspace, 'remote', 'add', 'origin', remote);

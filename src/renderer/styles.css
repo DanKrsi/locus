@@ -358,6 +358,10 @@ svg.ico { width: 16px; height: 16px; flex: none; }
   margin-bottom: 10px;
 }
 .choice .sub { color: var(--muted); font-size: 12.5px; }
+/* A quieter second way to take a choice above, e.g. the demo in a folder of your own. */
+.choice-extra { display: flex; justify-content: flex-end; margin: -8px 0 12px; }
+.choice-extra button { padding: 2px 4px; color: var(--accent); font-size: 12.5px; }
+.choice-extra button:hover { text-decoration: underline; }
 .recent-row { padding: 7px 8px; border-radius: 6px; cursor: pointer; }
 .recent-row:hover { background: var(--accent-soft); }
 

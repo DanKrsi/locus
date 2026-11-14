@@ -305,6 +305,22 @@ export function App() {
     });
   }, []);
 
+  /**
+   * Opens the demo workspace: 'here' goes to the copy in Documents (making it the first time),
+   * 'somewhere' puts a fresh copy in a folder the user picks.
+   */
+  async function openDemo(where: 'here' | 'somewhere') {
+    try {
+      const info = where === 'here' ? await api.openDemo() : await api.createDemo();
+      if (!info) return;
+      // The first time, start on the note that walks through everything.
+      if (!localStorage.getItem(sessionKey(info.root))) localStorage.setItem(sessionKey(info.root), JSON.stringify({ notes: [DEMO_NOTE], activeNote: DEMO_NOTE }));
+      await openWorkspace(undefined, false, info);
+    } catch (e) {
+      showToast(String((e as Error).message).replace(/^Error invoking remote method 'api': (Error: )?/, ''));
+    }
+  }
+
   const loadCitations = useCallback(async () => {
     setCitations(await api.citations().catch(() => [] as Citation[]));
   }, []);
@@ -1317,16 +1333,7 @@ export function App() {
             }
           }}
           onGitHub={() => setGhOpen({})}
-          onDemo={async () => {
-            try {
-              const info = await api.openDemo();
-              // The first time, start on the note that walks through everything.
-              if (!localStorage.getItem(sessionKey(info.root))) localStorage.setItem(sessionKey(info.root), JSON.stringify({ notes: [DEMO_NOTE], activeNote: DEMO_NOTE }));
-              await openWorkspace(undefined, false, info);
-            } catch (e) {
-              showToast(String((e as Error).message).replace(/^Error invoking remote method 'api': (Error: )?/, ''));
-            }
-          }}
+          onDemo={(where) => void openDemo(where)}
         />
       ) : (
         <div
@@ -1538,6 +1545,10 @@ export function App() {
             setShowSettings(false);
             setClaudeDialog('settings');
           }}
+          onDemo={() => {
+            setShowSettings(false);
+            void openDemo('somewhere');
+          }}
         />
       )}
       {claudeDialog && <ClaudeDialog first={claudeDialog === 'first'} onClose={() => setClaudeDialog(null)} />}
@@ -1644,7 +1655,7 @@ function Welcome({
   onCreate(): void;
   onImport(): void;
   onGitHub(): void;
-  onDemo(): void;
+  onDemo(where: 'here' | 'somewhere'): void;
 }) {
   return (
     <div className="welcome">
@@ -1652,10 +1663,13 @@ function Welcome({
         <div>
           <h1>Welcome</h1>
           <p className="muted" style={{ marginTop: 0 }}>Pick a folder to work in. Your notes and the files they cite live there together.</p>
-          <button className="choice demo" onClick={onDemo}>
+          <button className="choice demo" onClick={() => onDemo('here')}>
             <span><Icon name="presentation" /> <b>Try the demo</b></span>
             <span className="sub">A small workspace that shows every kind of link. Nothing to download</span>
           </button>
+          <div className="choice-extra">
+            <button onClick={() => onDemo('somewhere')}>Put a copy in a folder of my own…</button>
+          </div>
           <button className="choice" onClick={() => onOpen()}>
             <span><Icon name="folderOpen" /> <b>Open a folder</b></span>
             <span className="sub">Any folder of documents or code</span>
@@ -1736,11 +1750,13 @@ function SettingsDialog({
   onChange,
   onClose,
   onClaude,
+  onDemo,
 }: {
   settings: Settings;
   onChange(p: Partial<Settings>): void;
   onClose(): void;
   onClaude(): void;
+  onDemo(): void;
 }) {
   return (
     <div className="backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
@@ -1813,6 +1829,13 @@ function SettingsDialog({
             <div className="muted" style={{ marginBottom: 8 }}>When a side is full, opening another file closes the one you looked at longest ago.</div>
             <TabLimit label="Editor (notes and flowcharts)" value={settings.editorTabLimit ?? 0} onChange={(n) => onChange({ editorTabLimit: n })} />
             <TabLimit label="Viewer (documents)" value={settings.viewerTabLimit ?? 0} onChange={(n) => onChange({ viewerTabLimit: n })} />
+          </section>
+          <section>
+            <div style={{ fontWeight: 600, marginBottom: 6 }}>Demo workspace</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span className="muted" style={{ flex: 1 }}>A small workspace that shows every kind of link, in a folder of your choosing. Yours is untouched.</span>
+              <button className="outline" onClick={onDemo}>Create a demo workspace…</button>
+            </div>
           </section>
           <section>
             <div style={{ fontWeight: 600, marginBottom: 6 }}>Claude</div>

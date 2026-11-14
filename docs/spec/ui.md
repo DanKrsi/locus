@@ -70,6 +70,13 @@ folder, create a workspace, open a shared `.locus` file, download from GitHub; a
 list. The demo ships inside the app: the first time it is unpacked into `Documents\Locus\Locus
 demo` and opens on its **Start here** note; later the same folder is reopened.
 
+**A demo of your own**: **Put a copy in a folder of my own…** under the demo button, and
+**Settings → Demo workspace → Create a demo workspace…** once a workspace is open, both ask where
+it should go and put a fresh copy there, which opens on **Start here**. The folder picked is used
+as it is when it is empty, otherwise a `Locus demo` folder is made inside it (`Locus demo (2)`
+and so on when that name is taken), so nothing already there is touched. A folder that holds
+files is refused rather than written into.
+
 ## 4. Left pane: notes
 
 - Note tabs (● = unsaved), middle-click closes, drag to reorder (both panes), + new note.
@@ -302,6 +309,9 @@ per line, so diffs stay readable.
   instantly; the rail and chip still show.
 
 ## 6. Settings
+
+Terminology, theme and colours, autosave, motion, tab limits, **Demo workspace** (a fresh copy of
+the demo wherever you choose, see §3) and Claude.
 
 ### 6.1 Claude
 

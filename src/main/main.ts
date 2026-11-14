@@ -204,6 +204,22 @@ async function githubRepoOf(root: string) {
   return gh.parseGitHubUrl(await share.remoteUrl(root));
 }
 
+/** The demo workspace package that ships with the app. */
+function demoPackage(): string {
+  return app.isPackaged ? join(process.resourcesPath, 'Locus-demo.locus') : join(app.getAppPath(), 'build', 'Locus-demo.locus');
+}
+
+/**
+ * Where a copy of the demo goes inside the folder that was picked: that folder itself when it is
+ * empty (someone made it for the demo), otherwise a new folder in it, so nothing there is mixed in.
+ */
+async function demoFolderIn(picked: string): Promise<string> {
+  if ((await fs.readdir(picked)).length === 0) return picked;
+  let dest = join(picked, 'Locus demo');
+  for (let i = 2; await exists(dest); i++) dest = join(picked, `Locus demo (${i})`);
+  return dest;
+}
+
 async function documentsFolder(name: string): Promise<string> {
   let dest = join(app.getPath('documents'), 'Locus', name.replace(/[<>:"/\\|?*]/g, '').trim() || 'Workspace');
   for (let i = 2; await exists(dest); i++) dest = join(app.getPath('documents'), 'Locus', `${name} (${i})`);
@@ -535,9 +551,22 @@ const api: Api = {
     // Opened before: go back to it, with whatever was changed there.
     if (!(await exists(join(dest, WORKSPACE_DIR)))) {
       if (await exists(dest)) dest = await documentsFolder('Locus demo');
-      const pkg = app.isPackaged ? join(process.resourcesPath, 'Locus-demo.locus') : join(app.getAppPath(), 'build', 'Locus-demo.locus');
-      await share.importPackage(pkg, dest);
+      await share.importPackage(demoPackage(), dest);
     }
+    return openWorkspaceAt(dest);
+  },
+  async createDemo(dest) {
+    if (!dest) {
+      const r = await dialog.showOpenDialog(win!, {
+        properties: ['openDirectory', 'createDirectory'],
+        title: 'Where should the demo workspace go?',
+        buttonLabel: 'Put the demo here',
+        defaultPath: workspace ? dirname(workspace.root) : app.getPath('documents'),
+      });
+      if (r.canceled || !r.filePaths[0]) return null;
+      dest = await demoFolderIn(r.filePaths[0]);
+    }
+    await share.importPackage(demoPackage(), dest);
     return openWorkspaceAt(dest);
   },
   async sharingStatus(doFetch) {

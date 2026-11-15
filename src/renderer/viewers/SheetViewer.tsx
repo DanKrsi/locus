@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { basename, colLetters, formatA1Range, formatSheetRef, parseSheetRef, type CellBox } from '../../core/link';
 import { Icon } from '../icons';
 import { CiteButton } from './CiteButton';
-import { cellKey, loadWorkbook, nameForBox, resolveSheetRef, type CellModel, type SheetModel, type WorkbookModel } from './sheetModel';
+import { cellKey, loadWorkbook, nameForBox, resolveSheetRef, type CellModel, type SheetImage, type SheetModel, type WorkbookModel } from './sheetModel';
 import type { ViewerProps } from './types';
 import { centred, glide, pulse, settled, showTravel } from './travel';
 
@@ -275,6 +275,22 @@ export function SheetViewer({ data, path, reveal, onCite, handle, onPlace, zoom 
     };
   };
 
+  /**
+   * Where a picture sits over the grid. Excel pins pictures to cells, so they scroll and resize
+   * with them; the column widths here are Locus's own reckoning, so the fit is close, not exact.
+   */
+  const imageStyle = (im: SheetImage): React.CSSProperties => {
+    const left = HEAD_W + colPre[Math.min(im.col, nCols) - 1] + im.dx * zoom;
+    const top = HEAD_H + rowPre[Math.min(im.row, nRows) - 1] + im.dy * zoom;
+    const right = im.col2
+      ? HEAD_W + colPre[Math.min(im.col2, nCols) - 1] + (im.dx2 ?? 0) * zoom
+      : left + (im.w ?? 120) * zoom;
+    const bottom = im.row2
+      ? HEAD_H + rowPre[Math.min(im.row2, nRows) - 1] + (im.dy2 ?? 0) * zoom
+      : top + (im.h ?? 90) * zoom;
+    return { left, top, width: Math.max(8, right - left), height: Math.max(8, bottom - top) };
+  };
+
   const cells: React.ReactNode[] = [];
   if (sheet) {
     for (let r = r0; r <= r1; r++) {
@@ -422,6 +438,9 @@ export function SheetViewer({ data, path, reveal, onCite, handle, onPlace, zoom 
           {sheet && (
             <div className="grid-inner" style={{ width: HEAD_W + colPre[nCols], height: HEAD_H + rowPre[nRows], ['--sheet-zoom' as string]: zoom }}>
               {cells}
+              {sheet.images.map((im, i) => (
+                <img key={'img' + i} className="sheet-image" src={im.src} alt="" style={imageStyle(im)} />
+              ))}
               {heads}
               <div className="corner" style={{ top: scroll.top, left: scroll.left, width: HEAD_W, height: HEAD_H, zIndex: 7 }} />
               {cited && cited.sheet === active && <div className="cited-box" style={boxRect(cited.box)} />}

@@ -28,6 +28,37 @@ export async function readSlides(data: Uint8Array): Promise<string[]> {
   return out;
 }
 
+const escapeXml = (s: string) =>
+  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+/**
+ * Puts the fallback in place of each piece of a slide that PowerPoint wrote twice: an equation,
+ * a modern chart, a shape with newer effects. PowerPoint keeps a plain picture of such a piece
+ * for readers that do not understand the modern form, and a reader that skips the whole block —
+ * as the one Locus draws slides with does — shows nothing at all where the equation should be.
+ * Where there is no picture to fall back on, the equation's own characters are left in its place
+ * so the slide still reads.
+ */
+export function showFallbacks(xml: string): string {
+  const block = /<(?:\w+:)?AlternateContent\b[^>]*>(?:(?!<(?:\w+:)?AlternateContent\b)[\s\S])*?<\/(?:\w+:)?AlternateContent>/;
+  let out = xml;
+  for (let i = 0; i < 100; i++) {
+    const found = block.exec(out);
+    if (!found) break;
+    const inner = found[0];
+    const fallback = /<(?:\w+:)?Fallback\b[^>]*>([\s\S]*?)<\/(?:\w+:)?Fallback>/.exec(inner);
+    let replacement = fallback ? fallback[1] : '';
+    if (!fallback) {
+      // No picture: keep the characters of the equation, so the slide is not silently missing it.
+      // A run, not a paragraph: an equation sits inside the paragraph of a text body.
+      const text = [...inner.matchAll(/<m:t[^>]*>([\s\S]*?)<\/m:t>/g)].map((m) => m[1]).join('');
+      replacement = text ? `<a:r><a:t>${escapeXml(text.replace(/&[a-z]+;/g, ' '))}</a:t></a:r>` : '';
+    }
+    out = out.slice(0, found.index) + replacement + out.slice(found.index + inner.length);
+  }
+  return out;
+}
+
 /** Letters and digits only, lower-cased: so line breaks and spacing don't decide a match. */
 const bare = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
 

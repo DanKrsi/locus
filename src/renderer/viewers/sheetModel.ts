@@ -14,6 +14,26 @@ export interface CellModel {
   formula?: string;
 }
 
+/**
+ * A picture anchored in a sheet. Excel pins pictures to cells, so they move with the grid; the
+ * offsets inside the anchor cells are in pixels at 100%.
+ */
+export interface SheetImage {
+  col: number;
+  row: number;
+  dx: number;
+  dy: number;
+  /** The cell the far corner is pinned to, when the picture is pinned to two cells. */
+  col2?: number;
+  row2?: number;
+  dx2?: number;
+  dy2?: number;
+  /** Size in pixels, for a picture pinned to one cell only. */
+  w?: number;
+  h?: number;
+  src: string;
+}
+
 export interface SheetModel {
   name: string;
   tabColor?: string;
@@ -23,6 +43,7 @@ export interface SheetModel {
   rowH: number[];
   cells: Map<number, CellModel>;
   merges: CellBox[];
+  images: SheetImage[];
 }
 
 export interface WorkbookModel {
@@ -82,6 +103,50 @@ export function formatValue(value: unknown, fmt?: string): { text: string; num: 
   return { text: String(value), num: false };
 }
 
+/** English Metric Units per pixel at 96 dpi: how Excel writes the offsets inside a cell. */
+const EMU = 9525;
+
+function dataUrl(buffer: unknown, extension?: string): string | null {
+  const bytes =
+    buffer instanceof Uint8Array ? buffer : buffer instanceof ArrayBuffer ? new Uint8Array(buffer) : null;
+  if (!bytes?.length) return null;
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  const type = extension === 'jpg' ? 'jpeg' : (extension ?? 'png');
+  return `data:image/${type};base64,${btoa(binary)}`;
+}
+
+/** The pictures anchored in a sheet, with where each one is pinned. */
+function sheetImages(wb: ExcelJS.Workbook, ws: ExcelJS.Worksheet): SheetImage[] {
+  const out: SheetImage[] = [];
+  const px = (emu?: number) => Math.round((emu ?? 0) / EMU);
+  for (const image of ws.getImages?.() ?? []) {
+    const media = wb.getImage(Number(image.imageId)) as unknown as { buffer?: unknown; extension?: string } | undefined;
+    const src = media ? dataUrl(media.buffer, media.extension) : null;
+    if (!src) continue;
+    const range = image.range as unknown as {
+      tl: { nativeCol: number; nativeRow: number; nativeColOff?: number; nativeRowOff?: number };
+      br?: { nativeCol: number; nativeRow: number; nativeColOff?: number; nativeRowOff?: number };
+      ext?: { width: number; height: number };
+    };
+    if (!range?.tl) continue;
+    out.push({
+      col: range.tl.nativeCol + 1,
+      row: range.tl.nativeRow + 1,
+      dx: px(range.tl.nativeColOff),
+      dy: px(range.tl.nativeRowOff),
+      col2: range.br ? range.br.nativeCol + 1 : undefined,
+      row2: range.br ? range.br.nativeRow + 1 : undefined,
+      dx2: range.br ? px(range.br.nativeColOff) : undefined,
+      dy2: range.br ? px(range.br.nativeRowOff) : undefined,
+      w: range.ext ? Math.round(range.ext.width) : undefined,
+      h: range.ext ? Math.round(range.ext.height) : undefined,
+      src,
+    });
+  }
+  return out;
+}
+
 async function loadXlsx(data: Uint8Array): Promise<WorkbookModel> {
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer);
@@ -127,7 +192,13 @@ async function loadXlsx(data: Uint8Array): Promise<WorkbookModel> {
       const b = parseA1Range(m);
       if (b) merges.push(b);
     }
-    sheets.push({ name: ws.name, tabColor: argb(ws.properties?.tabColor), rows, cols, colW, rowH, cells, merges });
+    let images: SheetImage[] = [];
+    try {
+      images = sheetImages(wb, ws);
+    } catch {
+      images = []; // a picture Locus cannot read is not a reason to lose the sheet
+    }
+    sheets.push({ name: ws.name, tabColor: argb(ws.properties?.tabColor), rows, cols, colW, rowH, cells, merges, images });
   });
   const names: WorkbookModel['names'] = [];
   const model = (wb.definedNames as unknown as { model?: { name: string; ranges: string[] }[] }).model ?? [];
@@ -195,6 +266,7 @@ function loadCsv(data: Uint8Array, name: string, sep: string): WorkbookModel {
         rowH: [0, ...Array(Math.max(1, rowsData.length)).fill(DEFAULT_ROW_H)],
         cells,
         merges: [],
+        images: [],
       },
     ],
     names: [],

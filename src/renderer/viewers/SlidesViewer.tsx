@@ -4,22 +4,37 @@ import { init } from 'pptx-preview';
 import JSZip from 'jszip';
 
 /**
- * Removes [Content_Types].xml entries for parts that aren't in the file. PowerPoint ignores
- * them, but pptx-preview stops loading slides when it meets one (some generators emit them).
+ * Two things the deck needs before it can be drawn:
+ *
+ * - [Content_Types].xml entries for parts that aren't in the file. PowerPoint ignores them, but
+ *   pptx-preview stops loading slides when it meets one (some generators emit them).
+ * - Pieces PowerPoint wrote twice — equations above all, and modern charts and effects. The
+ *   renderer skips those blocks whole, so the slide comes up missing them; putting PowerPoint's
+ *   own fallback picture in their place is what the fallback is for (see core/slides).
  */
 async function sanitize(data: Uint8Array): Promise<ArrayBuffer> {
   const zip = await JSZip.loadAsync(data);
+  let changed = false;
   const types = await zip.file('[Content_Types].xml')?.async('string');
   if (types) {
     const fixed = types.replace(/<Override PartName="\/([^"]+)"[^>]*\/>/g, (m, part: string) => (zip.file(part) ? m : ''));
     if (fixed !== types) {
       zip.file('[Content_Types].xml', fixed);
-      return zip.generateAsync({ type: 'arraybuffer' });
+      changed = true;
     }
   }
-  return data.slice().buffer as ArrayBuffer;
+  for (const file of zip.file(/^ppt\/(slides|slideLayouts|slideMasters)\/[^/]+\.xml$/)) {
+    const xml = await file.async('string');
+    const shown = showFallbacks(xml);
+    if (shown !== xml) {
+      zip.file(file.name, shown);
+      changed = true;
+    }
+  }
+  return changed ? zip.generateAsync({ type: 'arraybuffer' }) : (data.slice().buffer as ArrayBuffer);
 }
 import type { Rect } from '../../core/link';
+import { showFallbacks } from '../../core/slides';
 import { Icon } from '../icons';
 import { CiteButton } from './CiteButton';
 import type { ViewerProps } from './types';

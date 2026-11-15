@@ -216,6 +216,18 @@ const hoverLink = async (label) => {
   }
 };
 
+await step('a picture anchored in a sheet is drawn over the cells', async () => {
+  const sheet = win.locator('.viewer:not(.hidden)').first();
+  const picture = sheet.locator('img.sheet-image').first();
+  await picture.waitFor({ timeout: 15000 });
+  const box = await picture.boundingBox();
+  if (!box || box.width < 20 || box.height < 20) throw new Error(`the picture came out ${JSON.stringify(box)}`);
+  // It sits over the cells it is anchored to, and does not take their clicks.
+  const grid = await sheet.locator('.grid-scroll').first().boundingBox();
+  if (box.x < grid.x || box.y < grid.y) throw new Error('the picture is outside the grid');
+  await shot('sheet-picture');
+});
+
 await step('hover card', async () => {
   await hoverLink('BDS-100 p5');
   await win.waitForTimeout(800);

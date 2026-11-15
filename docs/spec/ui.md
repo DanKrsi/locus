@@ -312,7 +312,8 @@ per line, so diffs stay readable.
 |---|---|
 | PDF | Grey background, white pages, page box (printed labels supported), zoom, search, **Area** tool (crosshair, drag a translucent gold box; Esc cancels), text selection becomes the quote |
 | Code / text | Read-only, syntax highlighted, line numbers; cited lines get a pale gold band |
-| Spreadsheet | Excel-like grid: column letters / row numbers, column widths, merged cells, fills, bold, number formats, sheet tabs at the bottom; name box + formula bar; virtualised rendering |
+| Spreadsheet | Excel-like grid: column letters / row numbers, column widths, merged cells, fills, bold, number formats, sheet tabs at the bottom; name box + formula bar; virtualised rendering. Pictures anchored in a sheet are drawn over the cells they are pinned to, scrolling and scaling with them, and never take a click meant for a cell |
+| Slides | Every slide in a scrolling list, slide box, **Area** tool (a box on a slide, cited as a place within it). Equations and other parts PowerPoint wrote twice are drawn from the picture it keeps for readers that cannot show the modern form; where there is no picture, the equation's characters are shown as text |
 | Markdown | Rendered; headings can be cited |
 | Image | Fit / zoom; Area tool |
 | Audio / video | Player; Cite time |

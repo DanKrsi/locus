@@ -273,6 +273,36 @@ scene('duplicate a document, the way people keep a copy before meddling', async 
   await report('after duplicating the workbook');
 });
 
+scene('an equation on a slide is shown, not silently dropped', async () => {
+  // PowerPoint writes an equation inside mc:AlternateContent, which the renderer skips whole.
+  const file = join(ws, 'docs', 'review.pptx');
+  const zip = await JSZip.loadAsync(await readFile(file));
+  const slide = zip.file('ppt/slides/slide2.xml') ?? zip.file('ppt/slides/slide1.xml');
+  const xml = await slide.async('string');
+  const math =
+    '<mc:AlternateContent xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006">' +
+    '<mc:Choice Requires="a14"><m:oMath><m:r><m:t>MS = 1.42 (ultimate)</m:t></m:r></m:oMath></mc:Choice>' +
+    '</mc:AlternateContent>';
+  // Inside a paragraph of a text body, where PowerPoint puts an inline equation.
+  const at = xml.indexOf('</a:p>');
+  if (at < 0) return note('skipped: no text on the slide to put an equation in');
+  zip.file(slide.name, xml.slice(0, at) + math + xml.slice(at));
+  await writeFile(file, await zip.generateAsync({ type: 'nodebuffer' }));
+  await win.evaluate(() => window.dispatchEvent(new Event('focus')));
+
+  await win.keyboard.press('Control+P');
+  await win.getByPlaceholder('Find a file by name').fill('review.pptx');
+  await win.locator('.tree-row', { hasText: 'review.pptx' }).first().waitFor({ timeout: 10000 });
+  await win.keyboard.press('Enter');
+  const viewer = win.locator('.viewer:not(.hidden)').first();
+  await viewer.locator('.slides-host').first().waitFor({ timeout: 25000 });
+  await win.waitForTimeout(2500);
+  const shown = await viewer.getByText('MS = 1.42 (ultimate)').count();
+  if (!shown) problem('an equation on a slide is not shown at all');
+  else note('the equation reads on the slide');
+  await shot('slide-equation');
+});
+
 scene('draw a box on a slide, then shuffle the deck under it', async () => {
   // Open the deck on the right and draw a box on a slide.
   await win.keyboard.press('Control+P');

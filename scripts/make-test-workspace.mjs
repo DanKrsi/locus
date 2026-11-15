@@ -3,10 +3,11 @@
 import { exec } from 'dugite';
 import ExcelJS from 'exceljs';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { formatReference } from '../src/core/link.ts';
 
+const repo = resolve(import.meta.dirname, '..');
 const root = resolve(process.argv[2] ?? join(import.meta.dirname, '..', '..', 'locus-test-workspace'));
 
 async function git(args, env = {}) {
@@ -196,6 +197,11 @@ async function makeWorkbook(withQ3) {
     m.getCell(`B${2 + i}`).numFmt = '0.0%';
     if (margin <= 0.2) m.getCell(`C${2 + i}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFBF5E2' } };
   });
+
+  // A picture anchored in a sheet, the way a workbook from real work carries a sketch or a logo.
+  const picture = wb.addImage({ buffer: await readFile(join(repo, 'build', 'icon.png')), extension: 'png' });
+  ws.addImage(picture, 'G3:H9');
+
   return Buffer.from(await wb.xlsx.writeBuffer());
 }
 

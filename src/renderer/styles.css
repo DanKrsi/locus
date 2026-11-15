@@ -477,6 +477,8 @@ svg.ico { width: 16px; height: 16px; flex: none; }
 .pdf-page canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
 .pdf-page .textLayer { position: absolute; inset: 0; }
 .pdf-page.area-mode, .pdf-page.area-mode .textLayer { cursor: crosshair; }
+/* Pictures anchored in a sheet: above the cells, but the grid still takes the clicks. */
+.sheet-image { position: absolute; z-index: 3; pointer-events: none; object-fit: fill; }
 .slides-stage { position: relative; }
 .slides-stage.area-mode { cursor: crosshair; }
 .slides-boxes { position: absolute; inset: 0; pointer-events: none; }

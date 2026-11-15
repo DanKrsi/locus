@@ -60,7 +60,8 @@ never left looking finished, and skips a file that is already there.
 
 ## Where things are
 
-- `src/main` — Electron main process: files, git (bundled through dugite), sharing, Claude setup
+- `src/main` — Electron main process: files, git (bundled through dugite), the watch on the open
+  workspace (`watch.ts`), sharing, Claude setup
 - `src/renderer` — the window: notes editor, flowchart editor, viewers
 - `src/core`, `src/shared` — the link format and other shared logic
 - `src/mcp` — the MCP server Claude uses; `plugin` — the Claude Code plugin it ships in

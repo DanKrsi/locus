@@ -35,6 +35,8 @@ export interface HoverContext {
   redraw?(info: LinkInfo): void;
   /** Opens the citation editor for this link. */
   edit?(info: LinkInfo, view: EditorView): void;
+  /** The check still running behind an unknown status: the card is drawn again when it lands. */
+  whenKnown?: Promise<RefStatus>;
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string): HTMLElementTagNameMap[K] {
@@ -108,9 +110,28 @@ export async function buildPreview(loc: Location, src: FileSource): Promise<HTML
   return null;
 }
 
+/**
+ * The card for a reference. A link whose check is still running is drawn as what is known so
+ * far and drawn again when the answer lands, so a card opened a moment after the file changed
+ * does not sit there saying all is well.
+ */
 export function renderHoverCard(info: LinkInfo, view: EditorView, ctx: HoverContext): HTMLElement {
-  const src = sourceOf(info, ctx.notePath);
   const card = el('div', 'hover-card');
+  fillCard(card, info, view, ctx);
+  if (ctx.status.state === 'unknown' && ctx.whenKnown) {
+    void ctx.whenKnown
+      .then((status) => {
+        if (status.state === 'unknown' || !card.isConnected) return;
+        card.replaceChildren();
+        fillCard(card, info, view, { ...ctx, status });
+      })
+      .catch(() => undefined);
+  }
+  return card;
+}
+
+function fillCard(card: HTMLElement, info: LinkInfo, view: EditorView, ctx: HoverContext): void {
+  const src = sourceOf(info, ctx.notePath);
   const preview = el('div', 'preview');
   const kind = fileKind(src.path);
   if (kind === 'pdf' || kind === 'code' || kind === 'markdown' || kind === 'sheet' || kind === 'image') {
@@ -179,7 +200,6 @@ export function renderHoverCard(info: LinkInfo, view: EditorView, ctx: HoverCont
   }
   infoEl.append(actions);
   card.append(infoEl);
-  return card;
 }
 
 export { parseA1Range };

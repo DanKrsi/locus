@@ -14,4 +14,8 @@ contextBridge.exposeInMainWorld('locusEvents', {
     ipcRenderer.on('open-request', (_e, req: string) => cb(req));
     ipcRenderer.invoke('pending-open').then((req: string | null) => req && cb(req));
   },
+  /** Workspace files another program has just written. */
+  onFilesChanged(cb: (paths: string[]) => void) {
+    ipcRenderer.on('files-changed', (_e, paths: string[]) => cb(paths));
+  },
 });

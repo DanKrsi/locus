@@ -19,6 +19,7 @@ import * as share from './share';
 import { noteToPage } from './export';
 import { planExport, writeExport, LIMITS } from './exportFolder';
 import * as gh from './github';
+import { watchWorkspace, type Watcher } from './watch';
 
 const RENDERER_DIR = join(__dirname, '..', 'renderer');
 const WORKSPACE_DIR = '.locus';
@@ -52,6 +53,39 @@ const DEFAULT_SETTINGS: Settings = {
 };
 
 const settingsFile = () => join(app.getPath('userData'), 'settings.json');
+
+/** The watch on the open workspace: a file saved elsewhere should show without a click. */
+let watcher: Watcher | null = null;
+
+/** Paths Locus has just written itself, with the time: the watch passes over them. */
+const ourWrites = new Map<string, number>();
+const OUR_WRITE_MS = 3000;
+
+/** Records a write the app is making, so the watch does not report it back as outside news. */
+function ours(...paths: string[]) {
+  const now = Date.now();
+  for (const p of paths) ourWrites.set(p, now);
+  if (ourWrites.size > 500) for (const [p, t] of ourWrites) if (now - t > OUR_WRITE_MS) ourWrites.delete(p);
+}
+
+function wasOurs(path: string): boolean {
+  const t = ourWrites.get(path);
+  if (t === undefined) return false;
+  if (Date.now() - t > OUR_WRITE_MS) {
+    ourWrites.delete(path);
+    return false;
+  }
+  return true;
+}
+
+function watchFiles(root: string) {
+  watcher?.close();
+  watcher = watchWorkspace(root, (paths) => {
+    const outside = paths.filter((p) => !wasOurs(p));
+    if (!outside.length) return;
+    if (win && !win.webContents.isLoading()) win.webContents.send('files-changed', outside);
+  });
+}
 
 async function loadSettings(): Promise<Settings> {
   try {
@@ -105,6 +139,7 @@ async function openWorkspaceAt(dir: string): Promise<WorkspaceInfo> {
   }
   await git.ensureIdentity(root);
   workspace = { root, name: meta.name, managed: meta.managed };
+  watchFiles(root);
   const settings = await loadSettings();
   await saveSettings({ recentWorkspaces: [root, ...settings.recentWorkspaces.filter((r) => r !== root)].slice(0, 10) });
   return workspace;
@@ -295,11 +330,13 @@ const api: Api = {
   },
   async writeText(path, text) {
     const full = abs(path);
+    ours(path);
     await fs.mkdir(dirname(full), { recursive: true });
     await fs.writeFile(full, text, 'utf8');
   },
   async writeNewFile(path, bytes) {
     const full = abs(path);
+    ours(path);
     await fs.mkdir(dirname(full), { recursive: true });
     await fs.writeFile(full, bytes, { flag: 'wx' });
   },
@@ -365,6 +402,7 @@ const api: Api = {
     const dst = abs(to);
     if (await exists(dst)) throw new Error(`${to.slice(1)} already exists`);
     const notesBefore = await workspaceNotes();
+    ours(from, to);
     await fs.mkdir(dirname(dst), { recursive: true });
     await fs.rename(src, dst);
     const change = [{ from, to }];
@@ -378,6 +416,7 @@ const api: Api = {
         ? (rewriteCanvas(text, (md) => rewriteLinks(md, oldNote, newNote, change)) ?? { text, count: 0 })
         : rewriteLinks(text, oldNote, newNote, change);
       if (!r.count) continue;
+      ours(newNote);
       await fs.writeFile(file, r.text, 'utf8');
       updatedNotes.push(newNote);
       links += r.count;
@@ -395,12 +434,14 @@ const api: Api = {
     const file = abs(path);
     const want = await git.readBlob(root, path, rev); // follows a rename back to the name it had
     const had = await fs.readFile(file).then((b) => [...b], () => null);
+    ours(path);
     await fs.mkdir(dirname(file), { recursive: true });
     await fs.writeFile(file, want);
     return { had };
   },
   async undoRestore(path, had) {
     const file = abs(path);
+    ours(path);
     if (had) await fs.writeFile(file, Buffer.from(had));
     else await fs.rm(file, { force: true });
   },
@@ -415,6 +456,7 @@ const api: Api = {
       if (before === null) continue;
       const r = updateLinks(note, before, list);
       if (!r.count) continue;
+      ours(note);
       await fs.writeFile(abs(note), r.text, 'utf8');
       undo.notes.push({ note, before, after: r.text });
       links += r.count;
@@ -434,6 +476,7 @@ const api: Api = {
     for (const n of undo.notes) {
       // A note edited since keeps its edits.
       if ((await fs.readFile(abs(n.note), 'utf8').catch(() => null)) !== n.after) continue;
+      ours(n.note);
       await fs.writeFile(abs(n.note), n.before, 'utf8');
       restored.push(n.note);
     }
@@ -448,6 +491,7 @@ const api: Api = {
     const id = newNoteId();
     const next = addNoteId(path, text, id);
     if (next === text) throw new Error(`${path.slice(1)} can't carry an identity`);
+    ours(path);
     await fs.writeFile(full, next, 'utf8');
     return id;
   },
@@ -679,6 +723,7 @@ const api: Api = {
     shell.showItemInFolder(/^[A-Za-z]:[\/]/.test(path) ? path : abs(path));
   },
   async trashFile(path) {
+    ours(path);
     await shell.trashItem(abs(path));
   },
   async setTitleBarColors(bg, fg) {

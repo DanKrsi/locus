@@ -203,7 +203,10 @@ which can never break; a heading of another note records that note's identity (l
 
 ### 4.6 Keeping links up to date
 
-The right pane shows files as they are now, so a file edited in another program shows at once. A
+The right pane shows files as they are now: the workspace is watched, so a file another program
+saves appears within a moment, without clicking into the window. Writes Locus makes itself are
+passed over, since the part of the app that made them has already shown them. (A window coming
+back to the front still re-checks, for folders that cannot be watched.) A
 live link records the version it was cited from and is brought forward each time a version is
 saved, so it never drifts far from the file.
 

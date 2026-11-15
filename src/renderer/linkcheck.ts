@@ -34,6 +34,14 @@ const short = (sha: string) => sha.slice(0, 10);
  */
 const answers = new Map<string, { at: number; value: Promise<unknown> }>();
 
+/**
+ * Throws those answers away. Held for two seconds, they are a saving while one check runs and a
+ * trap when the files have just changed underneath: whoever knows that calls this first.
+ */
+export function forgetAnswers() {
+  answers.clear();
+}
+
 function ask<T>(key: string, get: () => Promise<T>): Promise<T> {
   const hit = answers.get(key);
   if (hit && Date.now() - hit.at < 2000) return hit.value as Promise<T>;

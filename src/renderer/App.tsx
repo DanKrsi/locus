@@ -22,7 +22,7 @@ import { invalidateLatest, loadBytes, mimeFor } from './files';
 import { locateQuote } from './viewers/pdf';
 import { ConfirmDialog, type ConfirmRequest } from './menus';
 import { findSlide, readSlides } from '../core/slides';
-import { checkLink, checkLinks, pinFor, updateFor, type CheckedLink } from './linkcheck';
+import { checkLink, checkLinks, forgetAnswers, pinFor, updateFor, type CheckedLink } from './linkcheck';
 import { linkNoteId, withLinkNoteId } from '../core/noteid';
 import { ReviewBar, UpkeepSummary, type ReviewChoice, type SummaryChoice } from './LinkUpkeep';
 import { CitationEditor, type CitationTarget } from './CitationEditor';
@@ -55,6 +55,8 @@ const DEMO_NOTE = '/notes/Start here.md';
 interface Notice {
   text: string;
   danger?: boolean;
+  /** Marks the banner that offers to fix moved links, so a later look can take it back. */
+  kind?: 'moved';
   actions?: { label: string; run(): void }[];
 }
 
@@ -84,6 +86,8 @@ export function App() {
   const [showSettings, setShowSettings] = useState(false);
   /** A question about something the app cannot take back on its own (restoring a file over itself). */
   const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
+  /** Bumped when files change on disk, so open documents read them again. */
+  const [diskKey, setDiskKey] = useState(0);
   const [showShortcuts, setShowShortcuts] = useState(false);
   /** The section-link dialog: the note it was opened from, and that note as it is on screen. */
   const [sectionLink, setSectionLink] = useState<{ notePath: string; text: string } | null>(null);
@@ -126,6 +130,7 @@ export function App() {
   const forgetStatuses = () => {
     statusCache.current.clear();
     statusGeneration.current++;
+    forgetAnswers(); // what git was asked a moment ago may no longer be true
   };
   const live = useRef({ settings, versions, docTabs, activeDoc, ws, tour, citeMode });
   live.current = { settings, versions, docTabs, activeDoc, ws, tour, citeMode };
@@ -394,18 +399,49 @@ export function App() {
     });
   }, [docTabs, activeDoc, ws]);
 
-  // Files may change outside the app: re-check when the window regains focus.
-  useEffect(() => {
-    const onFocus = () => {
-      if (!live.current.ws) return;
+  /** One refresh at a time; changes that land during one are taken up by the next. */
+  const refreshing = useRef(false);
+  const refreshAgain = useRef(false);
+
+  /**
+   * Files have changed on disk: show them as they now are. The viewers are told by bumping the
+   * key they read their bytes with, so a document someone else just saved redraws where it is.
+   */
+  const filesChanged = async () => {
+    if (!live.current.ws) return;
+    if (refreshing.current) {
+      refreshAgain.current = true;
+      return;
+    }
+    refreshing.current = true;
+    try {
       invalidateLatest();
       forgetStatuses();
-      notes.current?.reloadFromDisk();
+      setDiskKey((k) => k + 1);
+      await notes.current?.reloadFromDisk();
       notes.current?.refresh();
-      void loadCitations();
-      void checkMovedLinksRef.current();
-    };
+      await loadCitations();
+      await checkMovedLinksRef.current();
+    } catch {
+      // A file caught half-written, a folder that went away: the next look sorts it out.
+    } finally {
+      refreshing.current = false;
+      if (refreshAgain.current) {
+        refreshAgain.current = false;
+        void filesChangedRef.current();
+      }
+    }
+  };
+  const filesChangedRef = useRef(filesChanged);
+  filesChangedRef.current = filesChanged;
+
+  // Files may change outside the app: the workspace is watched, and a window that comes back to
+  // the front catches anything the watch could not see (a folder it cannot watch, a sleep).
+  useEffect(() => {
+    const onFocus = () => filesChangedRef.current();
     window.addEventListener('focus', onFocus);
+    const events = (window as unknown as { locusEvents?: { onFilesChanged?(cb: (paths: string[]) => void): void } }).locusEvents;
+    events?.onFilesChanged?.(() => filesChangedRef.current());
     return () => window.removeEventListener('focus', onFocus);
   }, []);
 
@@ -522,13 +558,19 @@ export function App() {
     return { state: 'ok', changed: true, reason: `${basename(path)} changed since it was cited` };
   };
 
+  /** Checks still running, by link, so a card opened while one is in flight can wait for it. */
+  const pendingStatus = useRef(new Map<string, Promise<RefStatus>>());
+
   const refStatus = (info: LinkInfo, notePath: string): RefStatus => {
     const key = `${notePath}|${info.dest}`;
     const cached = statusCache.current.get(key);
     if (cached) return cached;
     const asked = statusGeneration.current;
     statusCache.current.set(key, { state: 'unknown' });
-    checkRef(info, notePath).then((s) => {
+    const looking = checkRef(info, notePath);
+    pendingStatus.current.set(key, looking);
+    void looking.then((s) => {
+      if (pendingStatus.current.get(key) === looking) pendingStatus.current.delete(key);
       if (asked !== statusGeneration.current) return; // the files changed while this was looking
       statusCache.current.set(key, s);
       if (s.state !== 'ok' || s.badge || s.changed) notes.current?.refresh();
@@ -622,6 +664,7 @@ export function App() {
         notePath: notePath(),
         terminology: live.current.settings?.terminology ?? 'simple',
         status: refStatus(info, notePath()),
+        whenKnown: pendingStatus.current.get(`${notePath()}|${info.dest}`),
         versionDate,
         follow: (i) => void followRef(i, notePath()),
         compare: (i) => {
@@ -705,8 +748,6 @@ export function App() {
     });
   };
 
-  const movedFixes = useRef(new Map<string, string>());
-
   /** Finds live links in the active note whose file was moved outside the app, and offers to fix them. */
   const checkMovedLinks = async () => {
     const view = notes.current?.activeView();
@@ -727,12 +768,16 @@ export function App() {
     });
     await Promise.all(looking);
     if (notes.current?.activePath() !== notePath) return; // the user moved on while we looked
-    movedFixes.current = fixes;
-    if (!fixes.size) return void checkUnrecorded();
+    if (!fixes.size) {
+      // Nothing is lost any more: an offer still on screen from an earlier look is stale.
+      if (noticeRef.current?.kind === 'moved') setNotice(null);
+      return void checkUnrecorded();
+    }
     const n = allLinks(view.state).filter((l) => fixes.has(l.dest)).length;
     setNotice({
       text: `${n} link${n === 1 ? ' points' : 's point'} to ${fixes.size === 1 ? 'a file that was' : 'files that were'} moved.`,
-      actions: [{ label: 'Fix links', run: () => applyMovedFixes() }],
+      kind: 'moved',
+      actions: [{ label: 'Fix links', run: () => applyMovedFixes(fixes) }],
     });
   };
   /** Notes whose Record banner was closed or used; it isn't offered twice in a session. */
@@ -806,15 +851,15 @@ export function App() {
     if (!notice && ws) void checkUnrecordedRef.current();
   }, [notice, ws]);
 
-  const applyMovedFixes = () => {
+  const applyMovedFixes = (fixes: Map<string, string>) => {
     const view = notes.current?.activeView();
     if (!view) return;
     const changes = allLinks(view.state)
-      .filter((l) => movedFixes.current.has(l.dest))
+      .filter((l) => fixes.has(l.dest))
       .map((l) => ({
         from: l.from,
         to: l.to,
-        insert: formatReference(l.label, { ...l.ref, path: movedFixes.current.get(l.dest)!, pathKind: 'root' }, l.title),
+        insert: formatReference(l.label, { ...l.ref, path: fixes.get(l.dest)!, pathKind: 'root' }, l.title),
       }));
     view.dispatch({ changes });
     forgetStatuses();
@@ -1498,6 +1543,7 @@ export function App() {
               activeId={activeDoc}
               terminology={terminology}
               versionsKey={versionsKey}
+              diskKey={diskKey}
               citedRevs={citedRevs}
               citations={citations}
               onCompare={(tab, rev) => setDocTabs((ts) => ts.map((t) => (t.id === tab.id ? { ...t, compare: rev } : t)))}

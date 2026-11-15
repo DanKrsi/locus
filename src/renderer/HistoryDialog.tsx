@@ -46,7 +46,16 @@ export function HistoryDialog({
   useEffect(() => {
     if (!selected) return;
     setChanges(null);
-    api.versionChanges(selected).then(setChanges, () => setChanges([]));
+    // What changed is asked for anew on every version picked; an answer about the version
+    // before, arriving late, must not be shown under this one's name.
+    let cancelled = false;
+    api.versionChanges(selected).then(
+      (c) => !cancelled && setChanges(c),
+      () => !cancelled && setChanges([]),
+    );
+    return () => {
+      cancelled = true;
+    };
   }, [selected]);
 
   const git = terminology === 'git';

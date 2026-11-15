@@ -24,6 +24,7 @@ await win.setViewportSize({ width: 1500, height: 900 });
 const errors = [];
 win.on('pageerror', (e) => errors.push(String(e)));
 win.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
+if (process.env.PAGELOG) win.on('console', (m) => console.log('[page]', m.text()));
 
 let n = 0;
 const shot = async (name) => {
@@ -617,6 +618,21 @@ await step('restore a file as it was in an older version, and undo it', async ()
     { timeout: 15000 },
   );
   await win.locator('.notice .icon').last().click().catch(() => undefined);
+});
+
+await step('a file saved by another program shows without a click', async () => {
+  // The code is open on the right; something else writes to it while Locus is not touched.
+  await win.keyboard.press('Control+P');
+  await win.getByPlaceholder('Find a file by name').fill('solver.py');
+  await win.locator('.tree-row', { hasText: 'solver.py' }).first().waitFor({ timeout: 8000 });
+  await win.keyboard.press('Enter');
+  const viewer = win.locator('.viewer:not(.hidden)').first();
+  await viewer.locator('.cm-content').first().waitFor({ timeout: 15000 });
+  const mark = `# written from outside at ${Date.now()}`;
+  await writeFile(join(workspace, 'src', 'solver.py'), mark + '\n' + (await readFile(join(workspace, 'src', 'solver.py'), 'utf8')), 'utf8');
+  // No focus event, no click: the watch on the workspace is what brings it in.
+  await viewer.locator('.cm-content').first().getByText('written from outside').waitFor({ timeout: 15000 });
+  await shot('refreshed-from-disk');
 });
 
 await step('Open: folders fold and unfold; Motion setting', async () => {

@@ -44,6 +44,8 @@ interface Props {
   /** Zoom of the document viewers (PDFs keep their own). */
   docZoom: number;
   onDocZoom(z: number): void;
+  /** Bumped when files change on disk: the latest version of a file is read again. */
+  diskKey: number;
   onChangeRev(tab: DocTab, rev: string | undefined): void;
   onRestore(tab: DocTab, rev: string): void;
   /** Starts or changes a comparison (left side = `rev`); undefined ends it. */
@@ -154,21 +156,31 @@ export function DocsPane(p: Props) {
   );
 }
 
-function useBytes(path: string, external: boolean, rev?: string, enabled = true) {
+function useBytes(path: string, external: boolean, rev?: string, enabled = true, diskKey = 0) {
   const [data, setData] = useState<Uint8Array | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // A past version never changes; only the file as it is now is read again.
+  const key = rev ? 0 : diskKey;
+  const first = useRef(true);
   useEffect(() => {
     if (!enabled) return;
     let cancelled = false;
-    setData(null);
-    setError(null);
+    // Reading again after a change on disk keeps what is on screen until the new bytes arrive.
+    if (first.current) {
+      setData(null);
+      setError(null);
+    }
+    first.current = false;
     loadBytes({ path, external, rev })
       .then((d) => !cancelled && setData(d))
       .catch((e) => !cancelled && setError(String(e?.message ?? e)));
     return () => {
       cancelled = true;
     };
-  }, [path, rev, external, enabled]);
+  }, [path, rev, external, enabled, key]);
+  useEffect(() => {
+    first.current = true;
+  }, [path, rev, external]);
   return { data, error };
 }
 
@@ -228,7 +240,7 @@ function ViewerBody({ kind, onZoom, noteCallbacks, onEdit, ...props }: BodyProps
 }
 
 function DocView({ tab, visible, hop, ...p }: Props & { tab: DocTab; visible: boolean; hop?: VersionHop }) {
-  const main = useBytes(tab.path, tab.external, tab.rev);
+  const main = useBytes(tab.path, tab.external, tab.rev, true, p.diskKey);
   // A version hop plays once the new version's content is in and laid out: the content slides in
   // from the side of the version strip it came from (older on the left), and a chip shows the two
   // versions on a little timeline with a dot travelling between them.

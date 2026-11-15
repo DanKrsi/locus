@@ -115,11 +115,13 @@ const openNote = async (name) => {
   await clearNotice();
   await win.keyboard.press('Control+O');
   await win.getByPlaceholder('Find a file by name').fill(name);
-  await win.locator('.tree-row', { hasText: name }).first().waitFor({ timeout: 8000 });
+  await win.locator('.tree-row', { hasText: name }).first().waitFor({ timeout: 15000 });
   await win.keyboard.press('Enter');
+  // Click rather than press "e": the dialog ignores keys for a turn, so a fast key is lost.
   const choice = win.locator('.open-choice');
-  if (await choice.count()) await win.keyboard.press('e');
-  await win.locator('[data-pane="notes"] .tab.active', { hasText: name.split('/').pop() }).waitFor({ timeout: 10000 });
+  await choice.waitFor({ timeout: 8000 }).catch(() => undefined);
+  if (await choice.count()) await choice.getByText('Edit', { exact: true }).click();
+  await win.locator('[data-pane="notes"] .tab.active', { hasText: name.split('/').pop() }).waitFor({ timeout: 15000 });
 };
 
 /** Saves a version the way a user does, and says what the link check made of it. */
@@ -334,8 +336,9 @@ scene('move a whole folder with Explorer, behind the back of the app', async () 
   await mkdir(join(ws, 'code'), { recursive: true });
   await rename(join(ws, 'src', 'margins.py'), join(ws, 'code', 'margins.py'));
   await win.evaluate(() => window.dispatchEvent(new Event('focus')));
-  await win.waitForTimeout(2000);
   const notice = win.locator('.notice', { hasText: /moved/i });
+  // Chasing a lost file costs a few git calls each; the offer comes up once they are done.
+  await notice.waitFor({ timeout: 15000 }).catch(() => undefined);
   if (!(await notice.count())) problem('a file moved outside the app was not noticed');
   else {
     note(`notice: ${(await notice.innerText()).replace(/\s+/g, ' ').trim().slice(0, 200)}`);

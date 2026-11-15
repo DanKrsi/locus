@@ -136,7 +136,8 @@ const R = {
   audioAction: await ref({ path: WAV, label: 'the action', time: at(audioStarts[2]) }),
   image: await ref({ path: IMG, label: 'the drawing' }),
 };
-const heading = (slug) => `/notes/Start%20here.md#${slug}`;
+// A link to a heading of this same note: a plain #slug, which can never break (link-format §2.5).
+const heading = (slug) => `#${slug}`;
 
 // ---------- The flowchart, drafted the way Claude would ----------
 

@@ -263,6 +263,8 @@ svg.ico { width: 16px; height: 16px; flex: none; }
   font-size: 13px;
 }
 .notice.danger { background: var(--danger-soft); color: var(--danger); }
+.notice-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.notice-help { font-size: 12px; opacity: 0.85; }
 .toast {
   position: fixed;
   left: 50%;

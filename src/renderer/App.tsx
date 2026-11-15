@@ -54,10 +54,13 @@ const DEMO_NOTE = '/notes/Start here.md';
 
 interface Notice {
   text: string;
+  /** A second line: what the banner means, and what its button will do. */
+  help?: string;
   danger?: boolean;
   /** Marks the banner that offers to fix moved links, so a later look can take it back. */
   kind?: 'moved';
-  actions?: { label: string; run(): void }[];
+  /** `keep` leaves the banner up, for a button that only shows something (Show me). */
+  actions?: { label: string; run(): void; keep?: boolean }[];
 }
 
 const THEMES = [
@@ -603,9 +606,16 @@ export function App() {
       if (!(await api.exists(path).catch(() => false))) {
         if (ref.at && (await api.exists(path, ref.at).catch(() => false))) {
           rev = ref.at;
-          setNotice({ text: `${basename(path)} is no longer in the workspace. Showing the version it was cited from.` });
+          setNotice({
+            text: `${basename(path)} is no longer in the workspace. Showing the version it was cited from.`,
+            help: 'It was deleted, or moved by something other than Locus. Put the file back and the link follows it again; the version it cites can always be read.',
+          });
         } else {
-          setNotice({ text: `${path.slice(1)} wasn't found.`, danger: true });
+          setNotice({
+            text: `${path.slice(1)} wasn't found.`,
+            danger: true,
+            help: 'Nothing is at that path now, and no version of it is in this workspace. Hover the link and press Edit to point it somewhere else.',
+          });
           return;
         }
       } else if (ref.at) {
@@ -620,8 +630,19 @@ export function App() {
           const hunks = await api.diffHunks(path, at).catch(() => []);
           const m = mapLines(hunks, loc.lines.start, loc.lines.end);
           loc = { ...loc, lines: { start: m.start, end: m.end } };
-          if (m.status === 'changed') setNotice({ text: `Some of these lines were edited since they were cited${since}.`, actions });
-          else if (m.status === 'gone') setNotice({ text: `The cited lines were deleted since${since}.`, danger: true, actions });
+          if (m.status === 'changed')
+            setNotice({
+              text: `Some of these lines were edited since they were cited${since}.`,
+              help: 'This shows the lines as they are now, found by following the edits. Compare puts them beside the version cited.',
+              actions,
+            });
+          else if (m.status === 'gone')
+            setNotice({
+              text: `The cited lines were deleted since${since}.`,
+              danger: true,
+              help: 'The link still opens the version it was cited from, where the lines are. Compare shows what replaced them.',
+              actions,
+            });
           else if (m.status === 'moved') showToast(m.start === m.end ? `Moved to line ${m.start} since this was cited` : `Lines moved to ${m.start}–${m.end} since this was cited`);
         } else if (await api.fileChangedSince(path, at).catch(() => false)) {
           const name = basename(path);
@@ -631,23 +652,47 @@ export function App() {
               .then((data) => readSlides(data))
               .then((slides) => findSlide(slides, info.title!, loc.slide!))
               .catch(() => null);
-            if (!on) setNotice({ text: `The quoted text is no longer in ${name}. It changed since you cited it${since}.`, danger: true, actions });
+            if (!on)
+              setNotice({
+                text: `The quoted text is no longer in ${name}. It changed since you cited it${since}.`,
+                danger: true,
+                help: 'The deck still has the slide number cited, but not those words. The version it was cited from is still there to open.',
+                actions,
+              });
             else if (on !== loc.slide) {
               loc = { ...loc, slide: on };
-              setNotice({ text: `${name} changed since you cited it${since}. The quoted text is now on slide ${on}.`, actions });
+              setNotice({
+                text: `${name} changed since you cited it${since}. The quoted text is now on slide ${on}.`,
+                help: 'Slides were added or removed; Locus followed the quoted words to where they are now.',
+                actions,
+              });
             }
           } else if (kind === 'pdf' && info.title && loc.page) {
             // The quote says what was cited: find it in the latest file, even on another page.
             const found = await loadBytes({ path, external: false })
               .then((data) => locateQuote(data, info.title!, loc.page!))
               .catch(() => null);
-            if (!found) setNotice({ text: `The quoted text is no longer in ${name}. It changed since you cited it${since}.`, danger: true, actions });
+            if (!found)
+              setNotice({
+                text: `The quoted text is no longer in ${name}. It changed since you cited it${since}.`,
+                danger: true,
+                help: 'The passage was edited away or the page was replaced. The version it was cited from is still there to open.',
+                actions,
+              });
             else if (found.page !== loc.page) {
               loc = { ...loc, page: found.page, viewrect: loc.viewrect ? found.rect : undefined };
-              setNotice({ text: `${name} changed since you cited it${since}. The quoted text is now on page ${found.page}.`, actions });
+              setNotice({
+                text: `${name} changed since you cited it${since}. The quoted text is now on page ${found.page}.`,
+                help: 'Pages were added or removed; Locus followed the quoted words to where they are now.',
+                actions,
+              });
             }
           } else {
-            setNotice({ text: `${name} changed since you cited it${since}. This shows the latest version.`, actions });
+            setNotice({
+              text: `${name} changed since you cited it${since}. This shows the latest version.`,
+              help: 'The link has no quote to follow, so Locus cannot tell whether the spot it cites moved. Compare puts the two versions side by side.',
+              actions,
+            });
           }
         }
       }
@@ -776,8 +821,12 @@ export function App() {
     const n = allLinks(view.state).filter((l) => fixes.has(l.dest)).length;
     setNotice({
       text: `${n} link${n === 1 ? ' points' : 's point'} to ${fixes.size === 1 ? 'a file that was' : 'files that were'} moved.`,
+      help: `Locus found ${fixes.size === 1 ? 'it' : 'them'} again by version history. Fix links writes the new place into ${n === 1 ? 'the link' : 'each link'}; what ${n === 1 ? 'it cites' : 'they cite'} does not change.`,
       kind: 'moved',
-      actions: [{ label: 'Fix links', run: () => applyMovedFixes(fixes) }],
+      actions: [
+        { label: 'Fix links', run: () => applyMovedFixes(fixes) },
+        { label: 'Show me', keep: true, run: () => notes.current?.showLinks([...fixes.keys()]) },
+      ],
     });
   };
   /** Notes whose Record banner was closed or used; it isn't offered twice in a session. */
@@ -806,10 +855,30 @@ export function App() {
     if (!found.length || notes.current?.activePath() !== notePath) return;
     recordSeen.current.add(notePath);
     const n = found.length;
+    const kinds = new Set(found.map((f) => f.kind));
+    const one = n === 1;
+    const text = kinds.size === 1 && kinds.has('self')
+      ? `${one ? 'A link in this note points' : `${n} links in this note point`} at this note by its own name.`
+      : `${n} link${one ? '' : 's'} in this note ${one ? "doesn't" : "don't"} record ${
+          kinds.has('version') && kinds.size === 1 ? 'a version' : !kinds.has('version') ? 'which note they point at' : 'a version or which note they point at'
+        }, so Locus can't follow ${one ? 'it' : 'them'} through changes.`;
     setNotice({
-      text: `${n} link${n === 1 ? '' : 's'} in this note ${n === 1 ? "doesn't" : "don't"} record ${found.every((f) => f.kind === 'version') ? 'a version' : found.every((f) => f.kind !== 'version') ? 'which note they point at' : 'a version or which note they point at'}, so Locus can't follow ${n === 1 ? 'it' : 'them'} through changes.`,
-      actions: [{ label: 'Record', run: () => void recordLinks(notePath) }],
+      text,
+      help: recordHelp(kinds),
+      actions: [
+        { label: 'Record', run: () => void recordLinks(notePath) },
+        { label: 'Show me', keep: true, run: () => notes.current?.showLinks(found.map((f) => f.link.dest)) },
+      ],
     });
+  };
+
+  /** What Record will do, in the words of what these particular links are missing. */
+  const recordHelp = (kinds: Set<'version' | 'note' | 'self'>): string => {
+    const parts: string[] = [];
+    if (kinds.has('version')) parts.push('the version each file is at now, so Locus can tell later what changed');
+    if (kinds.has('note')) parts.push("the identity of the note meant, so the link survives it being renamed");
+    if (kinds.has('self')) parts.push('a plain heading link, which can never break');
+    return `Record writes ${parts.join('; ')}. Nothing else in the note changes, and it can be undone.`;
   };
 
   /** Writes the latest version into links that have none, and the note's identity into links to notes. */
@@ -1367,9 +1436,12 @@ export function App() {
 
       {notice && (
         <div className={'notice' + (notice.danger ? ' danger' : '')}>
-          {notice.text}
+          <div className="notice-body">
+            <div>{notice.text}</div>
+            {notice.help && <div className="notice-help">{notice.help}</div>}
+          </div>
           {notice.actions?.map((a) => (
-            <button key={a.label} className="outline" onClick={() => { a.run(); setNotice(null); }}>{a.label}</button>
+            <button key={a.label} className="outline" onClick={() => { a.run(); if (!a.keep) setNotice(null); }}>{a.label}</button>
           ))}
           <div className="spacer" />
           <button className="icon" onClick={() => setNotice(null)}><Icon name="x" /></button>

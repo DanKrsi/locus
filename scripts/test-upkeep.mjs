@@ -208,6 +208,12 @@ await step('Record: links made by hand get a version written into them', async (
   await openNote('byhand.md');
   const notice = win.locator('.notice', { hasText: "doesn't record a version" });
   await notice.waitFor({ timeout: 10000 });
+  // The banner says what Record will do, and can point at the link it means.
+  await notice.locator('.notice-help', { hasText: 'Record writes' }).waitFor({ timeout: 5000 });
+  await notice.getByRole('button', { name: 'Show me' }).click();
+  await win.locator('.editor-wrap .cm-flash').first().waitFor({ timeout: 5000 });
+  await shot('record-banner');
+  await notice.waitFor({ timeout: 2000 }); // showing is not answering: the banner stays
   await notice.getByRole('button', { name: 'Record' }).click();
   await win.keyboard.press('Control+S');
   await win.waitForFunction(() => window.api.readText('/notes/byhand.md').then((t) => /solver\.py#L1-L2&at=[0-9a-f]{10}\)/.test(t)), null, { timeout: 10000 });

@@ -83,6 +83,29 @@ await step('create a demo workspace in a folder of your own', async () => {
   // A second copy stands on its own: the first is not touched or moved.
   const again = await callApi('createDemo', join(out, 'my demo 2'));
   if (!again || !existsSync(join(mine, 'notes', 'Start here.md'))) throw new Error('the second copy disturbed the first');
+  // Someone opening the demo for the first time should not be met with a warning about it.
+  const note = await readFile(join(mine, 'notes', 'Start here.md'), 'utf8');
+  for (const [, dest] of note.matchAll(/\]\((\/notes\/[^)\s"]+)/g)) {
+    if (!/[?&#]id=[a-z0-9]{12}/.test(dest)) throw new Error(`a demo link to a note records no identity: ${dest}`);
+  }
+});
+
+await step('the demo opens with nothing to warn about', async () => {
+  await callApi('openWorkspace', join(out, 'my demo'));
+  await win.evaluate(() => location.reload());
+  await win.locator('.header .ws-name').waitFor({ timeout: 15000 });
+  await win.keyboard.press('Control+P');
+  await win.getByPlaceholder('Find a file by name').fill('Start here');
+  await win.locator('.tree-row', { hasText: 'Start here.md' }).first().waitFor({ timeout: 8000 });
+  await win.keyboard.press('Enter');
+  const choice = win.locator('.open-choice');
+  await choice.waitFor({ timeout: 5000 }).catch(() => undefined);
+  if (await choice.count()) await choice.getByText('Edit', { exact: true }).click();
+  await win.locator('[data-pane="notes"] .tab.active', { hasText: 'Start here.md' }).waitFor({ timeout: 15000 });
+  await win.waitForTimeout(3000);
+  const banner = await win.locator('.notice').count();
+  if (banner) throw new Error(`the demo opens with a notice: "${(await win.locator('.notice').first().innerText()).trim()}"`);
+  await shot('demo-no-notice');
 });
 
 await step('a folder with files in it is refused, so nothing is overwritten', async () => {

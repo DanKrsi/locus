@@ -277,7 +277,14 @@ export function replaceLink(view: EditorView, info: LinkInfo, text: string) {
 
 /** Briefly highlights a link (tour mode / "flash"). */
 export function flashRange(view: EditorView, from: number, to: number) {
-  view.dispatch({ effects: [flashEffect.of({ from, to }), EditorView.scrollIntoView(from, { y: 'center' })] });
+  flashRanges(view, [{ from, to }]);
+}
+
+/** Flashes several places at once and scrolls to the first ("Show me" on a banner). */
+export function flashRanges(view: EditorView, ranges: { from: number; to: number }[]) {
+  if (!ranges.length) return;
+  const sorted = [...ranges].sort((a, b) => a.from - b.from);
+  view.dispatch({ effects: [flashEffect.of(sorted), EditorView.scrollIntoView(sorted[0].from, { y: 'center' })] });
   setTimeout(() => view.dispatch({ effects: flashEffect.of(null) }), 1600);
 }
 
@@ -301,14 +308,16 @@ export function flashLine(view: EditorView, line: number) {
   flashRange(view, l.from, l.to);
 }
 
-const flashEffect = StateEffect.define<{ from: number; to: number } | null>();
+const flashEffect = StateEffect.define<{ from: number; to: number }[] | null>();
 const flashField = StateField.define<DecorationSet>({
   create: () => Decoration.none,
   update(value, tr) {
     value = value.map(tr.changes);
     for (const e of tr.effects) {
       if (e.is(flashEffect)) {
-        value = e.value ? Decoration.set([Decoration.mark({ class: 'cm-flash' }).range(e.value.from, e.value.to)]) : Decoration.none;
+        value = e.value
+          ? Decoration.set(e.value.map((r) => Decoration.mark({ class: 'cm-flash' }).range(r.from, r.to)))
+          : Decoration.none;
       }
     }
     return value;

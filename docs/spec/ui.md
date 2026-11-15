@@ -258,6 +258,14 @@ to notes are left alone: a note is always read as it is now.
   latest version into each such link, gives linked notes an identity, and turns a link to the note
   it is written in into a plain `#heading` link. Pictures and outside files are skipped.
 
+### 4.6.1 What a notice says
+
+Every notice says what happened in its first line and, under it in smaller text, what it means
+and what its button will do — never jargon, never a bare warning with nothing to act on. A notice
+about particular links also carries **Show me**, which flashes them in the note and scrolls to the
+first without closing the notice; the other buttons answer the notice and close it. The demo
+workspace ships with nothing for these notices to report.
+
 ### 4.7 Tour mode
 
 Steps through the note's references in order with ←/→ (or PageUp/PageDown); the viewer

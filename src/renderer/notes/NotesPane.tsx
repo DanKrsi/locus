@@ -11,8 +11,10 @@ import {
   docText,
   editorRedo,
   editorUndo,
+  allLinks,
   flashLine,
   flashRange,
+  flashRanges,
   formatState,
   insertBlock,
   insertLink,
@@ -52,6 +54,8 @@ export interface NotesHandle {
   handleMove(from: string, to: string): void;
   /** Opens a note and flashes a line ("Cited in" jumps). */
   revealLine(path: string, line: number): Promise<void>;
+  /** Flashes the given links of the active note and scrolls to the first ("Show me"). */
+  showLinks(dests: string[]): void;
 }
 
 type EditorCallbacks = Pick<NoteEditorOptions, 'onFollow' | 'refStatus' | 'imageUrl' | 'renderHoverCard'>;
@@ -511,6 +515,17 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
       hosts.current = nextHosts;
       setTabs((ts) => ts.map((t) => ({ ...t, path: moved(t.path) })));
       setActive((a) => (a ? moved(a) : a));
+    },
+    showLinks: (dests) => {
+      const view = active ? docs.current.get(active)?.view : undefined;
+      if (!view) return;
+      const wanted = new Set(dests);
+      flashRanges(
+        view,
+        allLinks(view.state)
+          .filter((l) => wanted.has(l.dest))
+          .map((l) => ({ from: l.from, to: l.to })),
+      );
     },
     revealLine: async (path, line) => {
       if (isCanvas(path)) {

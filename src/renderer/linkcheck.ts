@@ -9,7 +9,8 @@ import { renumberLabel } from '../core/upkeep';
 import type { Citation, NoteLinkUpdate } from '../shared/api';
 import { api } from './api';
 import { loadBytes } from './files';
-import { locateQuote } from './viewers/pdf';
+import { locatePicture, locateQuote } from './viewers/pdf';
+import type { PageBox } from '../core/picture';
 import { cellKey, loadWorkbook, resolveSheetRef } from './viewers/sheetModel';
 
 export interface CheckedLink {
@@ -40,6 +41,7 @@ const answers = new Map<string, { at: number; value: Promise<unknown> }>();
  */
 export function forgetAnswers() {
   answers.clear();
+  kept.clear();
 }
 
 function ask<T>(key: string, get: () => Promise<T>): Promise<T> {
@@ -57,6 +59,17 @@ const moved = (path: string, at: string) => ask(`m|${path}|${at}`, () => api.fin
 const hunks = (path: string, at: string) => ask(`h|${path}|${at}`, () => api.diffHunks(path, at).catch(() => []));
 const bytes = (path: string, rev?: string) =>
   ask(`b|${path}|${rev ?? ''}`, () => (rev ? api.readFile(path, rev) : loadBytes({ path, external: false })).catch(() => null));
+/**
+ * Files held for the whole check, for the picture search: it renders pages, which is the slow part,
+ * and keeps them with the file's bytes, so several boxes on one PDF render it once.
+ */
+const kept = new Map<string, Promise<Uint8Array | null>>();
+const held = (path: string, rev?: string) => {
+  const key = `${path}|${rev ?? ''}`;
+  let p = kept.get(key);
+  if (!p) kept.set(key, (p = bytes(path, rev)));
+  return p;
+};
 const slidesIn = (path: string) =>
   ask(`s|${path}`, async () => {
     const data = await bytes(path);
@@ -126,9 +139,24 @@ export async function checkLink(cite: Citation, head: string): Promise<CheckedLi
         .then((data) => (data ? locateQuote(data, cite.quote!, loc.page!) : null))
         .catch(() => null);
       if (found) return { ...base, verdict: 'follow', next: latest({ ...loc, page: found.page, viewrect: loc.viewrect ? found.rect : undefined }), reason: found.page === loc.page ? 'the quoted text is still there' : `the quoted text is now on page ${found.page}` };
-      return { ...base, verdict: 'review', next: latest(loc), reason: 'the quoted text was reworded or removed' };
+      if (!loc.viewrect) return { ...base, verdict: 'review', next: latest(loc), reason: 'the quoted text was reworded or removed' };
     }
-    return { ...base, verdict: 'review', next: latest(loc), reason: loc.viewrect ? 'the PDF changed and the area has no quote to check' : 'the PDF changed' };
+    if (!loc.viewrect) return { ...base, verdict: 'review', next: latest(loc), reason: 'the PDF changed' };
+    // A box: look for the picture inside it (a figure, a photo, a drawing has no words to quote).
+    const [was, is] = await Promise.all([held(path, at), held(now)]);
+    const v = was && is ? await locatePicture(was, loc.page, loc.viewrect, is).catch(() => null) : null;
+    const words = cite.quote ? 'the quoted text was reworded or removed, and ' : 'the PDF changed and ';
+    if (!v || v.kind === 'blank') return { ...base, verdict: 'review', next: latest(loc), reason: cite.quote ? 'the quoted text was reworded or removed' : 'the PDF changed and the area has no words or picture to check' };
+    const alike = (score: number) => `${Math.round(Math.max(0, score) * 100)}% alike`;
+    if (v.kind === 'gone') return { ...base, verdict: 'review', next: latest(loc), reason: `${words}the picture in the area wasn't found${v.best ? ` (the closest was ${alike(v.best.score)})` : ''}; the same area is proposed` };
+    const place = (b: PageBox) => latest({ ...loc, page: b.page, viewrect: { x: Math.round(b.x), y: Math.round(b.y), w: Math.round(b.w), h: Math.round(b.h) } });
+    if (v.kind === 'same') return { ...base, verdict: 'follow', next: place(v.at), reason: 'the picture in the area is unchanged' };
+    const resized = Math.abs(v.at.w - loc.viewrect.w) > 3 ? ', at a different size' : '';
+    const where = v.at.page !== loc.page ? `on page ${v.at.page}` : 'elsewhere on the page';
+    // A certain match and a best guess read differently: the person decides how hard to look.
+    const what = v.at.score >= 0.99 ? `the same picture is now ${where}${resized}` : `the best match for the picture is ${where}${resized} (${alike(v.at.score)})`;
+    if (v.kind === 'moved') return { ...base, verdict: 'review', next: place(v.at), reason: `${what}; that place is proposed` };
+    return { ...base, verdict: 'review', next: place(v.at), reason: `the picture in the area appears in ${v.count} places; the one nearest the old place is proposed` };
   }
 
   if (kind === 'sheet' && loc.sheet) {
@@ -206,6 +234,7 @@ function worthChecking(cite: Citation, touched: Map<string, Set<string>>): boole
  */
 export async function checkLinks(head: string): Promise<CheckedLink[]> {
   answers.clear(); // a fresh look: what was asked during the last check may have changed since
+  kept.clear();
   const cites = await api.citations().catch(() => [] as Citation[]);
   const touched = await filesTouchedSince(cites);
   const keyOf = (c: Citation) => `${c.path}|${c.dest}|${c.quote ?? ''}`;

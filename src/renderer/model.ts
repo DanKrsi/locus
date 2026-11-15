@@ -14,6 +14,11 @@ export interface DocTab {
   revealLeft?: RevealRequest;
   /** When set, the tab compares this version (left; LATEST for the current file) with rev/latest (right). */
   compare?: string;
+  /**
+   * Opened to review a link: the review bar has the actions, so the viewers hide their Cite
+   * buttons, whose Live/Pinned tag would otherwise read as a description of the link under review.
+   */
+  review?: boolean;
 }
 
 export interface NoteTab {

@@ -218,8 +218,9 @@ file was edited answers in about a second:
 | File | Follows by itself when | Needs a look when |
 |---|---|---|
 | Code, text | the cited lines are untouched or only moved | lines in the range were edited or deleted (the same lines in the new version are proposed) |
-| PDF with a quote | the quote is found again, on this page or another | the quote was reworded or removed |
-| PDF page or area, no quote | never (nothing to check) | always; the same page or box is proposed |
+| PDF with a quote | the quote is found again, on this page or another | the quote was reworded or removed (an area then falls back to its picture, below) |
+| PDF area, no quote (a figure, a photo, a scan) | the picture inside the area is the same, in the same place | the picture moved, was resized or is repeated (the place it was found is proposed), or wasn't found (the same area is proposed) |
+| PDF page, no quote | never (nothing to check) | always; the same page is proposed |
 | Spreadsheet | a named range still resolves; the cited cells hold the same values | a value in the cited cells changed |
 | Slide with a quote | the words are found again, on this slide or another | the words were reworded or removed |
 | Slide or slide box, no quote | never (nothing to check) | any change to the deck |
@@ -230,6 +231,17 @@ file was edited answers in about a second:
 A link whose file was deleted stays on the version it was cited from (it becomes pinned). Links
 to notes are left alone: a note is always read as it is now.
 
+- **Finding a picture again**: a box over a figure has no words to quote, so Locus renders the
+  box from the cited version and looks for it in the new one, pixel against pixel (normalised
+  correlation in grey, so recompression and antialiasing don't matter): the cited page first, then
+  outward, up to 60 pages or six seconds a box; when nothing matches at the old size it tries sizes
+  from 0.7 to 1.4 times on the pages that came closest. Only the same picture in the same place
+  follows by itself. A picture found elsewhere is a proposal, worded by how sure it is ("the same
+  picture is now on page 2", or "the best match … (87% alike)"); one found about equally well in
+  several places (a logo in every header) is called repeated and the one nearest the old place is
+  proposed. A blank area (white paper, a flat fill) has nothing to look for and says so. Not built:
+  matching a picture by the identity of its embedded image, which would be exact even when resized,
+  and boxes on slides, which still ask on any change to the deck.
 - **Nothing to decide, nothing to answer**: when every link the check found can follow its file
   by itself, Locus updates them there and then and says so in a notice with **Undo**. The summary
   only appears when something needs a person: a link that cites something that changed, or one
@@ -241,7 +253,10 @@ to notes are left alone: a note is always read as it is now.
   version again brings the summary back.
 - **Reviewing a link**: a bar under the header names the link and what happened. The note opens
   at the link on the left; on the right the cited version and the latest version sit side by
-  side, the latest at the proposed place (code shows as a difference view). **Update the link**
+  side, each marked: what was cited on the left, the proposed place on the right (code shows as a
+  difference view). The viewers' Cite buttons are hidden while reviewing: their Live/Pinned tag is
+  about the next link you would insert, and beside a link under review it read as a description
+  of that link. **Update the link**
   takes the proposal (for code, the two line boxes can be changed first). **Use what's selected
   on the right** takes the place selected in the latest version instead: an area drawn on a PDF
   page, the cells picked, the page or slide shown; the old quote is dropped, because it no longer

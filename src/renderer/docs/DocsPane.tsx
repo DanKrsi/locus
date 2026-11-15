@@ -351,7 +351,7 @@ function DocView({ tab, visible, hop, ...p }: Props & { tab: DocTab; visible: bo
           {head}
           <div className="compare-split">
             <div className="side">
-              <CiteModeContext.Provider value={{ mode: p.citeMode, setMode: p.onCiteMode, pinnedOnly: true }}>
+              <CiteModeContext.Provider value={{ mode: p.citeMode, setMode: p.onCiteMode, pinnedOnly: true, hidden: tab.review }}>
               <ViewerBody
                 kind={tab.kind}
                 path={tab.path}
@@ -420,7 +420,7 @@ function DocView({ tab, visible, hop, ...p }: Props & { tab: DocTab; visible: bo
           </span>
         </div>
       )}
-      <CiteModeContext.Provider value={{ mode: p.citeMode, setMode: p.onCiteMode, pinnedOnly: !!tab.rev }}>{body}</CiteModeContext.Provider>
+      <CiteModeContext.Provider value={{ mode: p.citeMode, setMode: p.onCiteMode, pinnedOnly: !!tab.rev, hidden: tab.review }}>{body}</CiteModeContext.Provider>
       {strip}
     </div>
   );

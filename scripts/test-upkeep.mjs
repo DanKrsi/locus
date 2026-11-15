@@ -3,6 +3,7 @@
 // Usage: npm run build && node scripts/make-test-workspace.mjs && node scripts/test-upkeep.mjs
 import { _electron as electron } from 'playwright';
 import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
+import { PDFDocument, rgb } from 'pdf-lib';
 import { join, resolve } from 'node:path';
 
 const repo = resolve(import.meta.dirname, '..');
@@ -316,6 +317,93 @@ await step('a file renamed and then rewritten is still readable at the version i
   const was = await api('readText', '/src/engine/solver.py', head);
   if (!was.includes('def ')) throw new Error('the cited version could not be read once the file was rewritten');
   if (!(await api('exists', '/src/engine/solver.py', head))) throw new Error('the cited version is reported missing');
+});
+
+// A PDF of pictures, as Word saves one: a box drawn over a picture has no words to quote, so when
+// the pictures are swapped the only way to find it again is by the picture itself.
+const pictures = async (order) => {
+  const doc = await PDFDocument.create();
+  // A made-up picture: an 8 x 8 grid of greys, different for each seed.
+  const draw = (page, seed, x, top) => {
+    let s = seed;
+    for (let r = 0; r < 8; r++)
+      for (let c = 0; c < 8; c++) {
+        s = (s * 1103515245 + 12345) & 0x7fffffff;
+        const v = (s % 256) / 255;
+        page.drawRectangle({ x: x + c * 25, y: 792 - top - (r + 1) * 15, width: 25, height: 15, color: rgb(v, v * 0.8, 1 - v) });
+      }
+  };
+  for (const seed of order) {
+    const page = doc.addPage([612, 792]);
+    draw(page, seed, 80, 100);
+    // The same third picture lower on page 1 in both versions: it has not moved.
+    if (seed === order[0]) draw(page, 99, 300, 500);
+  }
+  return doc.save();
+};
+
+await step('a box over a picture that moved to another page is proposed where the picture went', async () => {
+  await win.locator('.notice .icon').click({ timeout: 2000 }).catch(() => undefined);
+  await writeFile(join(workspace, 'docs', 'pictures.pdf'), await pictures([1, 2]));
+  await api('saveVersion', 'Pictures');
+  const v1 = (await api('versions'))[0].sha.slice(0, 10);
+  await api(
+    'writeText',
+    '/notes/pictures.md',
+    `# Pictures\n\n[picture one](/docs/pictures.pdf#page=1&viewrect=80,100,200,120&at=${v1})\n\n[the unchanged one](/docs/pictures.pdf#page=1&viewrect=300,500,200,120&at=${v1})\n\n[a blank area](/docs/pictures.pdf#page=1&viewrect=80,600,150,80&at=${v1})\n`,
+  );
+  await api('saveVersion', 'Picture links');
+  // Swapped, as when two pictures change places in Word and the PDF is saved again.
+  await writeFile(join(workspace, 'docs', 'pictures.pdf'), await pictures([2, 1]));
+  await openNote('pictures.md');
+  await win.keyboard.press('Control+Shift+S');
+  // Files changed, so Save version asks for a name first.
+  await win.getByText('Version name').waitFor({ timeout: 5000 });
+  await win.keyboard.press('Enter');
+  const sum = win.locator('.upkeep-summary');
+  await sum.waitFor({ timeout: 30000 });
+  // Earlier steps left other links behind too; only this note's are looked at here.
+  if (!/can follow by (itself|themselves)/.test(await sum.innerText())) throw new Error(`summary: ${(await sum.innerText()).split(String.fromCharCode(10)).join(' | ')}`);
+  await sum.getByRole('button', { name: /^Update the \d+ and review the rest$/ }).click();
+  const bar = win.locator('.review-bar');
+  const seen = [];
+  for (let i = 0; i < 12 && (await bar.count()); i++) {
+    await bar.waitFor({ timeout: 10000 });
+    const what = await bar.innerText();
+    seen.push(what.split(String.fromCharCode(10)).slice(0, 4).join(' '));
+    if (/picture one/.test(what)) {
+      if (!/the same picture is now on page 2; that place is proposed/.test(what)) throw new Error(`bar: ${what}`);
+      // Both sides are marked: what was cited (page 1) on the left, the proposed place (page 2) on the right.
+      const view = win.locator('[data-pane="docs"] .viewer:not(.hidden) .compare-split');
+      await view.waitFor({ timeout: 15000 });
+      const sides = view.locator('> .side');
+      const markedPage = async (n) => {
+        const box = sides.nth(n).locator('.area-box.cited').first();
+        await box.waitFor({ timeout: 10000 });
+        return box.evaluate((el) => el.closest('[data-page]')?.getAttribute('data-page'));
+      };
+      const left = await markedPage(0);
+      const right = await markedPage(1);
+      // The Cite buttons, whose Live/Pinned tag read as a description of the link, are not shown.
+      if (await view.locator('.cite-split').count()) throw new Error('a Cite button shows in the review');
+      await shot('picture-review');
+      if (right === left) throw new Error(`both sides mark page ${left}`);
+      await bar.getByRole('button', { name: 'Update the link' }).click();
+    } else {
+      // The blank area: nothing to look for, so it says so and proposes the same place.
+      if (/a blank area/.test(what) && !/no words or picture to check/.test(what)) throw new Error(`blank: ${what}`);
+      if (/the unchanged one/.test(what)) throw new Error(`an unchanged picture was asked about: ${what}`);
+      await bar.getByRole('button', { name: 'Skip' }).click();
+    }
+    await win.waitForFunction((prev) => (document.querySelector('.review-bar')?.textContent ?? '') !== prev, what, { timeout: 15000 });
+  }
+  if (!seen.some((t) => /picture one/.test(t)) || !seen.some((t) => /a blank area/.test(t))) throw new Error(`reviewed: ${seen.join(' / ')}`);
+  await win.locator('.notice', { hasText: /Updated \d+ links?/ }).waitFor({ timeout: 15000 });
+  const now = await api('readText', '/notes/pictures.md');
+  if (!/\[picture one\]\(\/docs\/pictures\.pdf#page=2&viewrect=80,100,200,120&at=[0-9a-f]{10}\)/.test(now)) throw new Error(`picture one: ${now.match(/\[picture one\]\([^)]*\)/)?.[0]}`);
+  if (!/\[the unchanged one\]\(\/docs\/pictures\.pdf#page=1&viewrect=300,500,200,120&at=[0-9a-f]{10}\)/.test(now)) throw new Error(`unchanged: ${now.match(/\[the unchanged one\]\([^)]*\)/)?.[0]}`);
+  if (now.match(/\[the unchanged one\]\([^)]*at=([0-9a-f]{10})/)[1] === v1) throw new Error('the unchanged one was not moved to the new version');
+  if (now.match(/\[a blank area\]\([^)]*at=([0-9a-f]{10})/)[1] !== v1) throw new Error('the skipped blank area was changed');
 });
 
 await app.close();

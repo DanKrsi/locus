@@ -1303,7 +1303,9 @@ export function App() {
       // A file that moved has no earlier version under its new name to put beside it.
       compare: moved || link.next.at === link.ref.at ? undefined : link.ref.at,
       reveal: revealOf(link.next.loc),
-      revealLeft: moved || link.next.at === link.ref.at ? undefined : { ...revealOf(link.ref.loc), follow: true },
+      // Both sides marked: what was cited on the left, the proposed place on the right.
+      revealLeft: moved || link.next.at === link.ref.at ? undefined : revealOf(link.ref.loc),
+      review: true,
     };
     setDocTabs((ts) => [...ts, tab]);
     setActiveDoc(tab.id);

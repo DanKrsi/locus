@@ -129,6 +129,11 @@ Everything here is on Folio's own "not built" list, or absent from it:
 - Automatic updates and a signed installer.
 - Word documents.
 - Drag a selection into the note to cite it.
+- Finding a boxed picture by the **identity of its embedded image** (hash the decoded image in
+  the cited version, look for it in the new one): exact even when resized. The visual match that
+  shipped in 0.6.16 covers moved and modestly resized pictures; this would make them certain.
+- **Boxes on slides that follow** without a quote, by the same visual match (they still ask on
+  any change to the deck).
 
 Found by trying Claude on a research workspace (sources of every kind, cited through the MCP
 tools); proposed, not built:

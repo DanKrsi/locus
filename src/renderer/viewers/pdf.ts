@@ -4,6 +4,7 @@ import type { PDFDocumentProxy } from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import type { Rect } from '../../core/link';
 import { findQuote, type TextRun } from '../../core/quote';
+import { BLANK, crop, detail, findPicture, fromRgba, judgePicture, resize, SAME_PICTURE, type Gray, type PageBox, type PictureVerdict } from '../../core/picture';
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -106,4 +107,90 @@ export async function locateQuote(data: Uint8Array, quote: string, near: number)
     if (m) return { page: p, rect: m.rect };
   }
   return null;
+}
+
+// ---------- Finding a cited picture again ----------
+
+/** Rendered pages in grey, per PDF and page: the same file is often searched for several boxes. */
+const grays = new WeakMap<Uint8Array, Map<string, Promise<Gray | null>>>();
+
+/** One page in grey at `scale` pixels per point, on white paper. */
+function pageGray(data: Uint8Array, pageNo: number, scale: number): Promise<Gray | null> {
+  let m = grays.get(data);
+  if (!m) grays.set(data, (m = new Map()));
+  const key = `${pageNo}|${scale}`;
+  let p = m.get(key);
+  if (!p) {
+    p = (async () => {
+      const doc = await openPdf(data);
+      if (pageNo < 1 || pageNo > doc.numPages) return null;
+      const page = await doc.getPage(pageNo);
+      const viewport = page.getViewport({ scale });
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.ceil(viewport.width);
+      canvas.height = Math.ceil(viewport.height);
+      const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      await page.render({ canvas, viewport }).promise;
+      return fromRgba(canvas.width, canvas.height, ctx.getImageData(0, 0, canvas.width, canvas.height).data);
+    })().catch(() => null);
+    m.set(key, p);
+  }
+  return p;
+}
+
+/** Sizes tried when the picture isn't found at its old size (Word and others resize on re-layout). */
+const SIZES = [0.95, 1.05, 0.9, 1.1, 0.85, 1.18, 0.8, 1.25, 0.75, 1.33, 0.7, 1.4];
+/** Pages searched, outward from the cited one, and how long that may take: the user is waiting. */
+const MAX_PAGES = 60;
+const BUDGET_MS = 6000;
+
+/**
+ * Looks for the picture inside a box of one version of a PDF (`was`) in another (`now`): the same
+ * page first, then outward. A box with no words to quote can only be found again this way.
+ */
+export async function locatePicture(was: Uint8Array, page: number, rect: Rect, now: Uint8Array): Promise<PictureVerdict> {
+  const oldDoc = await openPdf(was);
+  const newDoc = await openPdf(now);
+  if (page < 1 || page > oldDoc.numPages) return { kind: 'gone' };
+  // About one pixel per point; a huge drawing sheet is rendered smaller so a page stays quick.
+  const size = (await oldDoc.getPage(page)).getViewport({ scale: 1 });
+  const scale = Math.min(1, 1400 / Math.max(size.width, size.height));
+  const oldPage = await pageGray(was, page, scale);
+  if (!oldPage) return { kind: 'gone' };
+  const tpl = crop(oldPage, rect.x * scale, rect.y * scale, rect.w * scale, rect.h * scale);
+  if (tpl.w < 4 || tpl.h < 4 || detail(tpl) < BLANK) return { kind: 'blank' };
+  const box = (n: number, h: { x: number; y: number; w: number; h: number; score: number }): PageBox => ({ page: n, x: h.x / scale, y: h.y / scale, w: h.w / scale, h: h.h / scale, score: h.score });
+
+  const order = [page];
+  for (let d = 1; d < newDoc.numPages; d++) order.push(page - d, page + d);
+  const pages = order.filter((n) => n >= 1 && n <= newDoc.numPages).slice(0, MAX_PAGES);
+  const hits: PageBox[] = [];
+  const start = performance.now();
+  for (const n of pages) {
+    if (performance.now() - start > BUDGET_MS) break;
+    const g = await pageGray(now, n, scale);
+    if (!g) continue;
+    const r = findPicture(g, tpl);
+    if (r.best) hits.push(box(n, r.best));
+    if (r.runnerUp) hits.push(box(n, r.runnerUp));
+    // Found in the same place: nothing moved, no need to look further.
+    if (n === page && r.best && r.best.score >= 0.97 && Math.abs(r.best.x / scale - rect.x) <= 3 && Math.abs(r.best.y / scale - rect.y) <= 3 && !(r.runnerUp && r.runnerUp.score >= r.best.score - 0.06)) break;
+  }
+  if (!hits.some((h) => h.score >= SAME_PICTURE)) {
+    // Perhaps resized: try other sizes on the pages that came closest at the old size.
+    const closest = [...new Set([...hits].sort((a, b) => b.score - a.score).map((h) => h.page))].slice(0, 3);
+    for (const n of closest) {
+      const g = await pageGray(now, n, scale);
+      if (!g) continue;
+      for (const f of SIZES) {
+        if (performance.now() - start > BUDGET_MS * 1.5) break;
+        const r = findPicture(g, resize(tpl, tpl.w * f, tpl.h * f));
+        if (r.best) hits.push(box(n, r.best));
+        if (r.best && r.best.score >= SAME_PICTURE) break;
+      }
+    }
+  }
+  return judgePicture({ page, ...rect }, hits);
 }

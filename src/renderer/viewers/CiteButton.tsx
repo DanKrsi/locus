@@ -5,7 +5,7 @@ import { Icon, type IconName } from '../icons';
 
 export type CiteMode = 'live' | 'pinned';
 
-export const CiteModeContext = createContext<{ mode: CiteMode; setMode(m: CiteMode): void; pinnedOnly: boolean }>({
+export const CiteModeContext = createContext<{ mode: CiteMode; setMode(m: CiteMode): void; pinnedOnly: boolean; hidden?: boolean }>({
   mode: 'live',
   setMode: () => undefined,
   pinnedOnly: false,
@@ -17,7 +17,7 @@ const MODES: [CiteMode, string, string][] = [
 ];
 
 export function CiteButton({ icon, label, title, onCite }: { icon: IconName; label: string; title?: string; onCite(): void }) {
-  const { mode, setMode, pinnedOnly } = useContext(CiteModeContext);
+  const { mode, setMode, pinnedOnly, hidden } = useContext(CiteModeContext);
   const shown: CiteMode = pinnedOnly ? 'pinned' : mode;
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -27,6 +27,7 @@ export function CiteButton({ icon, label, title, onCite }: { icon: IconName; lab
     window.addEventListener('mousedown', close);
     return () => window.removeEventListener('mousedown', close);
   }, [open]);
+  if (hidden) return null;
   return (
     <div className="cite-split" ref={ref}>
       <button className="cite" onClick={onCite} title={title ?? 'Insert a link to this into the note (Ctrl+Shift+L)'}>

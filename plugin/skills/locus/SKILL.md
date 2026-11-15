@@ -1,6 +1,6 @@
 ---
 name: locus
-description: Write Locus notes and flowcharts - markdown notes and .canvas flowcharts whose links jump to exact places in a workspace (code lines, PDF pages and highlighted passages, spreadsheet ranges, note sections, past versions of files). Use when asked for a tour or walkthrough of a codebase or folder of documents, a code review write-up, study or research notes that cite sources, a flowchart or diagram explaining how code or a process works, or any note "with links to where things are".
+description: Write Locus notes and flowcharts - markdown notes and .canvas flowcharts whose links jump to exact places in a workspace (code lines, PDF pages and highlighted passages, spreadsheet ranges, note sections, past versions of files). Use when asked for a tour or walkthrough of a codebase or folder of documents, a code review write-up, research that answers a question from downloaded sources (gathering them, citing them, walking someone through them), study notes that cite sources, a flowchart or diagram explaining how code or a process works, or any note "with links to where things are".
 ---
 
 # Locus notes
@@ -67,6 +67,68 @@ person can rearrange it afterwards.
 6. Read the result of `write_flowchart` (it checks every link) and fix anything flagged. Save
    flowcharts as `notes/<topic>.canvas`; `read_file` on a .canvas gives an outline of its
    boxes, loops and arrows.
+
+## Research: answering a question from sources
+
+Here the workspace is a library and the notes are the product. Downloading a file with curl,
+printing a page to PDF with Chrome, saving a page as markdown, quoting and boxing in all of those,
+and the CSV, repeated-quote and scan behaviour below were tried. Not tried: OCR with `ocrmypdf`,
+recalculating with LibreOffice, and Edge in place of Chrome; check those worked before relying on
+them.
+
+**Layout.** `sources/` holds each source as received and is never edited (a citation appends one
+invisible id comment to a saved web page; that is expected). `data/` holds tables and models you
+build, `notes/` the notes, `images/` figures. Name sources `publisher-title-year.pdf`; a source
+that is published again (monthly statistics) is a new dated file, never an overwrite.
+
+**Getting a source in.**
+- *A PDF or a data file*: `curl -L -o "sources/<name>" "<url>"`, then `read_file` it to check it
+  really has text and the numbers you expect.
+- *A web page*: print it to PDF, which freezes the page as it was and keeps its tables and charts,
+  and can then be quoted and boxed like any report:
+  `"C:\Program Files\Google\Chrome\Application\chrome.exe" --headless --disable-gpu --no-pdf-header-footer --print-to-pdf="<absolute path>.pdf" "<url>"`
+  (Edge, `msedge.exe`, is Chromium and should take the same flags; that was not tried). Read the result: cookie banners, paywalls and charts
+  that load late print wrongly or not at all. If a page won't print well, scrape it to markdown
+  instead (the scraper tool or WebFetch), save it as `.md` whose first line is
+  `<!-- Source: <url> · Retrieved: <date> -->`, and cite it by quote.
+- *A scan*: `read_file` says "no text layer". OCR it (for example `ocrmypdf`) and use the OCR copy
+  as the source; nothing in a scan can be quoted.
+- *A workbook you build with a script*: its formulas have no stored values until a spreadsheet
+  program calculates them, and `read_file` shows "(not calculated)" (the app shows blanks). Recalculate
+  and save (LibreOffice does) before citing cells.
+- Keep a **source register**, `notes/Sources.md`: for every source its file, publisher, URL, date
+  published, date retrieved, what it is good for, and what to distrust (who paid for it, what it
+  doesn't measure, how old it is).
+
+**Citing.**
+- Quote the exact words, then `make_reference` with `highlight: true` for a PDF. A paraphrase
+  fails, on purpose. If a quote fails, shorten it to a clean fragment; printed web pages put link
+  addresses into the text, so quote the part before or after a link, or cite the page. Never
+  loosen a quote into your own wording.
+- `make_reference` tells you when the same words are on other pages. Prefer the place the figure
+  is stated (the table, the body) over its repeat in a summary, and pass `page`.
+- A chart or figure has no text to quote. Quote its caption with `highlight: true`, describe in
+  your own words what it shows, and say you are reading it from the picture. (The box cannot be
+  drawn on the chart itself from here; the person can draw one in the app with Cite area.)
+- CSV and workbook cells are cited by `range`; a derived number cites the cells of the model that
+  produced it, and each input of the model cites its source.
+- Every number in a note has a link. If you cannot link it, say it is your estimate.
+
+**The shapes of note.**
+- *An answer*: the question, a short answer, a table `Claim | Evidence | How firm`, then what
+  would change the answer. Separate what a source says (linked) from what you conclude (not).
+- *A walkthrough of a source*: ordered stops, one idea each, a quote link to the exact place,
+  what to notice, the terms explained, the method and its limits. Written for someone who has
+  not read the source. Press Tour in the app to step through it.
+- *A model*: assumptions each cited, a workbook in `data/`, results that link to its cells, and
+  how the answer moves when each assumption does.
+- *Where sources disagree*: put them side by side with their dates, areas and definitions, and
+  say what could explain the difference before choosing between them.
+
+**Honesty.** Say when evidence is old, thin, or from someone who gains from the answer. Don't cite
+from memory or from a search snippet: open the source, read it, then quote it. Links to files that
+never change can stay live; pin a link (`version`) when an argument rests on those exact words
+and the file is one that gets edited.
 
 ## Images and tables
 

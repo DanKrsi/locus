@@ -5,6 +5,7 @@ import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
 import { basename, colLetters, fileKind } from '../core/link';
 import { readSlides } from '../core/slides';
+import { parseCsv } from '../core/csv';
 import type { TextRun } from '../core/quote';
 
 // PDF.js runs its "worker" on the main thread in Node when the worker module is preloaded.
@@ -64,6 +65,8 @@ function cellText(v: ExcelJS.CellValue): string {
   if (typeof v === 'object') {
     const o = v as unknown as Record<string, unknown>;
     if ('result' in o) return cellText(o.result as ExcelJS.CellValue);
+    // A formula nobody has calculated (a workbook written by a script): no value to read.
+    if ('formula' in o || 'sharedFormula' in o) return '(not calculated)';
     if (Array.isArray(o.richText)) return (o.richText as { text: string }[]).map((r) => r.text).join('');
     if ('text' in o) return String(o.text);
     if ('error' in o) return String(o.error);
@@ -75,13 +78,11 @@ export async function readWorkbook(data: Uint8Array, fileName: string): Promise<
   if (/\.(csv|tsv)$/i.test(fileName)) {
     const sep = fileName.toLowerCase().endsWith('.tsv') ? '\t' : ',';
     const rows = new Map<number, [string, string][]>();
-    new TextDecoder()
-      .decode(data)
-      .split(/\r?\n/)
-      .forEach((line, i) => {
-        if (!line) return;
-        rows.set(i + 1, line.split(sep).map((v, c) => [colLetters(c + 1), v.replace(/^"|"$/g, '')] as [string, string]));
-      });
+    // The cells the viewer shows, at the addresses it gives them: empty cells are not cells.
+    parseCsv(new TextDecoder().decode(data).replace(/^\uFEFF/, ''), sep).forEach((row, i) => {
+      const cells = row.map((v, c) => [colLetters(c + 1), v] as [string, string]).filter(([, v]) => v !== '');
+      if (cells.length) rows.set(i + 1, cells);
+    });
     return { sheets: [{ name: basename(fileName).replace(/\.[^.]+$/, ''), rows, dims: '' }], names: [] };
   }
   const wb = new ExcelJS.Workbook();
@@ -120,6 +121,10 @@ export interface ReadOptions {
 
 const MAX_CHARS = 60000;
 
+/** What to tell Claude about a PDF that is only pictures: reading it gives nothing to quote. */
+export const NO_TEXT_LAYER =
+  'This PDF has no text layer (a scan or pictures of pages): nothing in it can be read or quoted. Make a searchable copy first (OCR it, e.g. with ocrmypdf), or cite whole pages.';
+
 /** A readable rendering of any supported file, with the coordinates needed to cite it. */
 export async function renderForClaude(path: string, data: Uint8Array, opts: ReadOptions = {}): Promise<string> {
   const kind = fileKind(path);
@@ -128,8 +133,10 @@ export async function renderForClaude(path: string, data: Uint8Array, opts: Read
     const pages = await readPdf(data);
     const [a, b] = opts.pages ?? [1, pages.length];
     out += `PDF "${basename(path)}", ${pages.length} pages. Cite with page=<n> (file page number below).\n`;
+    if (pages.every((p) => !p.text)) out += `${NO_TEXT_LAYER}\n`;
     for (const p of pages.slice(a - 1, b)) {
-      out += `\n=== page ${p.page}${p.label && p.label !== String(p.page) ? ` (printed "${p.label}")` : ''} ===\n${p.text}\n`;
+      const body = p.text || (pages.every((q) => !q.text) ? '' : '(no text on this page: a picture or a scan. A quote cannot find anything here; cite the page.)');
+      out += `\n=== page ${p.page}${p.label && p.label !== String(p.page) ? ` (printed "${p.label}")` : ''} ===\n${body}\n`;
       if (out.length > MAX_CHARS) {
         out += `\n[truncated: read more with pages=[${p.page + 1}, ${Math.min(pages.length, p.page + 20)}]]\n`;
         break;

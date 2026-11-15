@@ -2,7 +2,11 @@
 // Usage: node scripts/build-mcp.mjs && node scripts/make-test-workspace.mjs && node scripts/test-mcp.mjs
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { resolve } from 'node:path';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
+import ExcelJS from 'exceljs';
+import JSZip from 'jszip';
+import { PDFDocument, StandardFonts } from 'pdf-lib';
 
 const repo = resolve(import.meta.dirname, '..');
 const workspace = resolve(repo, '..', 'locus-test-workspace');
@@ -88,6 +92,63 @@ if (!badFlow.isError) failures++;
 const badCite = await client.callTool({ name: 'write_flowchart', arguments: { ...flow, path: 'notes/bad.canvas', boxes: [{ id: 'start', text: 'x', cite: [{ path: 'src/net/client.py', quote: 'not in the file' }] }], loops: [], arrows: [] } });
 console.log(`${badCite.isError && /Box "start"/.test(badCite.content[0].text) ? 'ok  ' : 'FAIL'} write_flowchart names the box with a bad citation`);
 if (!(badCite.isError && /Box "start"/.test(badCite.content[0].text))) failures++;
+
+// Sources of the kinds a research workspace gets, and what Claude is told about each.
+const src = resolve(repo, '..', 'locus-test-mcp-sources');
+await rm(src, { recursive: true, force: true });
+await mkdir(join(src, 'sources'), { recursive: true });
+await mkdir(join(src, 'data'), { recursive: true });
+
+// A report that says the same thing in its summary and in its body.
+const rep = await PDFDocument.create();
+const font = await rep.embedFont(StandardFonts.Helvetica);
+for (const where of ['Summary', 'Body']) {
+  const p = rep.addPage([612, 792]);
+  p.drawText(where, { x: 60, y: 720, size: 18, font });
+  p.drawText('Average asking rents rose 3.2 percent over the year.', { x: 60, y: 680, size: 12, font });
+}
+await writeFile(join(src, 'sources', 'report.pdf'), await rep.save());
+
+// A scan: one page that is only a picture.
+const scan = await PDFDocument.create();
+const png = await scan.embedPng(await readFile(resolve(repo, 'build', 'icon.png')));
+scan.addPage([612, 792]).drawImage(png, { x: 100, y: 300, width: 400, height: 400 });
+await writeFile(join(src, 'sources', 'scan.pdf'), await scan.save());
+
+// A data download, the way agencies publish it: values with thousands separators are quoted.
+await writeFile(join(src, 'data', 'prices.csv'), 'place,price,rent\nToronto,"1,075,000",2310\nOttawa,"640,000",1890\n');
+
+// A model written by a script: its formula has no stored value until a spreadsheet program calculates it.
+const wb = new ExcelJS.Workbook();
+const ws = wb.addWorksheet('Model');
+ws.addRow(['Price', 1000000]);
+ws.getCell('B2').value = { formula: 'B1*0.2' };
+await wb.xlsx.writeFile(join(src, 'data', 'model.xlsx'));
+
+// A deck: slide text is searchable like any other text.
+const deck = new JSZip();
+deck.file('ppt/presentation.xml', '<p:presentation xmlns:p="p" xmlns:r="r"><p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst></p:presentation>');
+deck.file('ppt/_rels/presentation.xml.rels', '<Relationships><Relationship Id="rId1" Target="slides/slide1.xml"/></Relationships>');
+deck.file('ppt/slides/slide1.xml', '<p:sld><a:p><a:r><a:t>Vacancy fell to a three year low</a:t></a:r></a:p></p:sld>');
+await writeFile(join(src, 'sources', 'deck.pptx'), await deck.generateAsync({ type: 'nodebuffer' }));
+
+await call('init_workspace', { workspace: src }, /ready/);
+const W = { workspace: src };
+await call('read_file', { ...W, path: 'data/prices.csv' }, /A2=Toronto \| B2=1,075,000 \| C2=2310/);
+await call('make_reference', { ...W, path: 'data/prices.csv', range: 'B2', label: 'Toronto price' }, /prices\.csv#B2&at=/);
+await call('read_file', { ...W, path: 'data/model.xlsx' }, /B2=\(not calculated\)  \(=B1\*0\.2\)/);
+await call('read_file', { ...W, path: 'sources/scan.pdf' }, /no text layer[\s\S]*OCR/);
+const scanQuote = await client.callTool({ name: 'make_reference', arguments: { ...W, path: 'sources/scan.pdf', quote: 'average rent' } });
+const scanOut = scanQuote.content.map((c) => c.text).join('\n');
+console.log(`${scanQuote.isError && /no text layer/.test(scanOut) ? 'ok  ' : 'FAIL'} a quote in a scan says the PDF has no text, not that the quote is wrong`);
+if (!(scanQuote.isError && /no text layer/.test(scanOut))) failures++;
+await call(
+  'make_reference',
+  { ...W, path: 'sources/report.pdf', quote: 'Average asking rents rose 3.2 percent over the year.', highlight: true },
+  /page=1&[\s\S]*note: This quote also appears on page 2; page 1 was cited\. Pass page/,
+);
+await call('make_reference', { ...W, path: 'sources/report.pdf', page: 2, quote: 'Average asking rents rose 3.2 percent over the year.' }, /page=2/);
+await call('search_workspace', { ...W, query: 'three year low' }, /deck\.pptx\s+slide 1/);
 
 await client.close();
 console.log(failures ? `\n${failures} failure(s)` : '\nall passed');

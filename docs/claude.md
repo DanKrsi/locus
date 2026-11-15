@@ -35,9 +35,9 @@ Then, in a workspace folder, ask: "give me a tour of this codebase as a Locus no
 | Tool | What it does |
 |---|---|
 | `workspace_overview` | Files and version history |
-| `read_file` | Code with line numbers, PDFs by page, spreadsheets by cell, at any version |
-| `search_workspace` | Find text across code, PDFs and spreadsheets |
-| `make_reference` | Verified link to lines, a PDF page or quoted passage, a cell range, a heading or a past version |
+| `read_file` | Code with line numbers, PDFs by page (and says when a PDF is a scan with no text), slides, spreadsheets by cell (CSV cells are the ones the viewer shows), at any version |
+| `search_workspace` | Find text across code, notes, PDFs, slides and spreadsheets |
+| `make_reference` | Verified link to lines, a PDF page or quoted passage, a cell range, a heading or a past version; says when the same quote is on other pages |
 | `validate_note` / `write_note` | Check every link in a note or flowchart (moved, changed, broken) / save a note and check it |
 | `write_flowchart` | Draw a flowchart from boxes, loops and arrows: laid out automatically, with verified citations in the boxes |
 | `file_history`, `init_workspace` | Versions of a file; set up history for a plain folder |

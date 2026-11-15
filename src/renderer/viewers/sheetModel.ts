@@ -1,6 +1,7 @@
 // Reads .xlsx (ExcelJS) and .csv into a light model the grid can draw quickly.
 import ExcelJS from 'exceljs';
 import { colLetters, formatA1Range, parseA1Range, type CellBox, type SheetRef } from '../../core/link';
+import { parseCsv } from '../../core/csv';
 
 export interface CellModel {
   text: string;
@@ -210,38 +211,6 @@ async function loadXlsx(data: Uint8Array): Promise<WorkbookModel> {
     names.push({ name: dn.name, sheet, range: first.slice(bang + 1).replace(/\$/g, '') });
   }
   return { sheets, names };
-}
-
-function parseCsv(text: string, sep: string): string[][] {
-  const rows: string[][] = [];
-  let row: string[] = [];
-  let cur = '';
-  let quoted = false;
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-    if (quoted) {
-      if (ch === '"' && text[i + 1] === '"') {
-        cur += '"';
-        i++;
-      } else if (ch === '"') quoted = false;
-      else cur += ch;
-    } else if (ch === '"') quoted = true;
-    else if (ch === sep) {
-      row.push(cur);
-      cur = '';
-    } else if (ch === '\n' || ch === '\r') {
-      if (ch === '\r' && text[i + 1] === '\n') i++;
-      row.push(cur);
-      rows.push(row);
-      row = [];
-      cur = '';
-    } else cur += ch;
-  }
-  if (cur || row.length) {
-    row.push(cur);
-    rows.push(row);
-  }
-  return rows;
 }
 
 function loadCsv(data: Uint8Array, name: string, sep: string): WorkbookModel {

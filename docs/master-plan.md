@@ -130,6 +130,23 @@ Everything here is on Folio's own "not built" list, or absent from it:
 - Word documents.
 - Drag a selection into the note to cite it.
 
+Found by trying Claude on a research workspace (sources of every kind, cited through the MCP
+tools); proposed, not built:
+
+- **Boxes Claude can draw on a figure.** A PDF box needs a quote, so a chart or table-as-picture
+  can only be cited as a whole page, and an image only as a whole file. Let `make_reference` take
+  a rectangle (or "the figure under this caption"), and let an image link carry an area.
+- **An `add_source` tool.** Today Claude gets sources in by shell (`curl` for files, headless
+  Chrome to print a page to PDF, the scraper for markdown); a tool would do the same with the
+  file named and filed, and a line added to the source register.
+- **A `cited_in` tool and a coverage check.** Which claims rest on this source; which numbers in
+  a note have no link.
+- **Quotes that tolerate printed link addresses.** A printed web page puts `<https://…>` into the
+  text, so a quote spanning a link fails and Claude has to quote around it.
+- **Citing a saved page leaves it alone.** Linking into a saved `.md` appends an invisible id
+  comment to it; only notes need one.
+- **OCR in the app or tool** for scanned PDFs (now they are reported as having no text).
+
 ## 4. How each phase is done
 
 - Spec first (`docs/spec/`), then code, then a smoke-test step for every new behaviour.

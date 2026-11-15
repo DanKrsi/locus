@@ -21,7 +21,7 @@ import { layoutDraft, type DraftArrow, type DraftLoop } from '../core/flowLayout
 import { findQuote } from '../core/quote';
 import { mapLines } from '../core/remap';
 import * as git from '../main/git';
-import { readPdf, readWorkbook, type PdfPage } from './reader';
+import { NO_TEXT_LAYER, readPdf, readWorkbook, type PdfPage } from './reader';
 import { readSlides } from '../core/slides';
 import { addNoteId, joinNoteId, newNoteId, readNoteId, splitNoteId, withLinkNoteId } from '../core/noteid';
 
@@ -183,14 +183,21 @@ export async function makeReference(ws: Workspace, req: ReferenceRequest): Promi
     if (quote) {
       const candidates = page ? [pages[page - 1]] : pages;
       let hit: { page: PdfPage; rect: import('../core/link').Rect } | null = null;
+      const elsewhere: number[] = [];
       for (const p of candidates) {
         const m = findQuote(p.runs, quote);
-        if (m) {
-          hit = { page: p, rect: m.rect };
-          break;
-        }
+        if (!m) continue;
+        if (!hit) hit = { page: p, rect: m.rect };
+        else if (elsewhere.length < 8) elsewhere.push(p.page);
+        else break;
       }
-      if (!hit) throw new Error(`Couldn't find the quote ${page ? `on page ${page}` : 'anywhere'} in ${path}. Quote the text exactly as it appears (read_file shows it).`);
+      if (!hit) {
+        if (pages.every((p) => !p.runs.length)) throw new Error(NO_TEXT_LAYER);
+        throw new Error(`Couldn't find the quote ${page ? `on page ${page}` : 'anywhere'} in ${path}. Quote the text exactly as it appears (read_file shows it).`);
+      }
+      // The same words on more than one page (a summary and the body, a running header): the
+      // first is cited, and Claude is told, so it can choose with page instead of not knowing.
+      if (elsewhere.length) notes.push(`This quote also appears on page${elsewhere.length === 1 ? '' : 's'} ${elsewhere.join(', ')}; page ${hit.page.page} was cited. Pass page=<n> to cite another one.`);
       page = hit.page.page;
       if (req.highlight) loc.viewrect = roundRect(hit.rect);
     } else if (req.highlight) {

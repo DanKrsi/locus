@@ -9,6 +9,7 @@ import { fileKind } from '../core/link';
 import { isCanvas } from '../core/canvas';
 import skillDoc from '../../plugin/skills/locus/SKILL.md';
 import { renderForClaude, readWorkbook } from './reader';
+import { readSlides } from '../core/slides';
 import {
   git,
   initWorkspace,
@@ -107,7 +108,7 @@ server.registerTool(
   'search_workspace',
   {
     title: 'Search the workspace',
-    description: 'Finds text across code, notes, PDFs (by page) and spreadsheets (by cell). Returns where each hit is, ready to pass to make_reference.',
+    description: 'Finds text across code, notes, PDFs (by page), slides (by slide) and spreadsheets (by cell). Returns where each hit is, ready to pass to make_reference.',
     inputSchema: {
       workspace: workspaceArg,
       query: z.string().describe('Text to find (case-insensitive)'),
@@ -136,6 +137,12 @@ server.registerTool(
             const i = t.toLowerCase().indexOf(q);
             if (i >= 0 && hits.length < limit) hits.push(`${path}  page ${p.page}: …${t.slice(Math.max(0, i - 60), i + q.length + 60)}…`);
           }
+        } else if (kind === 'slides') {
+          (await readSlides(await readBytes(ws, path))).forEach((t, i) => {
+            const flat = t.replace(/\s+/g, ' ');
+            const at = flat.toLowerCase().indexOf(q);
+            if (at >= 0 && hits.length < limit) hits.push(`${path}  slide ${i + 1}: …${flat.slice(Math.max(0, at - 60), at + q.length + 60)}…`);
+          });
         } else if (kind === 'sheet') {
           const wb = await readWorkbook(await readBytes(ws, path), path);
           for (const s of wb.sheets) {

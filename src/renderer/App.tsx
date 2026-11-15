@@ -860,15 +860,17 @@ export function App() {
 
   /** Links in the active note that record no version (or, for a link to a note, no identity). */
   const unrecorded = async (view: import('@codemirror/view').EditorView, notePath: string) => {
-    const out: { link: LinkInfo; path: string; kind: 'version' | 'note' | 'self' }[] = [];
+    const out: { link: LinkInfo; path: string; kind: 'version' | 'note' }[] = [];
     for (const l of allLinks(view.state)) {
       const ref = l.ref;
       if (l.image || ref.rev || !ref.path || (ref.pathKind !== 'root' && ref.pathKind !== 'relative')) continue;
       const path = resolvePath(ref, notePath);
+      // A link to a heading of the note it is written in resolves and loses nothing: leave it be.
+      if (path === notePath) continue;
       const isNote = fileKind(path) === 'markdown' || isCanvas(path);
       if (isNote ? !!linkNoteId(ref.extra) : !!ref.at) continue;
       if (!(await api.exists(path).catch(() => false))) continue;
-      out.push({ link: l, path, kind: !isNote ? 'version' : path === notePath ? 'self' : 'note' });
+      out.push({ link: l, path, kind: isNote ? 'note' : 'version' });
     }
     return out;
   };
@@ -878,41 +880,46 @@ export function App() {
     const notePath = notes.current?.activePath();
     if (!view || !notePath || recordSeen.current.has(notePath) || noticeRef.current) return;
     const found = await unrecorded(view, notePath);
-    // A link to a heading of this very note, written with the note's own path, resolves and loses
-    // nothing: it is no reason to interrupt anyone. Record tidies it when it runs for the others.
-    const needing = found.filter((f) => f.kind !== 'self');
-    if (!needing.length || notes.current?.activePath() !== notePath) return;
+    if (!found.length || notes.current?.activePath() !== notePath) return;
     recordSeen.current.add(notePath);
-    const n = needing.length;
+    const n = found.length;
     const one = n === 1;
-    const kinds = new Set(needing.map((f) => f.kind));
-    const missing = kinds.has('version') && kinds.size === 1 ? 'a version' : !kinds.has('version') ? `which note ${one ? 'it points' : 'they point'} at` : `a version or which note ${one ? 'it points' : 'they point'} at`;
+    const kinds = new Set(found.map((f) => f.kind));
     setNotice({
-      text: `${n} link${one ? '' : 's'} in this note ${one ? "doesn't" : "don't"} record ${missing}, so Locus can't follow ${one ? 'it' : 'them'} through changes.`,
-      help: recordHelp(new Set(found.map((f) => f.kind)), one),
+      text: recordText(kinds, n),
+      help: recordHelp(kinds, one),
       notePath,
       links: noticeLinks(
-        needing.map((f) => ({
+        found.map((f) => ({
           dest: f.link.dest,
           label: f.link.label,
-          hint: `${f.path.slice(1)}: ${f.kind === 'version' ? 'no version recorded' : 'no note identity recorded'}`,
+          hint: `${f.path.slice(1)}: ${f.kind === 'version' ? 'no saved version' : 'could stop working if renamed or moved'}`,
         })),
-        (dest) => basename(needing.find((f) => f.link.dest === dest)?.path ?? dest),
+        (dest) => basename(found.find((f) => f.link.dest === dest)?.path ?? dest),
       ),
       actions: [{ label: 'Record', run: () => void recordLinks(notePath) }],
     });
   };
 
-  /** What Record will do, in the words of what these particular links are missing. */
-  const recordHelp = (kinds: Set<'version' | 'note' | 'self'>, one: boolean): string => {
+  /** What is the matter, in plain words: what could go wrong for these links, not how they are stored. */
+  const recordText = (kinds: Set<'version' | 'note'>, n: number): string => {
+    const one = n === 1;
+    if (kinds.has('version') && kinds.has('note'))
+      return `${n} links in this note aren't fully tracked: some have no saved version, and some could stop working if their note is renamed or moved.`;
+    if (kinds.has('version')) return `${n} link${one ? ' has' : 's have'} no saved version, so Locus can't tell when what ${one ? 'it points' : 'they point'} at changes.`;
+    return `${n} link${one ? '' : 's'} in this note could stop working if ${one ? 'the note it points' : 'the notes they point'} at ${one ? 'is' : 'are'} renamed or moved.`;
+  };
+
+  /** What Record will do about it, and how to take it back. */
+  const recordHelp = (kinds: Set<'version' | 'note'>, one: boolean): string => {
     const link = one ? 'the link' : 'each link';
-    const what = kinds.has('version') && kinds.has('note')
-      ? `Record writes the version each file is at now, or a hidden id for the note, into ${link}, so Locus can follow ${one ? 'it' : 'them'} through changes.`
-      : kinds.has('version')
-        ? `Record writes the version each file is at now into ${link}, so Locus can tell later whether what ${one ? 'it cites' : 'they cite'} changed.`
-        : `Record writes a hidden id into ${link} and into the note ${one ? 'it points' : 'they point'} at, so ${one ? 'it' : 'they'} still find${one ? 's' : ''} ${one ? 'that note' : 'those notes'} after a rename or move.`;
-    const tidy = kinds.has('self') ? " Links to this note's own headings become plain #heading links." : '';
-    return `${what}${tidy} Ctrl+Z undoes it in this note.`;
+    const what =
+      kinds.has('version') && kinds.has('note')
+        ? 'Record saves the current version in each link, and a hidden id in each linked note and its link, so Locus can follow them through changes.'
+        : kinds.has('version')
+          ? `Record saves the file's current version in ${link}, so Locus can follow ${one ? 'it' : 'them'} through later changes.`
+          : `Record saves a hidden id in ${link} and in ${one ? 'that note' : 'those notes'}, so Locus can still find ${one ? 'it' : 'them'}.`;
+    return `${what} Ctrl+Z undoes it in this note.`;
   };
 
   /** Writes the latest version into links that have none, and the note's identity into links to notes. */
@@ -922,10 +929,7 @@ export function App() {
     const changes: { from: number; to: number; insert: string }[] = [];
     for (const { link, path, kind } of await unrecorded(view, notePath)) {
       let ref = link.ref;
-      if (kind === 'self') {
-        // A link to this note itself is a plain #heading link: it can never break.
-        ref = { ...ref, path: '', pathKind: 'relative' };
-      } else if (kind === 'note') {
+      if (kind === 'note') {
         const id = await api.ensureNoteId(path).catch(() => null);
         if (!id) continue;
         ref = { ...ref, extra: withLinkNoteId(ref.extra, id) };

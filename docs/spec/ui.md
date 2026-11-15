@@ -253,10 +253,11 @@ to notes are left alone: a note is always read as it is now.
   offers **Undo**, which puts back the notes that were rewritten unless they changed since.
 - **Update link to latest** on a hover card does the same for one link; **Redraw area** opens
   the review for a PDF box so a new one can be drawn.
-- **Record**: a note with links that record no version (made by hand, or by an older app), or
-  links to notes that record no identity, shows a notice once per session. **Record** writes the
-  latest version into each such link, gives linked notes an identity, and turns a link to the note
-  it is written in into a plain `#heading` link. Pictures and outside files are skipped.
+- **Record**: a note with links that have no saved version (made by hand, or by an older app), or
+  links to notes that could stop working if the note is renamed or moved, shows a notice once per
+  session. **Record** saves the latest version in each link of the first kind, and gives the note
+  a hidden id (in the note and in the link) for the second. Pictures, outside files and links to a
+  heading of the note they are written in are left alone.
 
 ### 4.6.1 What a notice says
 
@@ -273,9 +274,9 @@ text between two links does not matter: the chip takes you there. Following one 
 to see what it is leaves the notice where it is.
 
 A link to a heading of the note it is written in, written with the note's own path, is no reason for
-a notice: it resolves and loses nothing. Record tidies it into a plain `#heading` link when it runs
-for other links, and says so. The demo workspace ships with nothing for these notices to report; a
-copy made by an older version still has its old links, and Record fixes them.
+a notice and is not touched by Record: it resolves and loses nothing, and a notice should be about
+one thing. The demo workspace ships with nothing for these notices to report; a copy made by an
+older version still has its old links, and Record fixes them.
 
 ### 4.7 Tour mode
 

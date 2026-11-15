@@ -208,7 +208,7 @@ await step('a notice names the links it is about and keeps them marked until it 
   const filler = Array.from({ length: 40 }, (_, i) => `Filler paragraph ${i + 1}, long enough to be a line of its own.`).join('\n\n');
   await api('writeText', '/notes/twolinks.md', `# Two links\n\nSee [first solver](/src/solver.py#L1-L2).\n\n${filler}\n\nSee [second client](/src/net/client.py#L1-L2).\n`);
   await openNote('twolinks.md');
-  const notice = win.locator('.notice', { hasText: 'record a version' });
+  const notice = win.locator('.notice', { hasText: 'no saved version' });
   await notice.waitFor({ timeout: 10000 });
   if (!/^2 links/.test((await notice.innerText()).trim())) throw new Error(`expected the notice to count 2 links, got "${(await notice.innerText()).trim().slice(0, 80)}"`);
   const chips = notice.locator('.notice-chip');
@@ -240,10 +240,10 @@ await step('a notice names the links it is about and keeps them marked until it 
 await step('Record: names its link, writes the version, and Ctrl+Z puts it back', async () => {
   await api('writeText', '/notes/byhand.md', '# By hand\n\nSee [the solver](/src/solver.py#L1-L2).\n');
   await openNote('byhand.md');
-  const notice = win.locator('.notice', { hasText: "doesn't record a version" });
+  const notice = win.locator('.notice', { hasText: 'no saved version' });
   await notice.waitFor({ timeout: 10000 });
   // It says what Record will do, names the link, and marks it in the note.
-  await notice.locator('.notice-help', { hasText: 'Record writes' }).waitFor({ timeout: 5000 });
+  await notice.locator('.notice-help', { hasText: 'Record saves' }).waitFor({ timeout: 5000 });
   await notice.locator('.notice-chip', { hasText: 'the solver' }).waitFor({ timeout: 5000 });
   await win.locator('.editor-wrap .cm-attention', { hasText: 'the solver' }).first().waitFor({ timeout: 5000 });
   await shot('record-banner');
@@ -257,7 +257,7 @@ await step('Record: names its link, writes the version, and Ctrl+Z puts it back'
   await win.waitForFunction(() => window.api.readText('/notes/byhand.md').then((t) => /solver\.py#L1-L2\)/.test(t) && !t.includes('&at=')), null, { timeout: 10000 });
 });
 
-await step("a note as the old demo was: a link to its own heading is no reason for a notice; the other is named", async () => {
+await step("a note as the old demo was: its link to its own heading is left alone; the other is named", async () => {
   await api('writeText', '/notes/olddemo-target.md', '# Target\n\nSomething to point at.\n');
   await api('writeText', '/notes/selfonly.md', '# Self only\n\nBack to the [top](/notes/selfonly.md#self-only).\n');
   await openNote('selfonly.md');
@@ -265,16 +265,18 @@ await step("a note as the old demo was: a link to its own heading is no reason f
   if (await win.locator('.notice').count()) throw new Error(`a link to the note's own heading raised a notice: "${(await win.locator('.notice').first().innerText()).trim().slice(0, 100)}"`);
   await api('writeText', '/notes/olddemo.md', '# Old demo\n\nThe target: [the target](/notes/olddemo-target.md).\n\nBack to the [top](/notes/olddemo.md#old-demo).\n');
   await openNote('olddemo.md');
-  const notice = win.locator('.notice', { hasText: 'record which note' });
+  const notice = win.locator('.notice', { hasText: 'renamed or moved' });
   await notice.waitFor({ timeout: 10000 });
   // Only the link to the other note is counted and named; the link to its own heading is not.
-  if (!/^1 link in this note doesn't/.test((await notice.innerText()).trim())) throw new Error(`expected 1 link, got "${(await notice.innerText()).trim().slice(0, 80)}"`);
+  if (!/^1 link in this note could stop working/.test((await notice.innerText()).trim())) throw new Error(`expected 1 link, got "${(await notice.innerText()).trim().slice(0, 80)}"`);
   if ((await notice.locator('.notice-chip').count()) !== 1) throw new Error('expected one chip');
+  // Nothing in the notice is about headings: Record does one thing, and the notice says it.
+  if (/heading/i.test(await notice.innerText())) throw new Error('the notice talks about headings');
   await notice.getByRole('button', { name: 'Record' }).click();
   await win.keyboard.press('Control+S');
-  // Record gives the other note an identity, and tidies the link to the note's own heading.
+  // Record gives the other note an identity in the link, and leaves the link to the note's own heading as it was.
   await win.waitForFunction(
-    () => window.api.readText('/notes/olddemo.md').then((t) => /\]\(#old-demo\)/.test(t) && /olddemo-target\.md[^)]*id=[a-z0-9]{12}/.test(t)),
+    () => window.api.readText('/notes/olddemo.md').then((t) => /olddemo-target\.md[^)]*id=[a-z0-9]{12}/.test(t) && /\]\(\/notes\/olddemo\.md#old-demo\)/.test(t)),
     null,
     { timeout: 10000 },
   );

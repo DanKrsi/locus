@@ -1015,6 +1015,19 @@ await step('a note touched by a Windows tool still reads as lines', async () => 
   if (!/# Mixed\n\n## Part two/.test(saved)) throw new Error('the note was rewritten with the wrong line endings');
 });
 
+await step('a CSV with quoted values shows them as the cells Claude cites', async () => {
+  // Claude's reader and the viewer split a CSV into cells the same way, or an address means two things.
+  await win.evaluate(() => window.api.writeText('/data/prices.csv', 'place,price,rent\nToronto,"1,075,000",2310\n'));
+  await win.keyboard.press('Control+P');
+  await win.getByPlaceholder('Find a file by name').fill('prices.csv');
+  await win.locator('.tree-row', { hasText: 'prices.csv' }).first().waitFor({ timeout: 8000 });
+  await win.keyboard.press('Enter');
+  const viewer = win.locator('.viewer:not(.hidden)').first();
+  await viewer.locator('.cell', { hasText: '1,075,000' }).first().waitFor({ timeout: 15000 });
+  if (await viewer.locator('.cell', { hasText: /^075$/ }).count()) throw new Error('the quoted value was split into cells');
+  await shot('csv-quoted-cells');
+});
+
 const noteText = await win.evaluate(() => window.api.readText('/notes/review.md'));
 const citedLine = noteText.split('\n').find((l) => l.includes('New citation'));
 console.log('     inserted:', citedLine);

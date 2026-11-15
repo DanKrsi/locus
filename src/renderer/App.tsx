@@ -20,6 +20,7 @@ import { DocsPane } from './docs/DocsPane';
 import { FileBrowser } from './FileBrowser';
 import { invalidateLatest, loadBytes, mimeFor } from './files';
 import { locateQuote } from './viewers/pdf';
+import { ConfirmDialog, type ConfirmRequest } from './menus';
 import { findSlide, readSlides } from '../core/slides';
 import { checkLink, checkLinks, pinFor, updateFor, type CheckedLink } from './linkcheck';
 import { linkNoteId, withLinkNoteId } from '../core/noteid';
@@ -81,6 +82,8 @@ export function App() {
   const [activeDoc, setActiveDoc] = useState<string | null>(null);
   const [browser, setBrowser] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  /** A question about something the app cannot take back on its own (restoring a file over itself). */
+  const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
   const [showShortcuts, setShowShortcuts] = useState(false);
   /** The section-link dialog: the note it was opened from, and that note as it is on screen. */
   const [sectionLink, setSectionLink] = useState<{ notePath: string; text: string } | null>(null);
@@ -663,6 +666,44 @@ export function App() {
   };
 
   const openCitation = (c: { note: string; line: number }) => void notes.current?.revealLine(c.note, c.line);
+
+  /**
+   * Puts a file back as it was in a version. It lands as an unsaved change, so nothing is lost
+   * until the user saves a version, and the notice offers to put it back the way it was.
+   */
+  const restoreVersion = async (tab: DocTab, rev: string) => {
+    const name = basename(tab.path);
+    const when = versionDate(rev);
+    const done = await api.restoreVersion(tab.path, rev).catch((e: Error) => {
+      showToast(String(e.message).replace(/^Error invoking remote method 'api': (Error: )?/, ''));
+      return null;
+    });
+    if (!done) return;
+    forgetStatuses();
+    invalidateLatest();
+    setDocTabs((ts) => ts.map((t) => (t.id === tab.id ? { ...t, rev: undefined, compare: undefined } : t)));
+    notes.current?.reloadFromDisk();
+    notes.current?.refresh();
+    void loadCitations();
+    void refreshSharing(false);
+    setNotice({
+      text: `${name} is back as it was${when ? ` on ${when}` : ''}. Save a version to keep it.`,
+      actions: [
+        {
+          label: 'Undo',
+          run: async () => {
+            await api.undoRestore(tab.path, done.had).catch(() => undefined);
+            forgetStatuses();
+            invalidateLatest();
+            notes.current?.reloadFromDisk();
+            notes.current?.refresh();
+            void loadCitations();
+            showToast(`${name} left as it was`);
+          },
+        },
+      ],
+    });
+  };
 
   const movedFixes = useRef(new Map<string, string>());
 
@@ -1290,6 +1331,7 @@ export function App() {
         </div>
       )}
 
+      {confirm && <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />}
       {showShortcuts && <Shortcuts onClose={() => setShowShortcuts(false)} />}
       {exporting && (
         <ExportDialog
@@ -1459,6 +1501,17 @@ export function App() {
               citedRevs={citedRevs}
               citations={citations}
               onCompare={(tab, rev) => setDocTabs((ts) => ts.map((t) => (t.id === tab.id ? { ...t, compare: rev } : t)))}
+              onRestore={(tab, rev) =>
+                setConfirm({
+                  title: `Put ${basename(tab.path)} back as it was?`,
+                  lines: [
+                    `The file becomes what it was in the version of ${versionDate(rev) ?? 'that day'}, as an unsaved change.`,
+                    'Nothing is saved until you save a version, and Undo puts it straight back.',
+                  ],
+                  action: 'Restore',
+                  run: () => void restoreVersion(tab, rev),
+                })
+              }
               onOpenCitation={openCitation}
               onActivate={setActiveDoc}
               onClose={closeDoc}

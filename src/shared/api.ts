@@ -171,6 +171,13 @@ export interface Api {
   setTitleBarColors(bg: string, fg: string): Promise<void>;
   /** Moves a file or folder and rewrites every link to it. Returns the notes that changed. */
   renameFile(from: string, to: string): Promise<{ updatedNotes: string[]; links: number }>;
+  /**
+   * Puts a file back as it was in a version, as an unsaved change the user can look at and then
+   * save (or undo). A file that was deleted comes back. Returns what it replaced, for the undo.
+   */
+  restoreVersion(path: string, rev: string): Promise<{ had: number[] | null }>;
+  /** Puts back what restoreVersion replaced: the bytes it returned, or nothing to delete again. */
+  undoRestore(path: string, had: number[] | null): Promise<void>;
   /** Where a file that existed at `at` lives now, if it was moved outside the app. */
   findMoved(path: string, at: string): Promise<string | null>;
   /**
@@ -235,7 +242,7 @@ export const API_METHODS: (keyof Api)[] = [
   'openWorkspace', 'createWorkspace', 'listFiles', 'readFile', 'readText', 'writeText', 'writeNewFile', 'exists', 'fileChangedSince', 'claudeStatus', 'connectClaude', 'restartClaudeDesktop', 'appVersion',
   'head', 'versions', 'changesSince', 'uncommitted', 'saveVersion', 'ensureVersion', 'diffHunks',
   'getSettings', 'setSettings', 'pickExternalFiles', 'readExternal', 'openExternally', 'setTitleBarColors',
-  'renameFile', 'findMoved', 'citations', 'versionChanges', 'updateLinks', 'undoLinkUpdate', 'ensureNoteId', 'findNoteById',
+  'renameFile', 'restoreVersion', 'undoRestore', 'findMoved', 'citations', 'versionChanges', 'updateLinks', 'undoLinkUpdate', 'ensureNoteId', 'findNoteById',
   'exportNotePage', 'planExport', 'writeExport', 'exportPackage', 'importPackage', 'openDemo', 'createDemo', 'sharingStatus', 'sync', 'conflictSides', 'resolveConflict', 'finishSync', 'abortSync',
   'githubSignInStart', 'githubSignInWait', 'githubSignOut', 'githubShare', 'githubInvite', 'githubPeople', 'githubRepos',
   'githubAcceptInvitation', 'githubClone', 'copyText', 'showInFolder', 'trashFile',

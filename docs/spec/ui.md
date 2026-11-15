@@ -303,6 +303,11 @@ per line, so diffs stay readable.
 - Every tab keeps its own scroll, zoom, search and version.
 - **Version strip** under the toolbar: one dot per version of this file, current one
   highlighted, gold dots for versions cited by the open note. Click a dot to view that version.
+- **Restore this version** appears on the strip while a past version is the one on screen. It
+  asks first, then writes that version over the working file and returns the tab to Latest, so
+  what was restored is an ordinary unsaved change: look at it, save a version to keep it, or take
+  the **Undo** in the notice. A file that had been deleted comes back this way; one renamed since
+  is read under the name it had then.
 - **"Cited in" markers**: gold bookmarks in the page margin / gutter where any note in the
   workspace cites this document; hover lists the notes.
 

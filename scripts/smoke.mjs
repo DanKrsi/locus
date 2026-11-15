@@ -588,6 +588,37 @@ await step('history: what changed, open a file as it was, browse a version', asy
   await win.keyboard.press('Escape');
 });
 
+await step('restore a file as it was in an older version, and undo it', async () => {
+  // The client was refactored over the versions, so an older one really is different.
+  const file = '/src/http/client.py';
+  const now = await win.evaluate((p) => window.api.readText(p), file);
+  await win.keyboard.press('Control+P');
+  await win.getByPlaceholder('Find a file by name').fill('client.py');
+  await win.locator('.tree-row', { hasText: 'client.py' }).first().waitFor({ timeout: 8000 });
+  await win.keyboard.press('Enter');
+  const viewer = win.locator('.viewer:not(.hidden)').first();
+  await viewer.locator('.cm-content').first().waitFor({ timeout: 15000 });
+  const strip = viewer.locator('.vstrip').first(); // the hidden tabs have strips of their own
+  await strip.locator('.vdot').first().click();
+  await win.waitForTimeout(1200);
+  await strip.getByRole('button', { name: /Restore this version/ }).click();
+  await win.locator('.confirm-dialog').waitFor({ timeout: 5000 });
+  await win.locator('.confirm-dialog').getByRole('button', { name: 'Restore' }).click();
+  await win.locator('.notice', { hasText: 'back as it was' }).waitFor({ timeout: 15000 });
+  const back = await win.evaluate((p) => window.api.readText(p), file);
+  if (back === now) throw new Error('the file was not put back');
+  if (!/sleep/.test(back)) throw new Error(`restored the wrong thing: ${back.slice(0, 120)}`);
+  await shot('restored');
+  // The notice puts it back the way it was.
+  await win.locator('.notice', { hasText: 'back as it was' }).getByRole('button', { name: 'Undo' }).click();
+  await win.waitForFunction(
+    ([p, before]) => window.api.readText(p).then((t) => t === before),
+    [file, now],
+    { timeout: 15000 },
+  );
+  await win.locator('.notice .icon').last().click().catch(() => undefined);
+});
+
 await step('Open: folders fold and unfold; Motion setting', async () => {
   await win.keyboard.press('Control+O');
   const row = win.locator('.tree-row', { hasText: 'review.md' });

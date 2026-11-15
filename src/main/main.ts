@@ -390,6 +390,20 @@ const api: Api = {
       .catch(() => null);
     return { updatedNotes, links };
   },
+  async restoreVersion(path, rev) {
+    const root = ws().root;
+    const file = abs(path);
+    const want = await git.readBlob(root, path, rev); // follows a rename back to the name it had
+    const had = await fs.readFile(file).then((b) => [...b], () => null);
+    await fs.mkdir(dirname(file), { recursive: true });
+    await fs.writeFile(file, want);
+    return { had };
+  },
+  async undoRestore(path, had) {
+    const file = abs(path);
+    if (had) await fs.writeFile(file, Buffer.from(had));
+    else await fs.rm(file, { force: true });
+  },
   async updateLinks(changes, message) {
     const w = ws();
     const byNote = new Map<string, typeof changes>();

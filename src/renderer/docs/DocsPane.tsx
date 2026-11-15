@@ -45,6 +45,7 @@ interface Props {
   docZoom: number;
   onDocZoom(z: number): void;
   onChangeRev(tab: DocTab, rev: string | undefined): void;
+  onRestore(tab: DocTab, rev: string): void;
   /** Starts or changes a comparison (left side = `rev`); undefined ends it. */
   onCompare(tab: DocTab, rev: string | undefined): void;
   onOpenCitation(c: { note: string; line: number }): void;
@@ -295,6 +296,7 @@ function DocView({ tab, visible, hop, ...p }: Props & { tab: DocTab; visible: bo
       onPick={(rev) => (tab.compare ? p.onCompare(tab, rev ?? tab.compare) : p.onChangeRev(tab, rev))}
       onCompare={(rev) => p.onCompare(tab, rev)}
       onOpenCitation={p.onOpenCitation}
+      onRestore={(rev) => p.onRestore(tab, rev)}
       versionDate={p.versionDate}
     />
   );
@@ -472,6 +474,7 @@ function VersionStrip({
   onPick,
   onCompare,
   onOpenCitation,
+  onRestore,
   versionDate,
 }: {
   tab: DocTab;
@@ -482,6 +485,7 @@ function VersionStrip({
   onPick(rev: string | undefined): void;
   onCompare(rev: string | undefined): void;
   onOpenCitation(c: Citation): void;
+  onRestore(rev: string): void;
   versionDate(sha: string): string | undefined;
 }) {
   const [versions, setVersions] = useState<Version[]>([]);
@@ -539,6 +543,15 @@ function VersionStrip({
           onClick={() => (tab.compare ? onCompare(undefined) : void startCompare())}
         >
           <Icon name="compare" size={12} /> Compare
+        </button>
+      )}
+      {tab.rev && !tab.compare && (
+        <button
+          className="strip-btn"
+          title="Put the file back as it was in this version, as an unsaved change"
+          onClick={() => onRestore(tab.rev!)}
+        >
+          <Icon name="undo" size={12} /> Restore this version
         </button>
       )}
       {citations.length > 0 && (

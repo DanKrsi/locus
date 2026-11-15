@@ -119,7 +119,6 @@ the choice in the dialog is only about the plain copies beside them.
 
 Everything here is on Folio's own "not built" list, or absent from it:
 
-- **Restore** an old version of a file (Folio can only view and copy by hand).
 - Files changed in another program refresh at once (Folio waits for the window to regain focus).
 - A review **before** saving a version, not only after.
 - Flowcharts: hover cards, tour mode, the update helper, copy and paste, align, auto-layout

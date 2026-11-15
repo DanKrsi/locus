@@ -4,12 +4,18 @@ import { useEffect, useState } from 'react';
 import type { ClaudeStatus } from '../shared/api';
 import { api } from './api';
 import { Icon } from './icons';
+import { compareVersions } from '../core/version';
 
 type Target = 'code' | 'desktop';
 
+/** Whether what Claude has is as new as this app's: a newer plugin (it updates itself) is fine. */
+function asNewAs(installed: { version?: string } | undefined, current: string): boolean {
+  return !!installed?.version && compareVersions(installed.version, current) >= 0;
+}
+
 /** True when Claude is installed here and its Locus tools are missing or older than this app's. */
 export function claudeNeedsSetup(s: ClaudeStatus): boolean {
-  return (s.code.found && s.code.installed?.version !== s.code.current) || (s.desktop.found && s.desktop.installed?.version !== s.desktop.current);
+  return (s.code.found && !asNewAs(s.code.installed, s.code.current)) || (s.desktop.found && !asNewAs(s.desktop.installed, s.desktop.current));
 }
 
 export function ClaudeDialog({ first, onClose }: { first: boolean; onClose(): void }) {
@@ -48,13 +54,15 @@ export function ClaudeDialog({ first, onClose }: { first: boolean; onClose(): vo
   const row = (t: Target, name: string, what: string) => {
     const s = status?.[t];
     const installed = s?.installed;
-    const upToDate = installed && installed.version === s.current;
+    const upToDate = !!s && asNewAs(installed, s.current);
+    // Claude Code keeps its own copy and updated it before this app was: nothing for this button to do.
+    const newer = upToDate && compareVersions(installed!.version!, s!.current) > 0;
     const state = !status
       ? 'Checking…'
       : !s!.found
         ? 'Not found on this computer'
         : upToDate
-          ? `Connected · ${installed.version}`
+          ? `Connected · ${installed!.version}`
           : installed
             ? `Update available · ${installed.version || 'older version'} → ${s!.current}`
             : 'Not connected';
@@ -75,6 +83,11 @@ export function ClaudeDialog({ first, onClose }: { first: boolean; onClose(): vo
           )}
         </div>
         {msg && <div className={'claude-msg' + (msg.ok ? '' : ' bad')}>{msg.text}</div>}
+        {newer && !msg && (
+          <div className="muted" style={{ fontSize: 12.5, marginTop: 6 }}>
+            {name} already has a newer Locus ({installed!.version}) than this app ({s!.current}); it updates itself. Nothing to do here. Installing the newest Locus brings this app level.
+          </div>
+        )}
         {/* After connecting, Claude Desktop only sees Locus once it starts again. */}
         {t === 'desktop' && msg?.ok && !restarted && status?.desktop.running && (
           <div className="claude-restart">

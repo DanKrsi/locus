@@ -382,6 +382,9 @@ opens the same dialog any time, with each app's status and a Connect / Update / 
 - **Claude Code**: a plugin installed from the marketplace is updated with `claude plugin
   update`. Otherwise Locus writes a plugin folder to `~/.claude/skills/locus` (plugin.json, the
   skill, and `.mcp.json`); Claude Code loads it as `locus@skills-dir` in its next session.
+  A marketplace plugin updates itself as soon as a release is published, so it can be newer than
+  the app; that counts as connected (versions are compared as numbers, not for equality), no
+  Update is offered, and the row says why.
 - **Claude Desktop**: Locus adds a `locus` entry to `mcpServers` in
   `%APPDATA%\Claude\claude_desktop_config.json`, leaving everything else as it was and keeping the
   original as `claude_desktop_config.json.before-locus`; a file that isn't valid JSON is left alone.

@@ -120,6 +120,29 @@ let after = [];
 }
 check('restart closes Claude Desktop and opens it again', after.length === 1 && after[0] !== fake.pid, `before ${fake.pid}, after ${after}`);
 
+// 3b. Claude Code updates its own copy of the plugin as soon as a release is published, which can be
+// before this app is reinstalled. A plugin newer than the app is not "out of date", and the button
+// that would "update" it to the app's older version is not offered.
+{
+  const manifest = join(plugin, '.claude-plugin', 'plugin.json');
+  await writeFile(manifest, JSON.stringify({ ...(await json(manifest)), version: '99.0.0' }, null, 2) + '\n');
+  const { app, win } = await launch();
+  await win.getByTitle('Settings').waitFor({ timeout: 15000 });
+  await win.getByTitle('Settings').click();
+  await win.getByRole('button', { name: 'Set up Claude…' }).click();
+  const code = win.locator('.claude-row', { hasText: 'Claude Code' });
+  await code.getByText('Connected · 99.0.0').waitFor({ timeout: 15000 }).catch(() => undefined);
+  const text = (await code.innerText()).replace(/\n/g, ' / ');
+  check('a plugin newer than the app is connected, with no Update offered and a word about why', /Connected · 99\.0\.0/.test(text) && /newer Locus/.test(text) && !(await code.getByRole('button', { name: 'Update' }).count()), text);
+  await win.screenshot({ path: join(out, 'newer-plugin.png') });
+  const needs = await win.evaluate(async () => {
+    const s = await window.api.claudeStatus();
+    return s.code.installed?.version;
+  });
+  check('the app reads that plugin as 99.0.0', needs === '99.0.0', String(needs));
+  await app.close();
+}
+
 // 4. Uninstalling removes only what Locus added.
 execFileSync(join(repo, 'node_modules', 'electron', 'dist', 'electron.exe'), [repo, '--remove-claude'], { env, timeout: 60000 });
 const last = await json(deskCfg);

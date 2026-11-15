@@ -811,7 +811,7 @@ await step('Pick in the document: draw the area on the right', async () => {
   await win.waitForTimeout(1500);
   // Draw a box with the Area tool.
   await win.locator('.viewer:not(.hidden) .pdf-page canvas').first().waitFor({ timeout: 20000 });
-  await win.getByRole('button', { name: 'Area' }).click();
+  await win.locator('.viewer:not(.hidden)').first().getByRole('button', { name: 'Area', exact: true }).click();
   // Drag inside the part of the page that is on screen.
   const view = await win.locator('.viewer:not(.hidden) .pdf-scroll').boundingBox();
   await win.mouse.move(view.x + 120, view.y + 140);
@@ -826,6 +826,36 @@ await step('Pick in the document: draw the area on the right', async () => {
   if ((await win.getByLabel('Points at').inputValue()) !== 'area') throw new Error('the picked area did not come back');
   await dlg.getByRole('button', { name: 'Save' }).click();
   await win.waitForFunction(() => window.api.readText('/notes/review.md').then((t) => /\[Table 5\]\(<?[^)>]*#page=\d+&viewrect=[\d,]+&at=[0-9a-f]{10}>?\)/.test(t)), null, { timeout: 10000 });
+});
+
+await step('a box drawn by hand quotes what is inside it', async () => {
+  await win.locator('[data-pane="docs"] .tab', { hasText: 'BDS-100' }).first().click();
+  await win.locator('.viewer:not(.hidden) .pdf-page canvas').first().waitFor({ timeout: 20000 });
+  // A side-by-side comparison puts two toolbars in one viewer: take the first of everything.
+  const pdf = win.locator('.viewer:not(.hidden)').first();
+  const bar = pdf.locator('.toolbar').first();
+  await bar.getByRole('button', { name: 'Area', exact: true }).click(); // "Cite area" also contains "Area"
+  const view = await pdf.locator('.pdf-scroll').first().boundingBox();
+  await win.mouse.move(view.x + 120, view.y + 150);
+  await win.mouse.down();
+  await win.mouse.move(view.x + 420, view.y + 260, { steps: 8 });
+  await win.mouse.up();
+  await pdf.locator('button.cite').first().filter({ hasText: 'Cite area' }).waitFor({ timeout: 5000 });
+  // The words inside the box are read before citing, so the link carries them.
+  await win.locator('.editor-wrap .cm-content').first().click();
+  await win.keyboard.press('Control+End');
+  await win.keyboard.type('\n\nDrawn box: ');
+  await bar.getByRole('button', { name: 'Cite area' }).click();
+  await win.locator('.cm-renaming').waitFor({ timeout: 10000 });
+  await win.keyboard.type('A drawn box');
+  await win.keyboard.press('Enter');
+  await win.keyboard.press('Control+S');
+  await win.waitForFunction(
+    () => window.api.readText('/notes/review.md').then((t) => /\[A drawn box\]\(<?[^)>]*viewrect=[\d,]+[^)>]*>? "[^"]+"\)/.test(t)),
+    null,
+    { timeout: 10000 },
+  );
+  await shot('drawn-box-quote');
 });
 
 await step('Link to a section, and the shortcuts list', async () => {

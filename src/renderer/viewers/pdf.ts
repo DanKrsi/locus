@@ -66,6 +66,35 @@ export async function pageRuns(data: Uint8Array, pageNo: number): Promise<TextRu
   return runs;
 }
 
+/**
+ * The words inside an area of a page, in reading order. A box drawn by hand quotes them, so the
+ * link can find the same place again after the document changes, the way a quoted link does.
+ */
+export async function textInRect(data: Uint8Array, pageNo: number, rect: Rect, limit = 400): Promise<string> {
+  const runs = await pageRuns(data, pageNo);
+  const inside = runs.filter((r) => {
+    const x = r.x + r.w / 2;
+    const y = r.y + r.h / 2;
+    return x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h;
+  });
+  if (!inside.length) return '';
+  // Runs come in the order the page draws them, which is not always the order it reads in.
+  const lines: { y: number; runs: TextRun[] }[] = [];
+  for (const run of [...inside].sort((a, b) => a.y - b.y || a.x - b.x)) {
+    const line = lines.find((l) => Math.abs(l.y - run.y) <= Math.max(2, run.h * 0.6));
+    if (line) line.runs.push(run);
+    else lines.push({ y: run.y, runs: [run] });
+  }
+  const text = lines
+    .map((l) => l.runs.sort((a, b) => a.x - b.x).map((r) => r.str.trim()).filter(Boolean).join(' '))
+    .filter(Boolean)
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  // A whole-page box would quote the whole page: enough to find it again is enough.
+  return text.length > limit ? text.slice(0, limit).replace(/\s+\S*$/, '') : text;
+}
+
 /** Finds quoted text, searching outward from the page it was on; null when it is gone. */
 export async function locateQuote(data: Uint8Array, quote: string, near: number): Promise<{ page: number; rect: Rect } | null> {
   const doc = await openPdf(data);

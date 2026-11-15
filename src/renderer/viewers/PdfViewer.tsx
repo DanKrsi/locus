@@ -3,7 +3,7 @@ import type { PDFDocumentProxy, PDFPageProxy, RenderTask } from 'pdfjs-dist';
 import type { Rect } from '../../core/link';
 import { Icon } from '../icons';
 import { CiteButton } from './CiteButton';
-import { openPdf, pdfjs } from './pdf';
+import { openPdf, pdfjs, textInRect } from './pdf';
 import { centred, glide, pulse, settled, showTravel } from './travel';
 import type { CiteMark, ViewerProps } from './types';
 
@@ -27,6 +27,8 @@ export function PdfViewer({ data, reveal, onCite, handle, marks, onMark, onPlace
   const [pageInput, setPageInput] = useState('1');
   const [areaMode, setAreaMode] = useState(false);
   const [area, setArea] = useState<{ page: number; rect: Rect } | null>(null);
+  /** The words inside the drawn box, ready for the link to quote when it is cited. */
+  const [areaText, setAreaText] = useState<string | null>(null);
   const [cited, setCited] = useState<{ page: number; rect?: Rect } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const pendingScroll = useRef<{ page: number; y?: number; h?: number; until: number } | null>(null);
@@ -207,6 +209,15 @@ export function PdfViewer({ data, reveal, onCite, handle, marks, onMark, onPlace
   const zoomRef = useRef(zoom);
   zoomRef.current = zoom;
 
+  useEffect(() => {
+    if (!area) return setAreaText(null);
+    let cancelled = false;
+    void textInRect(data, area.page, area.rect).then((t) => !cancelled && setAreaText(t || null));
+    return () => {
+      cancelled = true;
+    };
+  }, [area, data]);
+
   const selectionQuote = (): { text: string; page?: number } | null => {
     const sel = window.getSelection();
     if (!sel || sel.isCollapsed || !scrollRef.current?.contains(sel.anchorNode)) return null;
@@ -223,13 +234,14 @@ export function PdfViewer({ data, reveal, onCite, handle, marks, onMark, onPlace
         const p = area?.page ?? q?.page ?? page;
         return {
           loc: area ? { page: area.page, viewrect: area.rect } : { page: p },
-          quote: q?.text,
+          // Selected text wins; a box with nothing selected quotes what it was drawn around.
+          quote: q?.text ?? (area ? areaText ?? undefined : undefined),
           pageLabel: labels?.[p - 1] && labels[p - 1] !== String(p) ? labels[p - 1] : undefined,
         };
       },
     });
     return () => handle(null);
-  }, [doc, area, page, labels]);
+  }, [doc, area, areaText, page, labels]);
 
   useEffect(() => {
     if (!areaMode) return;

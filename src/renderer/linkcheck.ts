@@ -3,6 +3,7 @@
 // (the cited place really changed). Nothing here writes anything; see App for what is done with it.
 import { basename, fileKind, formatDestination, formatReference, parseDestination, type Location, type Reference } from '../core/link';
 import { isCanvas } from '../core/canvas';
+import { findSlide, readSlides } from '../core/slides';
 import { mapLines } from '../core/remap';
 import { renumberLabel } from '../core/upkeep';
 import type { Citation, NoteLinkUpdate } from '../shared/api';
@@ -48,6 +49,11 @@ const moved = (path: string, at: string) => ask(`m|${path}|${at}`, () => api.fin
 const hunks = (path: string, at: string) => ask(`h|${path}|${at}`, () => api.diffHunks(path, at).catch(() => []));
 const bytes = (path: string, rev?: string) =>
   ask(`b|${path}|${rev ?? ''}`, () => (rev ? api.readFile(path, rev) : loadBytes({ path, external: false })).catch(() => null));
+const slidesIn = (path: string) =>
+  ask(`s|${path}`, async () => {
+    const data = await bytes(path);
+    return data ? readSlides(data).catch(() => null) : null;
+  });
 
 /** The text of the cited cells, row by row, or null when the range can't be found. */
 async function cellText(data: Uint8Array, path: string, loc: Location): Promise<string | null> {
@@ -125,6 +131,23 @@ export async function checkLink(cite: Citation, head: string): Promise<CheckedLi
     if (is !== null && !loc.sheet.sheet) return { ...base, verdict: 'follow', next: latest(loc), reason: 'the named range still resolves' };
     if (was !== null && was === is) return { ...base, verdict: 'follow', next: latest(loc), reason: 'the cited cells hold the same values' };
     return { ...base, verdict: 'review', next: latest(loc), reason: is === null ? 'the cited cells are gone' : 'a value in the cited cells changed' };
+  }
+
+  if (kind === 'slides' && loc.slide !== undefined) {
+    // A slide link is a number, and numbers move when a slide is inserted. Quoted words do not.
+    if (cite.quote) {
+      const slides = await slidesIn(now);
+      const on = slides ? findSlide(slides, cite.quote, loc.slide) : null;
+      if (on)
+        return {
+          ...base,
+          verdict: 'follow',
+          next: latest({ ...loc, slide: on }),
+          reason: on === loc.slide ? 'the quoted text is still on this slide' : `the quoted text is now on slide ${on}`,
+        };
+      return { ...base, verdict: 'review', next: latest(loc), reason: 'the quoted text is no longer in the deck' };
+    }
+    return { ...base, verdict: 'review', next: latest(loc), reason: loc.viewrect ? 'the deck changed and the box has no quote to check' : `${basename(path)} changed` };
   }
 
   return { ...base, verdict: 'review', next: latest(loc), reason: `${basename(path)} changed` };

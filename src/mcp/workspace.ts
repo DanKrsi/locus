@@ -21,7 +21,8 @@ import { layoutDraft, type DraftArrow, type DraftLoop } from '../core/flowLayout
 import { findQuote } from '../core/quote';
 import { mapLines } from '../core/remap';
 import * as git from '../main/git';
-import { readPdf, readSlides, readWorkbook, type PdfPage } from './reader';
+import { readPdf, readWorkbook, type PdfPage } from './reader';
+import { readSlides } from '../core/slides';
 import { addNoteId, joinNoteId, newNoteId, readNoteId, splitNoteId, withLinkNoteId } from '../core/noteid';
 
 export interface Workspace {

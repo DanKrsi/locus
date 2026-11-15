@@ -20,6 +20,7 @@ import { DocsPane } from './docs/DocsPane';
 import { FileBrowser } from './FileBrowser';
 import { invalidateLatest, loadBytes, mimeFor } from './files';
 import { locateQuote } from './viewers/pdf';
+import { findSlide, readSlides } from '../core/slides';
 import { checkLink, checkLinks, pinFor, updateFor, type CheckedLink } from './linkcheck';
 import { linkNoteId, withLinkNoteId } from '../core/noteid';
 import { ReviewBar, UpkeepSummary, type ReviewChoice, type SummaryChoice } from './LinkUpkeep';
@@ -507,6 +508,14 @@ export function App() {
       if (found?.page === ref.loc.page) return { state: 'ok' };
       return { state: 'ok', changed: true, reason: found ? `The quoted text moved to page ${found.page}` : 'The quoted text is no longer in the file' };
     }
+    if (kind === 'slides' && quote && ref.loc.slide) {
+      const on = await loadBytes({ path, external: false })
+        .then((data) => readSlides(data))
+        .then((slides) => findSlide(slides, quote, ref.loc.slide!))
+        .catch(() => null);
+      if (on === ref.loc.slide) return { state: 'ok' };
+      return { state: 'ok', changed: true, reason: on ? `The quoted text moved to slide ${on}` : 'The quoted text is no longer in the deck' };
+    }
     return { state: 'ok', changed: true, reason: `${basename(path)} changed since it was cited` };
   };
 
@@ -571,7 +580,18 @@ export function App() {
           else if (m.status === 'moved') showToast(m.start === m.end ? `Moved to line ${m.start} since this was cited` : `Lines moved to ${m.start}–${m.end} since this was cited`);
         } else if (await api.fileChangedSince(path, at).catch(() => false)) {
           const name = basename(path);
-          if (kind === 'pdf' && info.title && loc.page) {
+          if (kind === 'slides' && info.title && loc.slide) {
+            // The deck changed: the quoted words say which slide this is now, whatever its number.
+            const on = await loadBytes({ path, external: false })
+              .then((data) => readSlides(data))
+              .then((slides) => findSlide(slides, info.title!, loc.slide!))
+              .catch(() => null);
+            if (!on) setNotice({ text: `The quoted text is no longer in ${name}. It changed since you cited it${since}.`, danger: true, actions });
+            else if (on !== loc.slide) {
+              loc = { ...loc, slide: on };
+              setNotice({ text: `${name} changed since you cited it${since}. The quoted text is now on slide ${on}.`, actions });
+            }
+          } else if (kind === 'pdf' && info.title && loc.page) {
             // The quote says what was cited: find it in the latest file, even on another page.
             const found = await loadBytes({ path, external: false })
               .then((data) => locateQuote(data, info.title!, loc.page!))

@@ -48,7 +48,7 @@ others are `key=value` pairs in any order.
 | Code / text | `L<n>` or `L<a>-L<b>` (GitHub style) | `#L12-L18` |
 | PDF page | `page=<n>` (1-based page in the file) | `#page=18` |
 | PDF area | `page=<n>&viewrect=<left>,<top>,<width>,<height>` in PDF points from the page's top-left | `#page=12&viewrect=72,140,300,95` |
-| Slide deck | `slide=<n>` | `#slide=4` |
+| Slide deck | `slide=<n>`, with an optional `&viewrect=<left>,<top>,<width>,<height>` in points of a 960 x 540 slide from its top-left | `#slide=4&viewrect=80,60,420,180` |
 | Spreadsheet | Excel reference: `Sheet!A1:B2`, `'Sheet name'!A1`, `Sheet!4:12`, `Sheet!F:H`, or a named range | `#'Load cases'!B4:D12` |
 | Markdown note | GitHub heading slug | `#design-basis` |
 | Audio / video | `t=<seconds>` or `t=<m:ss>` / `t=<h:mm:ss>` | `#t=14:32` |

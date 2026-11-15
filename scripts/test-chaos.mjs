@@ -5,7 +5,8 @@
 // step and lists anything a user would call a broken link.
 // Usage: npm run build && node scripts/test-chaos.mjs [first-scene] [last-scene]
 import { _electron as electron } from 'playwright';
-import { copyFile, mkdir, rename, rm, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import JSZip from 'jszip';
 import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
@@ -270,6 +271,74 @@ scene('duplicate a document, the way people keep a copy before meddling', async 
   await win.waitForTimeout(1500);
   note(`notice: ${(await clearNotice()) ?? 'none'}`);
   await report('after duplicating the workbook');
+});
+
+scene('draw a box on a slide, then shuffle the deck under it', async () => {
+  // Open the deck on the right and draw a box on a slide.
+  await win.keyboard.press('Control+P');
+  await win.getByPlaceholder('Find a file by name').fill('review.pptx');
+  await win.locator('.tree-row', { hasText: 'review.pptx' }).first().waitFor({ timeout: 10000 });
+  await win.keyboard.press('Enter');
+  const viewer = win.locator('.viewer:not(.hidden)');
+  await viewer.locator('.slides-host .pptx-preview-wrapper, .slides-host > *').first().waitFor({ timeout: 25000 });
+  await win.waitForTimeout(1500);
+  await viewer.getByRole('button', { name: 'Area' }).click();
+  const box = await viewer.locator('.slides-stage').boundingBox();
+  await win.mouse.move(box.x + 80, box.y + 80);
+  await win.mouse.down();
+  await win.mouse.move(box.x + 420, box.y + 220, { steps: 8 });
+  await win.mouse.up();
+  await viewer.getByRole('button', { name: 'Cite area' }).waitFor({ timeout: 8000 });
+  await shot('slide-box');
+
+  await openNote('Start here');
+  await win.locator('.editor-wrap .cm-content').first().click();
+  await win.keyboard.press('Control+End');
+  await win.keyboard.type('\n\nSlide box: ');
+  await viewer.getByRole('button', { name: 'Cite area' }).click();
+  await win.locator('.cm-renaming').waitFor({ timeout: 10000 });
+  await win.keyboard.type('A slide box');
+  await win.keyboard.press('Enter');
+  await win.keyboard.press('Control+S');
+  await win.waitForTimeout(1200);
+  const link = (await api('readText', '/notes/Start here.md')).split('\n').find((l) => l.includes('A slide box')) ?? '';
+  note(`the link reads: ${link.replace(/^.*\]\(/, '').slice(0, 140)}`);
+  const slide = Number(/slide=(\d+)/.exec(link)?.[1]);
+  if (!slide) problem('a box drawn on a slide did not record which slide');
+  if (!/viewrect=[\d,]+/.test(link)) problem('a box drawn on a slide did not record the box');
+  if (!/"[^"]+"/.test(link)) problem('a box drawn on a slide quoted nothing, so it can never follow');
+
+  // Someone reorders the deck: the slide the box is on moves to another number.
+  const file = join(ws, 'docs', 'review.pptx');
+  const zip = await JSZip.loadAsync(await readFile(file));
+  const pres = await zip.file('ppt/presentation.xml').async('string');
+  const ids = [...pres.matchAll(/<p:sldId\b[^>]*\/>/g)].map((m) => m[0]);
+  if (ids.length > slide) {
+    const moved = [...ids];
+    moved.splice(slide - 1, 0, moved.pop()); // the last slide jumps in front of the cited one
+    let i = 0;
+    zip.file('ppt/presentation.xml', pres.replace(/<p:sldId\b[^>]*\/>/g, () => moved[i++]));
+    await writeFile(file, await zip.generateAsync({ type: 'nodebuffer' }));
+  } else problem('the deck is too short to shuffle');
+
+  await win.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await saveVersion('Shuffled the deck', 'update');
+  // Links that can follow are written once the review of the rest is over, so end it.
+  const bar = win.locator('.review-bar:not(.upkeep-summary)');
+  await bar.waitFor({ timeout: 8000 }).catch(() => undefined);
+  if (await bar.count()) {
+    await bar.getByRole('button', { name: /Stop reviewing/ }).first().click();
+  }
+  await win
+    .waitForFunction(() => window.api.readText('/notes/Start here.md').then((t) => /A slide box\]\([^)]*slide=2/.test(t)), null, { timeout: 20000 })
+    .catch(() => undefined);
+  const after = (await api('readText', '/notes/Start here.md')).split('\n').find((l) => l.includes('A slide box')) ?? '';
+  const now = Number(/slide=(\d+)/.exec(after)?.[1]);
+  note(`after the shuffle the link says slide ${now} (was ${slide})`);
+  if (!now) problem('the slide box link lost its slide');
+  else if (now === slide) problem('the slide box did not follow the slide it quotes');
+  await shot('slide-box-followed');
+  await report('after shuffling the deck');
 });
 
 scene('replace a document with another edition, keeping the name', async () => {

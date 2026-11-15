@@ -164,6 +164,10 @@ files is refused rather than written into.
 
 - **Cite** button at the far right of the viewer toolbar (gold), label depends on the view:
   Cite page / Cite area / Cite lines / Cite range / Cite time. Shortcut **Ctrl+Shift+L**.
+- **Area** in the PDF and slide toolbars draws a box: drag over the page or the slide, and the
+  Cite button becomes **Cite area**. A box quotes the words inside it (the selected text wins if
+  there is a selection), so the link can find that place again after the file changes — see §4.6.
+  A box over something with no words in it has nothing to quote, and is asked about instead.
 - Inserts the reference at the cursor (see link-format §3 for the label rules) and opens an
   inline rename box over the label: label pre-selected, 2px accent border, hint
   "Enter to name · Esc keeps '<default>'". Typing replaces, Enter confirms.
@@ -214,7 +218,9 @@ file was edited answers in about a second:
 | PDF with a quote | the quote is found again, on this page or another | the quote was reworded or removed |
 | PDF page or area, no quote | never (nothing to check) | always; the same page or box is proposed |
 | Spreadsheet | a named range still resolves; the cited cells hold the same values | a value in the cited cells changed |
-| Slides, pictures, recordings | never | any change to the file |
+| Slide with a quote | the words are found again, on this slide or another | the words were reworded or removed |
+| Slide or slide box, no quote | never (nothing to check) | any change to the deck |
+| Pictures, recordings | never | any change to the file |
 | Any file, whole-file link | always | never |
 | Any file | it was only moved or renamed | it was moved and edited |
 

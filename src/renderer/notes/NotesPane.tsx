@@ -14,11 +14,11 @@ import {
   allLinks,
   flashLine,
   flashRange,
-  flashRanges,
   formatState,
   insertBlock,
   insertLink,
   refreshEffect,
+  setAttention,
   setHeading,
   toggleLinePrefix,
   toggleWrap,
@@ -54,8 +54,13 @@ export interface NotesHandle {
   handleMove(from: string, to: string): void;
   /** Opens a note and flashes a line ("Cited in" jumps). */
   revealLine(path: string, line: number): Promise<void>;
-  /** Flashes the given links of the active note and scrolls to the first ("Show me"). */
-  showLinks(dests: string[]): void;
+  /**
+   * Marks the links with these destinations in one note, and clears the marks everywhere else:
+   * what a notice is about stays marked for as long as the notice is up. `null` clears them all.
+   */
+  markLinks(path: string | null, dests: string[]): void;
+  /** Brings one of a note's links into view (opening the note if need be) and flashes it. */
+  showLink(path: string, dest: string): Promise<void>;
 }
 
 type EditorCallbacks = Pick<NoteEditorOptions, 'onFollow' | 'refStatus' | 'imageUrl' | 'renderHoverCard'>;
@@ -516,16 +521,13 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
       setTabs((ts) => ts.map((t) => ({ ...t, path: moved(t.path) })));
       setActive((a) => (a ? moved(a) : a));
     },
-    showLinks: (dests) => {
-      const view = active ? docs.current.get(active)?.view : undefined;
-      if (!view) return;
-      const wanted = new Set(dests);
-      flashRanges(
-        view,
-        allLinks(view.state)
-          .filter((l) => wanted.has(l.dest))
-          .map((l) => ({ from: l.from, to: l.to })),
-      );
+    markLinks: (path, dests) => {
+      for (const [p, d] of docs.current) setAttention(d.view, path !== null && p === path ? dests : null);
+    },
+    showLink: async (path, dest) => {
+      const view = await open(path);
+      const link = view && allLinks(view.state).find((l) => l.dest === dest);
+      if (view && link) flashRange(view, link.from, link.to);
     },
     revealLine: async (path, line) => {
       if (isCanvas(path)) {

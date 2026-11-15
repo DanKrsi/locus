@@ -265,6 +265,21 @@ svg.ico { width: 16px; height: 16px; flex: none; }
 .notice.danger { background: var(--danger-soft); color: var(--danger); }
 .notice-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .notice-help { font-size: 12px; opacity: 0.85; }
+.notice-links { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 3px; font-size: 12px; }
+.notice-chip {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 1px 8px;
+  border: 1px solid var(--mark);
+  border-radius: 10px;
+  background: var(--mark-soft);
+  color: var(--mark-text);
+  font: inherit;
+  cursor: pointer;
+}
+.notice-chip:hover { outline: 2px solid var(--mark); }
 .toast {
   position: fixed;
   left: 50%;
@@ -406,6 +421,9 @@ svg.ico { width: 16px; height: 16px; flex: none; }
 /* The file has left the workspace, but the link still opens the version it was cited from. */
 .cm-ref.gone { color: var(--muted); text-decoration: underline dotted var(--muted); }
 .cm-ref.active { background: var(--mark-soft); outline: 2px solid var(--mark); }
+/* A link a notice is about: amber like the notice itself, one bar under the icon and the label, so
+   it is never taken for a broken link (red, wavy) and reads as one marked thing. */
+.cm-attention { background: var(--mark-soft); box-shadow: inset 0 -3px 0 var(--mark); }
 .cm-ref .badge { margin-left: 4px; font-weight: 500; vertical-align: 1px; }
 /* A reference in a note: icon widget, editable label text, then the version badge. */
 .cm-ref.cm-ref-icon { padding-right: 0; border-radius: 4px 0 0 4px; }

@@ -288,6 +288,24 @@ export function flashRanges(view: EditorView, ranges: { from: number; to: number
   setTimeout(() => view.dispatch({ effects: flashEffect.of(null) }), 1600);
 }
 
+/**
+ * The links a notice is about, marked in the note for as long as the notice is up. The flash on
+ * "Show me" fades in a second and a half; this does not, so the note itself says which links.
+ */
+const attentionEffect = StateEffect.define<string[] | null>();
+const attentionField = StateField.define<Set<string> | null>({
+  create: () => null,
+  update(value, tr) {
+    for (const e of tr.effects) if (e.is(attentionEffect)) return e.value && e.value.length ? new Set(e.value) : null;
+    return value;
+  },
+});
+
+/** Marks the links with these destinations (null clears the marks). */
+export function setAttention(view: EditorView, dests: string[] | null) {
+  view.dispatch({ effects: attentionEffect.of(dests) });
+}
+
 /** The link currently shown by tour mode, highlighted in the note. */
 const setActiveEffect = StateEffect.define<number | null>();
 const activeLinkField = StateField.define<number | null>({
@@ -341,6 +359,7 @@ class RefWidget extends WidgetType {
     readonly status: RefStatus,
     readonly onFollow: (info: LinkInfo) => void,
     readonly active = false,
+    readonly attention = false,
   ) {
     super();
   }
@@ -351,13 +370,15 @@ class RefWidget extends WidgetType {
       other.status.state === this.status.state &&
       other.status.badge === this.status.badge &&
       other.status.changed === this.status.changed &&
-      other.active === this.active
+      other.active === this.active &&
+      other.attention === this.attention
     );
   }
   toDOM(view: EditorView) {
     const span = document.createElement('span');
     const state = this.status.state;
-    span.className = 'cm-ref' + (state === 'broken' ? ' broken' : state === 'gone' ? ' gone' : '') + (this.active ? ' active' : '');
+    span.className =
+      'cm-ref' + (state === 'broken' ? ' broken' : state === 'gone' ? ' gone' : '') + (this.active ? ' active' : '') + (this.attention ? ' cm-attention' : '');
     if (state !== 'ok' && this.status.reason) span.title = this.status.reason;
     span.innerHTML = iconSvg(kindIcon(fileKind(this.info.ref.path)));
     span.append(this.info.label, ...refBadges(this.status));
@@ -742,16 +763,17 @@ function buildDecorations(view: EditorView, opts: NoteEditorOptions): Preview {
             const web = info.ref.pathKind === 'web';
             const status = web ? null : opts.refStatus(info);
             const active = state.field(activeLinkField, false) === info.from;
+            const attention = !web && !!state.field(attentionField, false)?.has(info.dest);
             if (info.labelTo === info.labelFrom) {
               // No label to edit as text: show the whole link as one piece.
-              const widget = web ? new WebLinkWidget(info.dest, info.dest) : new RefWidget(info, status!, opts.onFollow, active);
+              const widget = web ? new WebLinkWidget(info.dest, info.dest) : new RefWidget(info, status!, opts.onFollow, active, attention);
               object(Decoration.replace({ widget }), info.from, info.to);
               return false;
             }
             // The label is ordinary text; only "[" and "](target)" are hidden.
             // A web link has no status to read: only workspace links can be broken or gone.
             const mark = web ? '' : status!.state === 'broken' ? ' broken' : status!.state === 'gone' ? ' gone' : '';
-            const cls = web ? 'cm-weblink' : 'cm-ref' + mark + (active ? ' active' : '');
+            const cls = web ? 'cm-weblink' : 'cm-ref' + mark + (active ? ' active' : '') + (attention ? ' cm-attention' : '');
             conceal(
               web ? hide : Decoration.replace({ widget: new LinkIconWidget(kindIcon(fileKind(info.ref.path)), cls, opts.onFollow) }),
               info.from,
@@ -822,7 +844,9 @@ function livePreview(opts: NoteEditorOptions): Extension {
           u.viewportChanged ||
           u.focusChanged ||
           syntaxTree(u.startState) !== syntaxTree(u.state) ||
-          u.transactions.some((t) => t.effects.some((e) => e.is(refreshEffect) || e.is(startRename) || e.is(endRename) || e.is(setActiveEffect)))
+          u.transactions.some((t) =>
+            t.effects.some((e) => e.is(refreshEffect) || e.is(startRename) || e.is(endRename) || e.is(setActiveEffect) || e.is(attentionEffect)),
+          )
         ) {
           this.preview = buildDecorations(u.view, opts);
         }
@@ -1076,6 +1100,7 @@ export function createNoteEditor(parent: HTMLElement, opts: NoteEditorOptions): 
       renameKeymap,
       flashField,
       activeLinkField,
+      attentionField,
       revealField,
       livePreview(opts),
       renderedTables(opts),

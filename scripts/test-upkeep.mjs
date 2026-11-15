@@ -203,20 +203,81 @@ await step('a moved file opens from its link without claiming it changed', async
   if (!(await api('readText', '/notes/moved.md')).includes('(/src/solver.py#L1-L2')) throw new Error('moving it back did not bring the link back');
 });
 
-await step('Record: links made by hand get a version written into them', async () => {
+await step('a notice names the links it is about and keeps them marked until it goes', async () => {
+  // Two links more than a screen apart: the notice has to say which, and the note has to show it.
+  const filler = Array.from({ length: 40 }, (_, i) => `Filler paragraph ${i + 1}, long enough to be a line of its own.`).join('\n\n');
+  await api('writeText', '/notes/twolinks.md', `# Two links\n\nSee [first solver](/src/solver.py#L1-L2).\n\n${filler}\n\nSee [second client](/src/net/client.py#L1-L2).\n`);
+  await openNote('twolinks.md');
+  const notice = win.locator('.notice', { hasText: 'record a version' });
+  await notice.waitFor({ timeout: 10000 });
+  if (!/^2 links/.test((await notice.innerText()).trim())) throw new Error(`expected the notice to count 2 links, got "${(await notice.innerText()).trim().slice(0, 80)}"`);
+  const chips = notice.locator('.notice-chip');
+  if ((await chips.count()) !== 2) throw new Error(`expected a chip for each of the 2 links, got ${await chips.count()}`);
+  // The first is on screen and marked, and still marked after the 1.6 s a flash lasts.
+  const first = win.locator('.editor-wrap .cm-attention', { hasText: 'first solver' }).first();
+  await first.waitFor({ timeout: 5000 });
+  await win.waitForTimeout(2500);
+  await first.waitFor({ timeout: 1000 });
+  // The second is a screen away; its chip takes you there.
+  await chips.filter({ hasText: 'second client' }).click();
+  const second = win.locator('.editor-wrap .cm-attention', { hasText: 'second client' }).first();
+  await second.waitFor({ timeout: 5000 });
+  const inView = await second.evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    return r.top >= 0 && r.bottom <= window.innerHeight;
+  });
+  if (!inView) throw new Error('the chip did not bring its link into view');
+  await shot('notice-names-its-links');
+  // Following a marked link, to see what it is, does not take the notice away.
+  await win.locator('.editor-wrap .cm-ref', { hasText: 'second client' }).first().click();
+  await win.waitForTimeout(800);
+  if (!(await notice.count())) throw new Error('following a marked link dismissed the notice');
+  // Closing the notice takes the marks with it.
+  await win.locator('.notice .icon').click();
+  await win.locator('.editor-wrap .cm-attention').first().waitFor({ state: 'detached', timeout: 3000 });
+});
+
+await step('Record: names its link, writes the version, and Ctrl+Z puts it back', async () => {
   await api('writeText', '/notes/byhand.md', '# By hand\n\nSee [the solver](/src/solver.py#L1-L2).\n');
   await openNote('byhand.md');
   const notice = win.locator('.notice', { hasText: "doesn't record a version" });
   await notice.waitFor({ timeout: 10000 });
-  // The banner says what Record will do, and can point at the link it means.
+  // It says what Record will do, names the link, and marks it in the note.
   await notice.locator('.notice-help', { hasText: 'Record writes' }).waitFor({ timeout: 5000 });
-  await notice.getByRole('button', { name: 'Show me' }).click();
-  await win.locator('.editor-wrap .cm-flash').first().waitFor({ timeout: 5000 });
+  await notice.locator('.notice-chip', { hasText: 'the solver' }).waitFor({ timeout: 5000 });
+  await win.locator('.editor-wrap .cm-attention', { hasText: 'the solver' }).first().waitFor({ timeout: 5000 });
   await shot('record-banner');
-  await notice.waitFor({ timeout: 2000 }); // showing is not answering: the banner stays
   await notice.getByRole('button', { name: 'Record' }).click();
   await win.keyboard.press('Control+S');
   await win.waitForFunction(() => window.api.readText('/notes/byhand.md').then((t) => /solver\.py#L1-L2&at=[0-9a-f]{10}\)/.test(t)), null, { timeout: 10000 });
+  // The notice said Ctrl+Z undoes it in this note. It does.
+  await win.locator('.editor-wrap .cm-content').first().focus();
+  await win.keyboard.press('Control+Z');
+  await win.keyboard.press('Control+S');
+  await win.waitForFunction(() => window.api.readText('/notes/byhand.md').then((t) => /solver\.py#L1-L2\)/.test(t) && !t.includes('&at=')), null, { timeout: 10000 });
+});
+
+await step("a note as the old demo was: a link to its own heading is no reason for a notice; the other is named", async () => {
+  await api('writeText', '/notes/olddemo-target.md', '# Target\n\nSomething to point at.\n');
+  await api('writeText', '/notes/selfonly.md', '# Self only\n\nBack to the [top](/notes/selfonly.md#self-only).\n');
+  await openNote('selfonly.md');
+  await win.waitForTimeout(3000);
+  if (await win.locator('.notice').count()) throw new Error(`a link to the note's own heading raised a notice: "${(await win.locator('.notice').first().innerText()).trim().slice(0, 100)}"`);
+  await api('writeText', '/notes/olddemo.md', '# Old demo\n\nThe target: [the target](/notes/olddemo-target.md).\n\nBack to the [top](/notes/olddemo.md#old-demo).\n');
+  await openNote('olddemo.md');
+  const notice = win.locator('.notice', { hasText: 'record which note' });
+  await notice.waitFor({ timeout: 10000 });
+  // Only the link to the other note is counted and named; the link to its own heading is not.
+  if (!/^1 link in this note doesn't/.test((await notice.innerText()).trim())) throw new Error(`expected 1 link, got "${(await notice.innerText()).trim().slice(0, 80)}"`);
+  if ((await notice.locator('.notice-chip').count()) !== 1) throw new Error('expected one chip');
+  await notice.getByRole('button', { name: 'Record' }).click();
+  await win.keyboard.press('Control+S');
+  // Record gives the other note an identity, and tidies the link to the note's own heading.
+  await win.waitForFunction(
+    () => window.api.readText('/notes/olddemo.md').then((t) => /\]\(#old-demo\)/.test(t) && /olddemo-target\.md[^)]*id=[a-z0-9]{12}/.test(t)),
+    null,
+    { timeout: 10000 },
+  );
 });
 
 await step('a link to a deleted file still opens the version it cites, and is not drawn broken', async () => {

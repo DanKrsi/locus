@@ -261,10 +261,21 @@ to notes are left alone: a note is always read as it is now.
 ### 4.6.1 What a notice says
 
 Every notice says what happened in its first line and, under it in smaller text, what it means
-and what its button will do — never jargon, never a bare warning with nothing to act on. A notice
-about particular links also carries **Show me**, which flashes them in the note and scrolls to the
-first without closing the notice; the other buttons answer the notice and close it. The demo
-workspace ships with nothing for these notices to report.
+and what its button will do — never jargon, never a bare warning with nothing to act on, and
+never a promise it cannot keep (Record's help says Ctrl+Z undoes the change in the note, which it
+does; it does not say the whole thing can be undone, because the id it gives the other note stays).
+
+A notice about particular links also **names them and marks them**. Under the text, "Marked in the
+note:" is followed by a chip for each link (up to six, then "and N more"); clicking one scrolls to
+that link and flashes it. The links themselves are drawn with a dotted amber outline, unlike the red
+wavy line of a broken link, for as long as the notice is up, and the marks go with it. A screen of
+text between two links does not matter: the chip takes you there. Following one of the marked links
+to see what it is leaves the notice where it is.
+
+A link to a heading of the note it is written in, written with the note's own path, is no reason for
+a notice: it resolves and loses nothing. Record tidies it into a plain `#heading` link when it runs
+for other links, and says so. The demo workspace ships with nothing for these notices to report; a
+copy made by an older version still has its old links, and Record fixes them.
 
 ### 4.7 Tour mode
 

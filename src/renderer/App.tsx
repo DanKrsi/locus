@@ -52,6 +52,14 @@ interface Session {
 /** The note the demo workspace opens on. */
 const DEMO_NOTE = '/notes/Start here.md';
 
+/** One of the links a notice is about: named in the notice, and marked in the note. */
+interface NoticeLink {
+  dest: string;
+  label: string;
+  /** What is the matter with this one, shown on hover. */
+  hint?: string;
+}
+
 interface Notice {
   text: string;
   /** A second line: what the banner means, and what its button will do. */
@@ -59,8 +67,22 @@ interface Notice {
   danger?: boolean;
   /** Marks the banner that offers to fix moved links, so a later look can take it back. */
   kind?: 'moved';
-  /** `keep` leaves the banner up, for a button that only shows something (Show me). */
-  actions?: { label: string; run(): void; keep?: boolean }[];
+  /** The links the notice is about, and the note they are in: named under the text, marked there. */
+  links?: NoticeLink[];
+  notePath?: string;
+  actions?: { label: string; run(): void }[];
+}
+
+/** The links of a note with these destinations, once each, as a notice names them. */
+function noticeLinks(found: { dest: string; label: string; hint?: string }[], fallback: (dest: string) => string): NoticeLink[] {
+  const seen = new Set<string>();
+  const out: NoticeLink[] = [];
+  for (const f of found) {
+    if (seen.has(f.dest)) continue;
+    seen.add(f.dest);
+    out.push({ dest: f.dest, label: f.label.trim() || fallback(f.dest), hint: f.hint });
+  }
+  return out;
 }
 
 const THEMES = [
@@ -583,7 +605,8 @@ export function App() {
 
   const followRef = async (info: LinkInfo, notePath: string) => {
     const ref = info.ref;
-    setNotice(null);
+    // A notice about particular links stays while one of them is followed to see what it is.
+    if (!noticeRef.current?.links?.length) setNotice(null);
     if (ref.pathKind === 'web') return;
     if (!ref.path) {
       if (ref.loc.heading) notes.current?.revealHeading(notePath, ref.loc.heading);
@@ -818,15 +841,18 @@ export function App() {
       if (noticeRef.current?.kind === 'moved') setNotice(null);
       return void checkUnrecorded();
     }
-    const n = allLinks(view.state).filter((l) => fixes.has(l.dest)).length;
+    const affected = allLinks(view.state).filter((l) => fixes.has(l.dest));
+    const n = affected.length;
     setNotice({
       text: `${n} link${n === 1 ? ' points' : 's point'} to ${fixes.size === 1 ? 'a file that was' : 'files that were'} moved.`,
       help: `Locus found ${fixes.size === 1 ? 'it' : 'them'} again by version history. Fix links writes the new place into ${n === 1 ? 'the link' : 'each link'}; what ${n === 1 ? 'it cites' : 'they cite'} does not change.`,
       kind: 'moved',
-      actions: [
-        { label: 'Fix links', run: () => applyMovedFixes(fixes) },
-        { label: 'Show me', keep: true, run: () => notes.current?.showLinks([...fixes.keys()]) },
-      ],
+      notePath,
+      links: noticeLinks(
+        affected.map((l) => ({ dest: l.dest, label: l.label, hint: `now at ${fixes.get(l.dest)!.slice(1)}` })),
+        (dest) => basename(fixes.get(dest) ?? dest),
+      ),
+      actions: [{ label: 'Fix links', run: () => applyMovedFixes(fixes) }],
     });
   };
   /** Notes whose Record banner was closed or used; it isn't offered twice in a session. */
@@ -852,33 +878,41 @@ export function App() {
     const notePath = notes.current?.activePath();
     if (!view || !notePath || recordSeen.current.has(notePath) || noticeRef.current) return;
     const found = await unrecorded(view, notePath);
-    if (!found.length || notes.current?.activePath() !== notePath) return;
+    // A link to a heading of this very note, written with the note's own path, resolves and loses
+    // nothing: it is no reason to interrupt anyone. Record tidies it when it runs for the others.
+    const needing = found.filter((f) => f.kind !== 'self');
+    if (!needing.length || notes.current?.activePath() !== notePath) return;
     recordSeen.current.add(notePath);
-    const n = found.length;
-    const kinds = new Set(found.map((f) => f.kind));
+    const n = needing.length;
     const one = n === 1;
-    const text = kinds.size === 1 && kinds.has('self')
-      ? `${one ? 'A link in this note points' : `${n} links in this note point`} at this note by its own name.`
-      : `${n} link${one ? '' : 's'} in this note ${one ? "doesn't" : "don't"} record ${
-          kinds.has('version') && kinds.size === 1 ? 'a version' : !kinds.has('version') ? 'which note they point at' : 'a version or which note they point at'
-        }, so Locus can't follow ${one ? 'it' : 'them'} through changes.`;
+    const kinds = new Set(needing.map((f) => f.kind));
+    const missing = kinds.has('version') && kinds.size === 1 ? 'a version' : !kinds.has('version') ? `which note ${one ? 'it points' : 'they point'} at` : `a version or which note ${one ? 'it points' : 'they point'} at`;
     setNotice({
-      text,
-      help: recordHelp(kinds),
-      actions: [
-        { label: 'Record', run: () => void recordLinks(notePath) },
-        { label: 'Show me', keep: true, run: () => notes.current?.showLinks(found.map((f) => f.link.dest)) },
-      ],
+      text: `${n} link${one ? '' : 's'} in this note ${one ? "doesn't" : "don't"} record ${missing}, so Locus can't follow ${one ? 'it' : 'them'} through changes.`,
+      help: recordHelp(new Set(found.map((f) => f.kind)), one),
+      notePath,
+      links: noticeLinks(
+        needing.map((f) => ({
+          dest: f.link.dest,
+          label: f.link.label,
+          hint: `${f.path.slice(1)}: ${f.kind === 'version' ? 'no version recorded' : 'no note identity recorded'}`,
+        })),
+        (dest) => basename(needing.find((f) => f.link.dest === dest)?.path ?? dest),
+      ),
+      actions: [{ label: 'Record', run: () => void recordLinks(notePath) }],
     });
   };
 
   /** What Record will do, in the words of what these particular links are missing. */
-  const recordHelp = (kinds: Set<'version' | 'note' | 'self'>): string => {
-    const parts: string[] = [];
-    if (kinds.has('version')) parts.push('the version each file is at now, so Locus can tell later what changed');
-    if (kinds.has('note')) parts.push("the identity of the note meant, so the link survives it being renamed");
-    if (kinds.has('self')) parts.push('a plain heading link, which can never break');
-    return `Record writes ${parts.join('; ')}. Nothing else in the note changes, and it can be undone.`;
+  const recordHelp = (kinds: Set<'version' | 'note' | 'self'>, one: boolean): string => {
+    const link = one ? 'the link' : 'each link';
+    const what = kinds.has('version') && kinds.has('note')
+      ? `Record writes the version each file is at now, or a hidden id for the note, into ${link}, so Locus can follow ${one ? 'it' : 'them'} through changes.`
+      : kinds.has('version')
+        ? `Record writes the version each file is at now into ${link}, so Locus can tell later whether what ${one ? 'it cites' : 'they cite'} changed.`
+        : `Record writes a hidden id into ${link} and into the note ${one ? 'it points' : 'they point'} at, so ${one ? 'it' : 'they'} still find${one ? 's' : ''} ${one ? 'that note' : 'those notes'} after a rename or move.`;
+    const tidy = kinds.has('self') ? " Links to this note's own headings become plain #heading links." : '';
+    return `${what}${tidy} Ctrl+Z undoes it in this note.`;
   };
 
   /** Writes the latest version into links that have none, and the note's identity into links to notes. */
@@ -914,6 +948,11 @@ export function App() {
   checkMovedLinksRef.current = checkMovedLinks;
   const checkUnrecordedRef = useRef(checkUnrecorded);
   checkUnrecordedRef.current = checkUnrecorded;
+
+  useEffect(() => {
+    const links = notice?.links?.map((l) => l.dest) ?? [];
+    notes.current?.markLinks(notice?.notePath && links.length ? notice.notePath : null, links);
+  }, [notice]);
 
   // The Record banner waits its turn: another notice has something more pressing to say.
   useEffect(() => {
@@ -1439,9 +1478,20 @@ export function App() {
           <div className="notice-body">
             <div>{notice.text}</div>
             {notice.help && <div className="notice-help">{notice.help}</div>}
+            {notice.links && notice.notePath && (
+              <div className="notice-links">
+                <span>Marked in the note:</span>
+                {notice.links.slice(0, 6).map((l) => (
+                  <button key={l.dest} className="notice-chip" title={l.hint ?? l.dest} onClick={() => void notes.current?.showLink(notice.notePath!, l.dest)}>
+                    {l.label}
+                  </button>
+                ))}
+                {notice.links.length > 6 && <span>and {notice.links.length - 6} more</span>}
+              </div>
+            )}
           </div>
           {notice.actions?.map((a) => (
-            <button key={a.label} className="outline" onClick={() => { a.run(); if (!a.keep) setNotice(null); }}>{a.label}</button>
+            <button key={a.label} className="outline" onClick={() => { a.run(); setNotice(null); }}>{a.label}</button>
           ))}
           <div className="spacer" />
           <button className="icon" onClick={() => setNotice(null)}><Icon name="x" /></button>

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { isCanvas } from '../core/canvas';
 import { basename, fileKind } from '../core/link';
 import type { FileChange, Terminology, Version } from '../shared/api';
 import { api } from './api';
@@ -25,10 +26,14 @@ interface Props {
   onRename(from: string, to: string): Promise<void>;
   /** Opens the version history. */
   onHistory?(): void;
+  /** Which pane the file is for: notes lists only notes and flowcharts, at their latest version. */
+  side?: 'notes' | 'documents';
   /** Picking a document for a link: the dialog's title, and which files can be chosen. */
   title?: string;
   accept?(path: string): boolean;
 }
+
+const forNotes = (path: string) => fileKind(path) === 'markdown' || isCanvas(path);
 
 export function FileBrowser(p: Props) {
   const [files, setFiles] = useState<Entry[]>([]);
@@ -37,8 +42,10 @@ export function FileBrowser(p: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [renaming, setRenaming] = useState<{ path: string; value: string } | null>(null);
   const [reload, setReload] = useState(0);
-  /** Folders shown folded ("docs", "docs/old"). A big workspace starts folded, a small one open. */
+  /** Folders shown folded ("docs", "docs/old"). Every folder starts folded. */
   const [folded, setFolded] = useState<Set<string> | null>(null);
+  const notesSide = p.side === 'notes';
+  const accept = notesSide ? forNotes : p.accept;
 
   const commitRename = async () => {
     if (!renaming) return;
@@ -132,8 +139,9 @@ export function FileBrowser(p: Props) {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  /** The files this dialog offers; folders and their counts are made from these alone. */
+  const allowed = useMemo(() => (accept ? files.filter((f) => accept(f.path)) : files), [files, accept]);
   const shown = useMemo(() => {
-    const allowed = p.accept ? files.filter((f) => p.accept!(f.path)) : files;
     const q = filter.trim().toLowerCase();
     if (!q) return allowed;
     return allowed.filter((f) => f.path.toLowerCase().includes(q)).sort((a, b) => {
@@ -141,19 +149,19 @@ export function FileBrowser(p: Props) {
       const bn = basename(b.path).toLowerCase().includes(q) ? 0 : 1;
       return an - bn || a.path.localeCompare(b.path);
     });
-  }, [files, filter, p.accept]);
+  }, [allowed, filter]);
 
   const folders = useMemo(() => {
     const count = new Map<string, number>();
-    for (const f of files) {
+    for (const f of allowed) {
       const parts = f.path.split('/').slice(1, -1);
       for (let d = 1; d <= parts.length; d++) count.set(parts.slice(0, d).join('/'), (count.get(parts.slice(0, d).join('/')) ?? 0) + 1);
     }
     return count;
-  }, [files]);
+  }, [allowed]);
   useEffect(() => {
-    if (folded === null && files.length) setFolded(new Set(files.length > 60 ? [...folders.keys()].filter((f) => !f.includes('/')) : []));
-  }, [files]);
+    if (folded === null && allowed.length) setFolded(new Set(folders.keys()));
+  }, [allowed]);
   const isFolded = (folder: string) => !!folded?.has(folder);
   const toggleFold = (folder: string) =>
     setFolded((old) => {
@@ -187,7 +195,7 @@ export function FileBrowser(p: Props) {
           style={openable[cursor] === f ? { background: 'var(--accent-soft)' } : undefined}
           onClick={() => open(f)}
         >
-          <Icon name={kindIcon(fileKind(f.path))} />
+          <Icon name={isCanvas(f.path) ? 'flow' : kindIcon(fileKind(f.path))} />
           <span className="name">{basename(f.path)}</span>
           <span className="muted" style={{ fontSize: 12 }}>{f.path.slice(1, -basename(f.path).length - 1)}</span>
           <span className="spacer" />
@@ -232,7 +240,7 @@ export function FileBrowser(p: Props) {
           style={{ paddingLeft: 8 + (parts.length - 1) * 18 }}
           onClick={() => open(f)}
         >
-          <Icon name={kindIcon(fileKind(f.path))} />
+          <Icon name={isCanvas(f.path) ? 'flow' : kindIcon(fileKind(f.path))} />
           {renaming?.path === f.path ? renameControl(f.path) : <span className="name">{basename(f.path)}</span>}
           <span className="spacer" />
           {markBadge(f.mark)}
@@ -246,19 +254,27 @@ export function FileBrowser(p: Props) {
     <div className="backdrop" onMouseDown={(e) => e.target === e.currentTarget && p.onClose()}>
       <div className="locus-dialog" onKeyDown={(e) => e.key === 'Escape' && p.onClose()}>
         <div className="dialog-head">
-          <h2>{p.title ?? 'Open'}</h2>
-          {!p.title && <span className="muted" style={{ fontSize: 12.5 }}>notes and flowcharts: edit or view · anything else: viewer</span>}
+          <h2>{p.title ?? (notesSide ? 'Open a note or flowchart' : 'Open a document')}</h2>
+          {!p.title && (
+            <span className="muted" style={{ fontSize: 12.5 }}>
+              {notesSide ? 'opens on the left to edit' : 'opens in the viewer on the right · notes and flowcharts read-only'}
+            </span>
+          )}
           <div className="spacer" />
-          <span className="muted" style={{ fontSize: 12.5 }}>{term(p.terminology, 'showFolderAs')}</span>
-          <select value={p.rev ?? ''} onChange={(e) => p.onRevChange(e.target.value || undefined)} style={{ maxWidth: 280 }}>
-            <option value="">{term(p.terminology, 'latest')}</option>
-            {p.versions.map((v) => (
-              <option key={v.sha} value={v.sha}>
-                {p.terminology === 'git' ? `${v.sha.slice(0, 7)} · ` : ''}
-                {longDate(v.date)} · {v.message}
-              </option>
-            ))}
-          </select>
+          {!notesSide && (
+            <>
+              <span className="muted" style={{ fontSize: 12.5 }}>{term(p.terminology, 'showFolderAs')}</span>
+              <select value={p.rev ?? ''} onChange={(e) => p.onRevChange(e.target.value || undefined)} style={{ maxWidth: 280 }}>
+                <option value="">{term(p.terminology, 'latest')}</option>
+                {p.versions.map((v) => (
+                  <option key={v.sha} value={v.sha}>
+                    {p.terminology === 'git' ? `${v.sha.slice(0, 7)} · ` : ''}
+                    {longDate(v.date)} · {v.message}
+                  </option>
+                ))}
+              </select>
+            </>
+          )}
         </div>
         <div style={{ padding: '0 16px 10px' }}>
           <input
@@ -278,7 +294,13 @@ export function FileBrowser(p: Props) {
           />
         </div>
         <div className="dialog-body tree" style={{ minHeight: 280 }}>
-          {rows.length ? rows : <div className="muted" style={{ padding: 8 }}>No files match.</div>}
+          {rows.length ? (
+            rows
+          ) : (
+            <div className="muted" style={{ padding: 8 }}>
+              {filter.trim() || !notesSide ? 'No files match.' : 'No notes or flowcharts yet. Start one with + or the flowchart button beside the tabs.'}
+            </div>
+          )}
         </div>
         <div className="dialog-foot">
           {!filter.trim() && folders.size > 0 && (
@@ -292,7 +314,7 @@ export function FileBrowser(p: Props) {
               <Icon name="history" /> {term(p.terminology, 'history')}
             </button>
           )}
-          {!p.accept && (
+          {!accept && (
             <button
               className="outline"
               onClick={async () => {

@@ -509,18 +509,19 @@ export function App() {
     docViewed.current.delete(id);
   };
 
-  /** A note or flowchart picked in Open: edit it on the left or view it on the right. */
-  const [openChoice, setOpenChoice] = useState<string | null>(null);
-  const openBrowser = (rev?: string) => {
-    setBrowserRev(rev);
+  /** Each pane has its own Open: the notes one offers notes and flowcharts to edit, the documents one everything. */
+  const [browserSide, setBrowserSide] = useState<'notes' | 'documents'>('documents');
+  const openBrowser = (rev?: string, side: 'notes' | 'documents' = 'documents') => {
+    setBrowserRev(side === 'notes' ? undefined : rev);
+    setBrowserSide(side);
     setBrowser(true);
   };
 
   const openFromBrowser = (path: string, rev: string | undefined) => {
     setBrowser(false);
-    // A note or flowchart (latest version) can be edited on the left or viewed on the right; a
-    // past version can only be viewed, and everything else opens in the viewer.
-    if (!rev && (fileKind(path) === 'markdown' || isCanvas(path))) setOpenChoice(path);
+    // The notes Open edits on the left; the documents Open shows anything (notes and flowcharts
+    // read-only) in the viewer on the right.
+    if (browserSide === 'notes') void notes.current?.open(path);
     else openDoc(path, false, rev);
   };
 
@@ -1391,7 +1392,7 @@ export function App() {
         openBrowser();
       } else if (e.ctrlKey && !e.shiftKey && k === 'o') {
         e.preventDefault();
-        openBrowser();
+        openBrowser(undefined, 'notes');
       } else if (e.ctrlKey && !e.shiftKey && k === 'n') {
         e.preventDefault();
         void notes.current?.newNote();
@@ -1444,9 +1445,6 @@ export function App() {
           <>
             <button className="no-drag ws-name" title={ws.root} onClick={() => void openWorkspace()}>
               <Icon name="folder" /> {ws.name}
-            </button>
-            <button className="outline" onClick={() => openBrowser()} title="Open a document as it is now, or from any past version (Ctrl+P)">
-              <Icon name="folderOpen" /> Open
             </button>
             <div style={{ position: 'relative' }} className="no-drag">
               <button className="outline" onClick={() => void openSaveVersion()} title={`${term(terminology, 'saveVersionHint')} (Ctrl+Shift+S)`}>
@@ -1634,6 +1632,7 @@ export function App() {
               onTour={toggleTour}
               touring={!!tour}
               onLinkSection={openSectionLink}
+              onOpen={() => openBrowser(undefined, 'notes')}
               zoom={settings.noteZoom ?? 1}
               onZoom={(z) => setZoom('noteZoom', z)}
               onSaved={() => {
@@ -1689,6 +1688,7 @@ export function App() {
               onOpenCitation={openCitation}
               onActivate={setActiveDoc}
               onClose={closeDoc}
+              onOpen={() => openBrowser()}
               onReorder={(id, beforeId) =>
                 setDocTabs((ts) => {
                   const moving = ts.find((t) => t.id === id);
@@ -1727,6 +1727,8 @@ export function App() {
 
       {browser && ws && (
         <FileBrowser
+          key={browserSide}
+          side={browserSide}
           terminology={terminology}
           versions={versions}
           rev={browserRev}
@@ -1737,25 +1739,15 @@ export function App() {
             for (const p of paths) openDoc(p, true);
           }}
           onClose={() => setBrowser(false)}
-          onHistory={() => {
-            setBrowser(false);
-            setHistoryOpen(true);
-          }}
+          onHistory={
+            browserSide === 'documents'
+              ? () => {
+                  setBrowser(false);
+                  setHistoryOpen(true);
+                }
+              : undefined
+          }
           onRename={renameFile}
-        />
-      )}
-      {openChoice && (
-        <OpenChoiceDialog
-          path={openChoice}
-          onEdit={() => {
-            setOpenChoice(null);
-            void notes.current?.open(openChoice);
-          }}
-          onView={() => {
-            setOpenChoice(null);
-            openDoc(openChoice, false);
-          }}
-          onClose={() => setOpenChoice(null)}
         />
       )}
       {historyOpen && ws && (
@@ -1973,49 +1965,6 @@ function Welcome({
               <div className="muted" style={{ fontSize: 12 }}>{r}</div>
             </div>
           ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/** Notes and flowcharts picked in Open: edit on the left, or view (read-only) on the right. */
-function OpenChoiceDialog({ path, onEdit, onView, onClose }: { path: string; onEdit(): void; onView(): void; onClose(): void }) {
-  const flow = isCanvas(path);
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-      else if (e.key === 'Enter' || e.key.toLowerCase() === 'e') (e.preventDefault(), onEdit());
-      else if (e.key.toLowerCase() === 'v') (e.preventDefault(), onView());
-    };
-    // Start listening after this turn: the Enter that picked the file is still on its way up.
-    const t = setTimeout(() => window.addEventListener('keydown', onKey));
-    return () => {
-      clearTimeout(t);
-      window.removeEventListener('keydown', onKey);
-    };
-  }, []);
-  return (
-    <div className="backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="locus-dialog open-choice" style={{ width: 460 }}>
-        <div className="dialog-head">
-          <h2>
-            <Icon name={flow ? 'flow' : 'note'} /> {basename(path)}
-          </h2>
-        </div>
-        <div className="dialog-body open-choice-body">
-          <button className="open-choice-option primary-choice" onClick={onEdit}>
-            <span className="title"><Icon name="edit" /> Edit</span>
-            <span className="muted">Opens on the left, where you write and cite. <kbd>E</kbd></span>
-          </button>
-          <button className="open-choice-option" onClick={onView}>
-            <span className="title"><Icon name="file" /> View</span>
-            <span className="muted">Opens read-only on the right, beside your notes. <kbd>V</kbd></span>
-          </button>
-        </div>
-        <div className="dialog-foot">
-          <div className="spacer" />
-          <button className="outline" onClick={onClose}>Cancel</button>
         </div>
       </div>
     </div>

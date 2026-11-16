@@ -31,6 +31,8 @@ interface Props {
   citations: Citation[];
   onActivate(id: string): void;
   onClose(id: string): void;
+  /** Opens the file browser for any file, as it is now or from a past version. */
+  onOpen(): void;
   /** Moves a tab to sit before another one. */
   onReorder(id: string, beforeId: string): void;
   onCite(tab: DocTab): void;
@@ -140,12 +142,15 @@ export function DocsPane(p: Props) {
             <span className="close" onMouseDown={(e) => { e.stopPropagation(); p.onClose(t.id); }}><Icon name="x" size={12} /></span>
           </div>
         ))}
-
+        <button className="tab-add" title="Open any file in the viewer, as it is now or from a past version (Ctrl+P)" onClick={p.onOpen}>
+          <Icon name="folderOpen" size={14} /> Open
+        </button>
       </div>
       {p.tabs.length === 0 && (
         <div className="empty">
           <h3>No document open</h3>
-          <div>Use <b>Open</b> at the top for PDFs, code, spreadsheets, slides, images or recordings, to cite them in your notes.</div>
+          <div>Open PDFs, code, spreadsheets, slides, images or recordings to cite them in your notes.</div>
+          <button className="primary" onClick={p.onOpen}><Icon name="folderOpen" /> Open</button>
           <div className="muted" style={{ fontSize: 12 }}>Ctrl+P to find a file by name</div>
         </div>
       )}

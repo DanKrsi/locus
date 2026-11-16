@@ -94,13 +94,10 @@ await step('the demo opens with nothing to warn about', async () => {
   await callApi('openWorkspace', join(out, 'my demo'));
   await win.evaluate(() => location.reload());
   await win.locator('.header .ws-name').waitFor({ timeout: 15000 });
-  await win.keyboard.press('Control+P');
+  await win.keyboard.press('Control+O');
   await win.getByPlaceholder('Find a file by name').fill('Start here');
   await win.locator('.tree-row', { hasText: 'Start here.md' }).first().waitFor({ timeout: 8000 });
   await win.keyboard.press('Enter');
-  const choice = win.locator('.open-choice');
-  await choice.waitFor({ timeout: 5000 }).catch(() => undefined);
-  if (await choice.count()) await choice.getByText('Edit', { exact: true }).click();
   await win.locator('[data-pane="notes"] .tab.active', { hasText: 'Start here.md' }).waitFor({ timeout: 15000 });
   await win.waitForTimeout(3000);
   const banner = await win.locator('.notice').count();

@@ -51,9 +51,6 @@ await step('quick open a note', async () => {
   await win.getByPlaceholder('Find a file by name').fill('review');
   await win.locator('.tree-row', { hasText: 'review.md' }).waitFor();
   await win.keyboard.press('Enter');
-  // A note asks whether to edit it (left) or view it (right).
-  await win.locator('.open-choice').waitFor({ timeout: 5000 });
-  await win.keyboard.press('e');
   await win.locator('.editor-wrap .cm-ref').first().waitFor({ timeout: 10000 });
   await shot('note');
 });
@@ -110,12 +107,35 @@ await step('insert a table: it is a table straight away', async () => {
   if (!text.includes('| Name | Value |\n| --- | --- |\n|  | 42 |')) throw new Error('new table saved as:\n' + text.slice(text.lastIndexOf('| Name') - 2));
 });
 
-await step('one Open: a note can be viewed read-only on the right, then edited on the left', async () => {
-  if (await win.locator('.tab-add', { hasText: /Open (note|document)/ }).count()) throw new Error('a pane still has its own Open button');
-  await win.locator('.header').getByRole('button', { name: 'Open', exact: true }).click();
+await step('each pane has its own Open: the left lists only notes and flowcharts', async () => {
+  if (await win.locator('.header').getByRole('button', { name: 'Open', exact: true }).count()) throw new Error('the header still has an Open');
+  // Left: notes and flowcharts only, every folder folded, at the latest version.
+  await win.locator('[data-pane="notes"] .tabs .tab-add', { hasText: 'Open' }).click();
+  const dlg = win.locator('.locus-dialog');
+  // Files at the top of the workspace have no folder to fold into; count only those inside one.
+  const nested = () => dlg.locator('.tree-row:not(.folder)').evaluateAll((rows) => rows.filter((r) => r.style.paddingLeft !== '8px').length);
+  await dlg.getByRole('heading', { name: 'Open a note or flowchart' }).waitFor({ timeout: 5000 });
+  await dlg.locator('.tree-row.folder').first().waitFor({ timeout: 5000 });
+  if (await nested()) throw new Error('the left Open did not start with its folders folded');
+  if (await dlg.locator('select').count()) throw new Error('the left Open offers old versions');
+  await dlg.getByRole('button', { name: 'Expand all' }).click();
+  const names = await dlg.locator('.tree-row:not(.folder) .name').allInnerTexts();
+  if (!names.some((n) => n.endsWith('.md')) || !names.some((n) => n.endsWith('.canvas'))) throw new Error(`left Open lists: ${names.join(', ')}`);
+  if (names.some((n) => !/\.(md|canvas)$/.test(n))) throw new Error(`left Open lists other files: ${names.join(', ')}`);
+  await dlg.getByRole('button', { name: 'Collapse all' }).click();
+  if (await nested()) throw new Error('files still listed after Collapse all');
+  await shot('open-left');
+  await win.keyboard.press('Escape');
+  // Right: everything, folded too; a note picked there opens read-only.
+  await win.locator('[data-pane="docs"] .tabs .tab-add', { hasText: 'Open' }).click();
+  await dlg.getByRole('heading', { name: 'Open a document' }).waitFor({ timeout: 5000 });
+  await dlg.locator('.tree-row.folder').first().waitFor({ timeout: 5000 });
+  if (await nested()) throw new Error('the right Open did not start with its folders folded');
+  await dlg.getByRole('button', { name: 'Expand all' }).click();
+  const all = await dlg.locator('.tree-row:not(.folder) .name').allInnerTexts();
+  if (!all.some((n) => n.endsWith('.pdf')) || !all.some((n) => n.endsWith('.md'))) throw new Error(`right Open lists: ${all.join(', ')}`);
   await win.getByPlaceholder('Find a file by name').fill('design-basis');
   await win.locator('.tree-row', { hasText: 'design-basis.md' }).first().click();
-  await win.locator('.open-choice').getByRole('button', { name: /View/ }).click();
   const view = win.locator('[data-pane="docs"] .viewer:not(.hidden)');
   await view.locator('.note-view .cm-line').first().waitFor({ timeout: 10000 });
   if (!(await view.locator('.note-view .cm-content').evaluate((el) => el.closest('.cm-editor').querySelector('.cm-content').getAttribute('contenteditable') !== null)))
@@ -465,10 +485,15 @@ await step('flowchart: open, add a box, connect it, cite into it', async () => {
   await win.getByPlaceholder('Find a file by name').fill('retry-flow');
   await win.locator('.tree-row', { hasText: 'retry-flow' }).first().waitFor();
   await win.keyboard.press('Enter');
-  await win.locator('.open-choice').getByRole('button', { name: /Edit/ }).click();
   await win.locator('.flow-box', { hasText: 'wait backoff' }).waitFor({ timeout: 10000 });
   if ((await win.locator('.flow-frame').count()) !== 2) throw new Error('loop frames missing');
-  const edges0 = await win.locator('.flow-editor .react-flow__edge').count();
+  // The arrows draw a moment after the boxes: count them once the number holds still.
+  let edges0 = -1;
+  for (let same = 0; same < 4; await win.waitForTimeout(150)) {
+    const n = await win.locator('.flow-editor .react-flow__edge').count();
+    same = n === edges0 && n > 0 ? same + 1 : 0;
+    edges0 = n;
+  }
   // A new decision box starts with its text selected, so typing replaces it.
   await win.locator('.flow-toolbar').getByTitle('Add a decision box').click();
   await win.locator('.flow-box-editor .cm-content').waitFor({ timeout: 5000 });
@@ -562,7 +587,7 @@ await step('file moved outside the app offers Fix links', async () => {
 });
 
 await step('history: what changed, open a file as it was, browse a version', async () => {
-  await win.locator('.header').getByRole('button', { name: 'Open', exact: true }).click();
+  await win.keyboard.press('Control+P');
   await win.locator('.locus-dialog').getByRole('button', { name: 'Version history' }).click();
   await win.locator('.history-item', { hasText: 'Retry refactor: exponential' }).click();
   await win.locator('.history-detail .tree-row', { hasText: 'sleep_util.py' }).waitFor({ timeout: 10000 });
@@ -570,16 +595,19 @@ await step('history: what changed, open a file as it was, browse a version', asy
   await shot('history');
   await win.locator('.history-detail .tree-row', { hasText: 'client.py' }).click();
   await win.locator('.tab.active .badge.mark').waitFor({ timeout: 10000 });
-  await win.locator('.header').getByRole('button', { name: 'Open', exact: true }).click();
+  await win.keyboard.press('Control+P');
   await win.locator('.locus-dialog').getByRole('button', { name: 'Version history' }).click();
   await win.locator('.history-item', { hasText: 'Before retry refactor' }).click();
   await win.getByRole('button', { name: 'Browse all files from this version' }).click();
+  // Folders start folded; open them to see what was deleted later.
+  await win.getByRole('button', { name: 'Expand all' }).click();
   await win.getByText('deleted later').first().waitFor({ timeout: 10000 });
   await shot('browser-old-version');
   // Version history from the browser opens on the version being shown; Back returns to it.
   await win.locator('.locus-dialog').getByRole('button', { name: 'Version history' }).click();
   await win.locator('.history-item.selected', { hasText: 'Before retry refactor' }).waitFor({ timeout: 5000 });
   await win.getByRole('button', { name: 'Back to files' }).click();
+  await win.getByRole('button', { name: 'Expand all' }).click();
   await win.getByText('deleted later').first().waitFor({ timeout: 10000 });
   await win.keyboard.press('Escape');
   // Opening the browser again starts at the latest version.
@@ -638,9 +666,8 @@ await step('a file saved by another program shows without a click', async () => 
 await step('Open: folders fold and unfold; Motion setting', async () => {
   await win.keyboard.press('Control+O');
   const row = win.locator('.tree-row', { hasText: 'review.md' });
-  await row.first().waitFor();
-  await win.getByRole('button', { name: 'Collapse all' }).click();
-  if (await row.count()) throw new Error('files still listed after Collapse all');
+  await win.locator('.tree-row.folder', { hasText: 'notes' }).first().waitFor();
+  if (await row.count()) throw new Error('files listed before their folder was opened');
   await win.locator('.tree-row.folder', { hasText: 'notes' }).first().click();
   await row.first().waitFor({ timeout: 3000 });
   await win.getByRole('button', { name: 'Expand all' }).click();
@@ -844,6 +871,7 @@ await step('the citation editor moves a link without showing markdown', async ()
   // Only files that can hold an area are offered.
   await dlg.getByRole('button', { name: 'Change…' }).click();
   await win.getByText('Choose a document').waitFor({ timeout: 5000 });
+  await win.getByRole('button', { name: 'Expand all' }).click();
   if (await win.locator('.tree-row', { hasText: 'client.py' }).count()) throw new Error('a code file was offered for an area');
   await win.locator('.tree-row', { hasText: 'BDS-100' }).first().waitFor();
   await win.keyboard.press('Escape');
@@ -995,10 +1023,6 @@ await step('a note touched by a Windows tool still reads as lines', async () => 
   await win.getByPlaceholder('Find a file by name').fill('mixed');
   await win.locator('.tree-row', { hasText: 'mixed.md' }).first().waitFor({ timeout: 8000 });
   await win.keyboard.press('Enter');
-  // Click rather than press "e": the dialog ignores keys for a turn, so a fast key is lost.
-  const choice = win.locator('.open-choice');
-  await choice.waitFor({ timeout: 8000 }).catch(() => undefined);
-  if (await choice.count()) await choice.getByText('Edit', { exact: true }).click();
   await win.locator('[data-pane="notes"] .tab.active', { hasText: 'mixed.md' }).waitFor({ timeout: 15000 });
   await win.waitForTimeout(600);
   const lines = await win.locator('.editor-wrap .cm-line').count();

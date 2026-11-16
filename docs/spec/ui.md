@@ -11,9 +11,9 @@ version of a file.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│ ◆ Locus  Bracket project  [Open] [Save version] [Sync] [Share]                  ☀ ⚙ │ header
+│ ◆ Locus  Bracket project  [Save version] [Sync] [Share]                         ☀ ⚙ │ header
 ├──────────────────────────────────────┬───────────────────────────────────────┤
-│ [Review.md ●] [Design.md] [+]        │ [spec.pdf] [solver.py · Mar 3]        │ tabs
+│ [Review.md ●] [Design.md] Open + ⬡   │ [spec.pdf] [solver.py · Mar 3] Open   │ tabs
 │ Heading▾ B I S </> • 1. ☐ ❝ ▦ 🔗  Tour│ ‹ 22 of 36 › − Fit + │ Area │ [Cite page]│ toolbars
 │                                      │ History ●────●───●──────────◉ Latest   │ version strip
 │   # Bracket review                   ║                                       │
@@ -44,16 +44,22 @@ percentage returns to 100% (Ctrl+0 stays "normal text" in notes). Both levels ar
 
 ## 3. Header
 
-Logo + name · workspace name (click → open another workspace) · **Open** · **Save version** ·
-sync pill and **Share** (when shared) · light/dark toggle · keyboard shortcuts (F1) · settings ⚙. **Open** is the only way
-to open files (the panes have no Open buttons of their own); Ctrl+O and Ctrl+P open it too.
+Logo + name · workspace name (click → open another workspace) · **Save version** ·
+sync pill and **Share** (when shared) · light/dark toggle · keyboard shortcuts (F1) · settings ⚙.
 
-Where a file opens depends on its type. Notes (`.md`) and flowcharts (`.canvas`) ask first:
-**Edit** (E or Enter) opens it on the left to write and cite in; **View** (V) opens it read-only
-on the right, beside your notes, with an **Edit** button to move it to the left. Anything else
-opens in the viewer on the right. Old versions always open on the right.
+### 3.1 Opening files
 
-**Open** shows the file browser, with a selector for the version to
+Each pane has its own **Open**, in its tab row and in its empty state; the side the button is on
+is the side the file opens on.
+
+- **Open on the left** (Ctrl+O) lists only notes (`.md`) and flowcharts (`.canvas`), the only
+  files the left pane can hold, and opens the one picked there to write and cite in. It always
+  shows the latest version, so it has no version selector, history or "Browse this computer…".
+- **Open on the right** (Ctrl+P) lists every file and opens it in the viewer. Notes and
+  flowcharts picked here show read-only, beside your notes, with an **Edit** button to move them
+  to the left. Old versions always open on the right.
+
+The right-hand **Open** has a selector for the version to
 show the folder as it was. Its **Version history** button leads to the history: the workspace's
 versions, and for the selected one what it changed (added, changed, moved, deleted files).
 Clicking a file there opens it as it was in that version; **Browse all files from this version**
@@ -61,9 +67,10 @@ and **Back to files** return to the file browser. There is no global "viewing an
 version" mode: each document tab carries its own version (badge on the tab, version strip under
 the toolbar), and the file browser's version selector resets to Latest each time it opens.
 
-Folders in the file browser fold and unfold (click the folder; **Collapse all** / **Expand all**)
-and show how many files they hold. A workspace of more than 60 files starts with its top folders
-folded; a smaller one starts open. Searching gives a flat list.
+Folders in both file browsers fold and unfold (click the folder; **Collapse all** / **Expand all**
+at the bottom) and show how many of the listed files they hold; the left one shows only folders
+that contain notes or flowcharts. Every folder starts folded each time the browser opens.
+Searching gives a flat list.
 
 **Welcome screen** (shown when no workspace can be reopened): **Try the demo** first, then open a
 folder, create a workspace, open a shared `.locus` file, download from GitHub; and the recent
@@ -305,8 +312,8 @@ Obsidian's Canvas uses), so they open in Obsidian too. Locus adds fields Obsidia
 `shape`, and for arrows `route`, `style` and bend `points`. Files are written one box or arrow
 per line, so diffs stay readable.
 
-- **New flowchart** (flowchart icon in the tab row, or the empty pane). **Open** offers
-  flowcharts like notes (Edit or View); links to a `.canvas` file open it on the left.
+- **New flowchart** (flowchart icon in the tab row, or the empty pane). The left-hand
+  **Open** lists flowcharts with notes; links to a `.canvas` file open it on the left.
 - **Boxes**: process, decision, start/end, input/output, sub-process, note. Add from the
   toolbar (the new box's text is selected, so typing replaces it); change the shape of a selected
   box from the toolbar; drag to move (snaps to an 8 px grid), drag the corners to resize.
@@ -332,10 +339,10 @@ per line, so diffs stay readable.
 
 ## 5. Right pane: documents
 
-- Document tabs show a version badge when not on the latest version. Files come from the
-  header's **Open**; external files are allowed and marked.
+- Document tabs show a version badge when not on the latest version. Files come from this
+  pane's **Open**; external files are allowed and marked.
 - Empty state: "No document open", pointing to **Open**.
-- Notes and flowcharts chosen with **View** show read-only here: links, hover cards and
+- Notes and flowcharts opened with this pane's **Open** show read-only here: links, hover cards and
   **Cite lines** / **Cite flowchart** work, nothing can be edited, and **Edit** opens them on
   the left.
 - Every tab keeps its own scroll, zoom, search and version.
@@ -496,7 +503,8 @@ copies. Single-file `.locus` package (git bundle) for sharing without accounts.
 |---|---|
 | Save | Ctrl+S |
 | New note | Ctrl+N |
-| Open a file | Ctrl+O or Ctrl+P |
+| Open a note or flowchart (left) | Ctrl+O |
+| Open any file in the viewer (right) | Ctrl+P |
 | Headings | Ctrl+0 … Ctrl+6 |
 | Bold / Italic / Strikethrough / Inline code | Ctrl+B / Ctrl+I / Alt+Shift+5 / Ctrl+E |
 | Web link | Ctrl+K |

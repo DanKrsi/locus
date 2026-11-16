@@ -111,8 +111,6 @@ await step('the dialog says what goes in before writing anything', async () => {
   await win.getByPlaceholder('Find a file by name').fill('review');
   await win.locator('.tree-row', { hasText: 'review.md' }).first().waitFor();
   await win.keyboard.press('Enter');
-  await win.locator('.open-choice').waitFor({ timeout: 5000 });
-  await win.keyboard.press('e');
   await win.locator('[data-pane="notes"] .tab.active', { hasText: 'review.md' }).waitFor({ timeout: 10000 });
   await win.locator('[data-pane="notes"] .tabs > .tab', { hasText: 'review.md' }).first().click({ button: 'right' });
   await win.locator('.context-menu').getByRole('menuitem', { name: 'Export for someone without Locus…' }).click();

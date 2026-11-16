@@ -80,6 +80,8 @@ interface Props {
   touring: boolean;
   /** Opens the section-link dialog (the bookmark button, Ctrl+Alt+L). */
   onLinkSection(): void;
+  /** Opens the file browser for notes and flowcharts. */
+  onOpen(): void;
   /** Zoom of the notes editor, separate from the documents'. */
   zoom: number;
   onZoom(z: number): void;
@@ -645,6 +647,7 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
             )}
           </div>
         ))}
+        <button className="tab-add" title="Open a note or flowchart to edit (Ctrl+O)" onClick={p.onOpen}><Icon name="folderOpen" size={14} /> Open</button>
         <button className="tab-add" title="New note (Ctrl+N)" onClick={() => void newNote()}><Icon name="plus" size={14} /></button>
         <button className="tab-add" title="New flowchart" onClick={() => void newFlowchart()}><Icon name="flow" size={14} /></button>
         <div className="spacer" />
@@ -696,8 +699,9 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
       {tabs.length === 0 && (
         <div className="empty">
           <h3>No note open</h3>
-          <div>Open one with <b>Open</b> at the top and choose Edit, or start a new one.</div>
+          <div>Open a note or flowchart to edit, or start a new one.</div>
           <div style={{ display: 'flex', gap: 8 }}>
+            <button className="primary" onClick={p.onOpen}><Icon name="folderOpen" /> Open</button>
             <button className="outline" onClick={() => void newNote()}><Icon name="plus" /> New note</button>
             <button className="outline" onClick={() => void newFlowchart()}><Icon name="flow" /> New flowchart</button>
           </div>

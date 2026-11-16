@@ -118,10 +118,6 @@ const openNote = async (name) => {
   await win.getByPlaceholder('Find a file by name').fill(name);
   await win.locator('.tree-row', { hasText: name }).first().waitFor({ timeout: 15000 });
   await win.keyboard.press('Enter');
-  // Click rather than press "e": the dialog ignores keys for a turn, so a fast key is lost.
-  const choice = win.locator('.open-choice');
-  await choice.waitFor({ timeout: 8000 }).catch(() => undefined);
-  if (await choice.count()) await choice.getByText('Edit', { exact: true }).click();
   await win.locator('[data-pane="notes"] .tab.active', { hasText: name.split('/').pop() }).waitFor({ timeout: 15000 });
 };
 

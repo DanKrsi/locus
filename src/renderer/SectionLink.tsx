@@ -108,7 +108,8 @@ export function SectionLink(p: Props) {
 const KEYS: [string, string][] = [
   ['Save', 'Ctrl+S'],
   ['New note', 'Ctrl+N'],
-  ['Open a file', 'Ctrl+O or Ctrl+P'],
+  ['Open a note or flowchart (left)', 'Ctrl+O'],
+  ['Open any file in the viewer (right)', 'Ctrl+P'],
   ['Save version', 'Ctrl+Shift+S'],
   ['Cite what is shown on the right', 'Ctrl+Shift+L'],
   ['Link to a section', 'Ctrl+Alt+L'],

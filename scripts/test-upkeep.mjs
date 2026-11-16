@@ -49,8 +49,6 @@ await step('opens the note', async () => {
   await win.getByPlaceholder('Find a file by name').fill('review');
   await win.locator('.tree-row', { hasText: 'review.md' }).waitFor();
   await win.keyboard.press('Enter');
-  await win.locator('.open-choice').waitFor({ timeout: 5000 });
-  await win.keyboard.press('e');
   await win.locator('.editor-wrap .cm-ref').first().waitFor({ timeout: 10000 });
   before = await note();
   head = (await api('head')).slice(0, 10);
@@ -140,9 +138,6 @@ const openNote = async (name) => {
   await win.getByPlaceholder('Find a file by name').fill(name);
   await win.locator('.tree-row', { hasText: name }).first().waitFor();
   await win.keyboard.press('Enter');
-  await win.locator('.open-choice').waitFor({ timeout: 5000 });
-  // Click rather than press "e": the dialog ignores keys for a turn, so a fast key is lost.
-  await win.locator('.open-choice').getByText('Edit', { exact: true }).click();
   await win.locator('[data-pane="notes"] .tab.active', { hasText: name }).waitFor({ timeout: 10000 });
 };
 

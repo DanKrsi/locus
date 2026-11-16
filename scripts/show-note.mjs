@@ -19,8 +19,6 @@ await win.keyboard.press('Control+O');
 await win.getByPlaceholder('Find a file by name').fill(note);
 await win.locator('.tree-row').first().waitFor();
 await win.keyboard.press('Enter');
-await win.locator('.open-choice').waitFor({ timeout: 5000 });
-await win.keyboard.press('e');
 await win.locator('.cm-ref:visible').first().waitFor({ timeout: 10000 });
 await win.waitForTimeout(800);
 await win.screenshot({ path: join(out, '0-note.png') });

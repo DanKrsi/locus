@@ -601,6 +601,8 @@ export function App() {
 
   /** Checks still running, by link, so a card opened while one is in flight can wait for it. */
   const pendingStatus = useRef(new Map<string, Promise<RefStatus>>());
+  /** Counts links followed, so a slow one overtaken by a newer one gives way (see followRef). */
+  const followSeq = useRef(0);
 
   const refStatus = (info: LinkInfo, notePath: string): RefStatus => {
     const key = `${notePath}|${info.dest}`;
@@ -619,10 +621,24 @@ export function App() {
     return { state: 'unknown' };
   };
 
-  const followRef = async (info: LinkInfo, notePath: string) => {
+  /**
+   * Opens what a link cites. On a tour the note being toured stays in front, so a link to another
+   * note or flowchart opens it on the right, read-only, as the tour's other stops do.
+   */
+  const followRef = async (info: LinkInfo, notePath: string, touring = false) => {
+    // Only the link followed last opens anything: an earlier one still looking (at the history, say)
+    // must not take the viewer back when it finishes, as it would on a tour stepped through quickly.
+    const seq = ++followSeq.current;
+    const stale = () => seq !== followSeq.current;
+    const say = (n: Notice | null) => {
+      if (!stale()) setNotice(n);
+    };
+    const tell = (text: string) => {
+      if (!stale()) showToast(text);
+    };
     const ref = info.ref;
     // A notice about particular links stays while one of them is followed to see what it is.
-    if (!noticeRef.current?.links?.length) setNotice(null);
+    if (!noticeRef.current?.links?.length) say(null);
     if (ref.pathKind === 'web') return;
     if (!ref.path) {
       if (ref.loc.heading) notes.current?.revealHeading(notePath, ref.loc.heading);
@@ -635,6 +651,13 @@ export function App() {
       // Renamed or moved outside the app: the link still knows which note it meant.
       const id = linkNoteId(ref.extra);
       if (id && !(await api.exists(path).catch(() => true))) path = (await api.findNoteById(id).catch(() => null)) ?? path;
+      if (touring) {
+        if (path === notePath) {
+          if (ref.loc.heading) notes.current?.revealHeading(notePath, ref.loc.heading);
+        } else if (!stale()) openDoc(path, false, undefined, ref.loc);
+        return;
+      }
+      if (stale()) return;
       await notes.current?.open(path);
       if (ref.loc.heading) setTimeout(() => notes.current?.revealHeading(path, ref.loc.heading!), 50);
       return;
@@ -645,12 +668,12 @@ export function App() {
       if (!(await api.exists(path).catch(() => false))) {
         if (ref.at && (await api.exists(path, ref.at).catch(() => false))) {
           rev = ref.at;
-          setNotice({
+          say({
             text: `${basename(path)} is no longer in the workspace. Showing the version it was cited from.`,
             help: 'It was deleted, or moved by something other than Locus. Put the file back and the link follows it again; the version it cites can always be read.',
           });
         } else {
-          setNotice({
+          say({
             text: `${path.slice(1)} wasn't found.`,
             danger: true,
             help: 'Nothing is at that path now, and no version of it is in this workspace. Hover the link and press Edit to point it somewhere else.',
@@ -670,19 +693,19 @@ export function App() {
           const m = mapLines(hunks, loc.lines.start, loc.lines.end);
           loc = { ...loc, lines: { start: m.start, end: m.end } };
           if (m.status === 'changed')
-            setNotice({
+            say({
               text: `Some of these lines were edited since they were cited${since}.`,
               help: 'This shows the lines as they are now, found by following the edits. Compare puts them beside the version cited.',
               actions,
             });
           else if (m.status === 'gone')
-            setNotice({
+            say({
               text: `The cited lines were deleted since${since}.`,
               danger: true,
               help: 'The link still opens the version it was cited from, where the lines are. Compare shows what replaced them.',
               actions,
             });
-          else if (m.status === 'moved') showToast(m.start === m.end ? `Moved to line ${m.start} since this was cited` : `Lines moved to ${m.start}–${m.end} since this was cited`);
+          else if (m.status === 'moved') tell(m.start === m.end ? `Moved to line ${m.start} since this was cited` : `Lines moved to ${m.start}–${m.end} since this was cited`);
         } else if (await api.fileChangedSince(path, at).catch(() => false)) {
           const name = basename(path);
           if (kind === 'slides' && info.title && loc.slide) {
@@ -692,7 +715,7 @@ export function App() {
               .then((slides) => findSlide(slides, info.title!, loc.slide!))
               .catch(() => null);
             if (!on)
-              setNotice({
+              say({
                 text: `The quoted text is no longer in ${name}. It changed since you cited it${since}.`,
                 danger: true,
                 help: 'The deck still has the slide number cited, but not those words. The version it was cited from is still there to open.',
@@ -700,7 +723,7 @@ export function App() {
               });
             else if (on !== loc.slide) {
               loc = { ...loc, slide: on };
-              setNotice({
+              say({
                 text: `${name} changed since you cited it${since}. The quoted text is now on slide ${on}.`,
                 help: 'Slides were added or removed; Locus followed the quoted words to where they are now.',
                 actions,
@@ -712,7 +735,7 @@ export function App() {
               .then((data) => locateQuote(data, info.title!, loc.page!))
               .catch(() => null);
             if (!found)
-              setNotice({
+              say({
                 text: `The quoted text is no longer in ${name}. It changed since you cited it${since}.`,
                 danger: true,
                 help: 'The passage was edited away or the page was replaced. The version it was cited from is still there to open.',
@@ -720,14 +743,14 @@ export function App() {
               });
             else if (found.page !== loc.page) {
               loc = { ...loc, page: found.page, viewrect: loc.viewrect ? found.rect : undefined };
-              setNotice({
+              say({
                 text: `${name} changed since you cited it${since}. The quoted text is now on page ${found.page}.`,
                 help: 'Pages were added or removed; Locus followed the quoted words to where they are now.',
                 actions,
               });
             }
           } else {
-            setNotice({
+            say({
               text: `${name} changed since you cited it${since}. This shows the latest version.`,
               help: 'The link has no quote to follow, so Locus cannot tell whether the spot it cites moved. Compare puts the two versions side by side.',
               actions,
@@ -736,7 +759,7 @@ export function App() {
         }
       }
     }
-    openDoc(path, external, rev, loc);
+    if (!stale()) openDoc(path, external, rev, loc);
   };
 
   const editorCallbacks = (notePath: () => string) => ({
@@ -1038,7 +1061,7 @@ export function App() {
     const l = links[idx];
     setActiveLink(view, l.from);
     setTour({ index: idx, count: links.length, label: l.label });
-    void followRef(l, notePath);
+    void followRef(l, notePath, true);
   };
 
   const tourStop = () => {

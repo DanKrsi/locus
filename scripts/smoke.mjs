@@ -473,6 +473,28 @@ await step('tour mode', async () => {
   await win.locator('.tour-bar').waitFor({ state: 'detached', timeout: 5000 });
 });
 
+await step('tour mode: a stop in another note shows it on the right and the tour goes on', async () => {
+  const touring = await win.locator('[data-pane="notes"] .tab.active').innerText();
+  await win.getByRole('button', { name: 'Tour' }).click();
+  await win.locator('.tour-bar', { hasText: 'stop 1 of' }).waitFor({ timeout: 5000 });
+  const label = () => win.locator('.tour-bar .label').innerText();
+  for (let i = 0; i < 40 && (await label()) !== 'factors of safety'; i++) {
+    await win.keyboard.press('ArrowRight');
+    await win.waitForTimeout(150);
+  }
+  if ((await label()) !== 'factors of safety') throw new Error('never reached the link to the design basis note');
+  await win.locator('.viewer:not(.hidden) .cm-content', { hasText: 'Ultimate factor 1.4' }).waitFor({ timeout: 10000 });
+  await win.waitForTimeout(500);
+  if (!(await win.locator('.tour-bar').isVisible())) throw new Error('the tour ended');
+  const now = await win.locator('[data-pane="notes"] .tab.active').innerText();
+  if (now !== touring) throw new Error(`the note in front changed from ${touring} to ${now}`);
+  const stop = await win.locator('.tour-bar').innerText();
+  await win.keyboard.press('ArrowLeft');
+  await win.waitForFunction((s) => document.querySelector('.tour-bar')?.textContent !== s, stop, { timeout: 5000 });
+  await win.keyboard.press('Escape');
+  await win.locator('.tour-bar').waitFor({ state: 'detached', timeout: 5000 });
+});
+
 const flowText = () => win.evaluate(() => window.api.readText('/notes/retry-flow.canvas'));
 const until = async (what, test, ms = 8000) => {
   // A read can catch the file mid-save; that just means "not yet".

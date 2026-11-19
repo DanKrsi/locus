@@ -526,7 +526,9 @@ to themselves; Locus never handles a Claude login or key.
   a note says it can already see the screen and show places, that Set up adds the tools for
   reference links and notes, and has **Set up** (the Claude dialog, §6.1).
 - **Edits.** Claude edits files directly. A note open without unsaved changes reloads as soon as it
-  is written, so the user sees the edit; a note with unsaved changes keeps what is on screen.
+  is written, so the user sees the edit. **Known gap:** a note with unsaved changes keeps what is
+  on screen, and its next save (autosave included) writes over the edit without a word. Planned:
+  notice the outside write and offer to keep either side or merge.
 - The panel's width is dragged at its left edge and remembered, as is whether it is open.
 
 ## 7. Export

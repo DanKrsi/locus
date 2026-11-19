@@ -250,10 +250,11 @@ export function ClaudePanel({
           <div className="claude-cover">
             <h3>Claude Code isn't installed</h3>
             <p>
-              This panel runs Claude Code, Anthropic's command-line Claude, signed in with your own account. Install it from claude.com/code (or with
-              <code> npm install -g @anthropic-ai/claude-code</code>), sign in once in any terminal, then press Try again.
+              This panel runs Claude Code, Anthropic's command-line Claude, signed in with your own account. To install it, run
+              <code> irm https://claude.ai/install.ps1 | iex </code> in PowerShell (or <code>winget install Anthropic.ClaudeCode</code>), run
+              <code> claude </code> once to sign in, then press Try again.
             </p>
-            <p>Meanwhile you can use a plain terminal in this workspace's folder.</p>
+            <p>Open a plain terminal to run those here, in this workspace's folder. Instructions: code.claude.com/docs/en/setup</p>
             <div className="claude-cover-actions">
               <button className="primary" onClick={() => void start('claude')}>Try again</button>
               <button className="outline" onClick={() => void start('shell')}>Open a plain terminal</button>

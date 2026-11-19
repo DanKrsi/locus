@@ -49,15 +49,22 @@ async function onPath(file: string): Promise<string> {
   return file;
 }
 
-/** Runs a program, through cmd.exe when it is a .cmd or .bat script (as npm installs). */
-async function program(file: string, args: string[]) {
+/** One argument as Windows programs read their command line (quoted when it has spaces or quotes). */
+const quoteArg = (a: string) => (a && !/[\s"]/.test(a) ? a : `"${a.replace(/(\\*)"/g, '$1$1\\"').replace(/(\\+)$/, '$1$1')}"`);
+
+/**
+ * Runs a program, through cmd.exe when it is a .cmd or .bat script (as npm installs). cmd.exe gets
+ * the whole line as one quoted string with /s, which keeps quoted paths with spaces intact (with
+ * plain /c it strips the first and last quote of the line, so "C:\Users\A B\claude.cmd" breaks).
+ */
+async function program(file: string, args: string[]): Promise<{ file: string; args: string[] | string }> {
   const full = await onPath(file);
-  if (/\.(cmd|bat)$/i.test(full)) return { file: await onPath('cmd.exe'), args: ['/d', '/c', full, ...args] };
+  if (/\.(cmd|bat)$/i.test(full)) return { file: await onPath('cmd.exe'), args: `/d /s /c "${[full, ...args].map(quoteArg).join(' ')}"` };
   return { file: full, args };
 }
 
 /** What to run: Claude Code with the live tools, or the user's shell. Tests swap Claude for a stand-in. */
-async function command(kind: TerminalKind): Promise<{ file: string; args: string[] } | null> {
+async function command(kind: TerminalKind): Promise<{ file: string; args: string[] | string } | null> {
   if (kind === 'shell') return program('powershell.exe', ['-NoLogo']);
   const override = process.env.LOCUS_TERMINAL_CMD;
   const live = await liveConfig();

@@ -7,7 +7,7 @@ const common = {
   format: 'cjs',
   target: 'node22',
   sourcemap: true,
-  external: ['electron', 'dugite', 'electron-updater'],
+  external: ['electron', 'dugite', 'electron-updater', 'node-pty'],
   logLevel: 'warning',
 };
 

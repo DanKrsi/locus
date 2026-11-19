@@ -907,3 +907,22 @@ button.outline.strong { border-color: var(--accent); color: var(--accent); font-
 .export-summary { border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); padding: 10px 12px; }
 .export-summary ul { margin: 0; padding-left: 18px; display: grid; gap: 3px; }
 .export-summary li.warn { color: var(--danger); list-style: none; margin-left: -18px; display: flex; align-items: center; gap: 6px; }
+
+/* ---------- Claude panel (UI spec §6.3) ---------- */
+.claude-panel { flex: 1; flex-direction: column; min-width: 0; background: var(--panel); border-left: 1px solid var(--border); }
+.claude-head { display: flex; align-items: center; gap: 2px; padding: 6px 8px; background: var(--page); border-bottom: 1px solid var(--border); }
+.claude-title { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: 13px; }
+.claude-note { display: flex; align-items: flex-start; gap: 8px; padding: 8px 10px; background: var(--mark-soft); color: var(--mark-text); border-bottom: 1px solid var(--border); font-size: 13px; }
+.claude-chip-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; padding: 6px 10px; border-bottom: 1px solid var(--border); font-size: 12px; color: var(--muted); min-height: 38px; }
+.claude-chip-where { white-space: nowrap; }
+.claude-chip { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 2px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+button.small { height: 24px; padding: 0 8px; font-size: 12px; }
+.claude-term-wrap { position: relative; flex: 1; min-height: 0; }
+.claude-term { position: absolute; inset: 6px 4px 4px 8px; }
+.claude-term .xterm-viewport { background: transparent !important; }
+.claude-cover { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 8px; padding: 24px; background: var(--panel); color: var(--muted); font-size: 13px; overflow: auto; }
+.claude-cover h3 { margin: 0; color: var(--text); font-weight: 600; }
+.claude-cover p { margin: 0; line-height: 1.5; }
+.claude-cover-actions { display: flex; gap: 8px; margin-top: 6px; }
+.claude-ended { position: absolute; left: 8px; right: 8px; bottom: 8px; display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 8px; background: var(--page); border: 1px solid var(--border); box-shadow: var(--shadow); font-size: 12px; }
+button.outline.active { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }

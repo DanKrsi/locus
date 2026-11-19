@@ -487,6 +487,48 @@ starts, and downloads it in the background without asking.
   viewed longest ago (a note is saved first); the tab in front is never closed. Lowering the limit
   trims straight away.
 
+### 6.3 Claude panel
+
+**Claude** in the header opens a panel at the right of the window running the user's own Claude
+Code in a real terminal, in the workspace folder. It is the Claude Code they installed and signed in
+to themselves; Locus never handles a Claude login or key.
+
+- **What runs.** Claude Code is started with `--mcp-config` (the live tools below) and
+  `--append-system-prompt` (it is in Locus; call current_view when the user says "this", "here" or
+  "the selection"; use show to open places; reference links come in angle brackets). Nothing is
+  pre-approved: Claude Code asks about trusting the folder and about each tool as it always does.
+  The header's terminal/Claude button swaps to a plain PowerShell in the same folder and back, and
+  ⟳ starts again. Main chooses the program; the page only asks for "claude" or "shell".
+- **Selection chips.** Above the terminal, what is picked out in the pane last worked in shows as a
+  chip ("Selected in the note: design-basis.md line 3", "In view in the document: BDS-100 p5"):
+  selected text in a note (as a link to its lines, quoting the text), or a document's selection,
+  area, cells or page in view (as Cite would link it). **Add to prompt** pastes the reference link
+  into what is being typed to Claude. Making the chip records nothing: no version is saved and no
+  note id is added, so a link to the latest version stays a link to the file as it is.
+- **Live tools** (`locus-live`, given only to the panel's Claude): `current_view` returns the
+  workspace, the note being edited (path, cursor line, selection with its text and link), the
+  document on the right (path, kind, version, what is selected or in view, as a link with its
+  quote, and what it is compared with), and the open notes and documents; `show` opens a Locus link
+  or destination as clicking it would (a note at lines opens in the notes pane with them flashed)
+  and says what it opened, or that nothing is there.
+- **The live server** listens on 127.0.0.1 at a random port, and answers only requests that carry
+  this run's random token, have no Origin header (no web page) and are addressed to `127.0.0.1:port`
+  (no DNS rebinding). Its config file is written to Locus's own settings folder, never the
+  workspace.
+- **Lifecycle.** One session at a time. Hiding the panel keeps it running; it ends when another
+  workspace opens, the window closes, Locus quits or installs an update. When it ends a bar offers
+  Start again (and a plain terminal).
+- **Keys.** Keys typed in the panel are the terminal's: Locus shortcuts (Ctrl+O, Ctrl+N, tour keys)
+  don't fire there. Ctrl+C copies when terminal text is selected and otherwise interrupts; Ctrl+V
+  pastes.
+- **No Claude Code.** The panel says it isn't installed, how to install it and sign in, and offers
+  **Try again** and **Open a plain terminal**. If Claude Code is installed without the Locus tools,
+  a note says it can already see the screen and show places, that Set up adds the tools for
+  reference links and notes, and has **Set up** (the Claude dialog, §6.1).
+- **Edits.** Claude edits files directly. A note open without unsaved changes reloads as soon as it
+  is written, so the user sees the edit; a note with unsaved changes keeps what is on screen.
+- The panel's width is dragged at its left edge and remembered, as is whether it is open.
+
 ## 7. Export
 
 Right-click a note's tab. An export is of **what is on screen**, unsaved changes included, and

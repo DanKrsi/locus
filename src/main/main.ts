@@ -21,6 +21,8 @@ import { planExport, writeExport, LIMITS } from './exportFolder';
 import * as gh from './github';
 import { watchWorkspace, type Watcher } from './watch';
 import { checkForUpdates, installUpdate, startUpdates, updateStatus } from './update';
+import { onTerminalOutput, resizeTerminal, startTerminal, stopTerminal, terminalRunning, writeTerminal } from './terminal';
+import { setLivePage } from './live';
 
 const RENDERER_DIR = join(__dirname, '..', 'renderer');
 const WORKSPACE_DIR = '.locus';
@@ -139,6 +141,8 @@ async function openWorkspaceAt(dir: string): Promise<WorkspaceInfo> {
     }
   }
   await git.ensureIdentity(root);
+  // The Claude panel's session runs in the workspace folder, so it ends with the workspace.
+  if (workspace?.root !== root) stopTerminal(true);
   workspace = { root, name: meta.name, managed: meta.managed };
   watchFiles(root);
   const settings = await loadSettings();
@@ -360,7 +364,25 @@ const api: Api = {
     return checkForUpdates();
   },
   async installUpdate() {
+    stopTerminal();
     installUpdate();
+  },
+  async terminalStart(kind, cols, rows) {
+    if (!workspace) return { ok: false, reason: 'no-workspace' };
+    return startTerminal(kind === 'shell' ? 'shell' : 'claude', workspace.root, Number(cols) || 80, Number(rows) || 24);
+  },
+  async terminalWrite(data) {
+    if (typeof data === 'string') writeTerminal(data);
+  },
+  async terminalResize(cols, rows) {
+    resizeTerminal(Number(cols), Number(rows));
+  },
+  async terminalStop() {
+    stopTerminal();
+  },
+  async terminalState() {
+    const t = terminalRunning();
+    return t && workspace && t.cwd === workspace.root ? { kind: t.kind } : null;
   },
   async appVersion() {
     return app.getVersion();
@@ -771,7 +793,29 @@ function createWindow() {
     return { action: 'deny' };
   });
   win.loadURL('app://renderer/index.html');
+  win.on('closed', () => {
+    stopTerminal();
+    setLivePage(null);
+    win = null;
+  });
 }
+
+/** Sends to the window once its page is up. */
+function tell(channel: string, payload: unknown) {
+  if (win && !win.isDestroyed() && !win.webContents.isLoading()) win.webContents.send(channel, payload);
+}
+
+// What the panel's Claude reads of the window (current_view) and how it opens a place (show):
+// both answered by the page, which knows the open tabs, selections and how links are followed.
+async function askPage(script: string): Promise<unknown> {
+  if (!win || win.isDestroyed()) return null;
+  return win.webContents.executeJavaScript(script, true);
+}
+setLivePage({
+  view: () => askPage('window.__locusLive ? window.__locusLive.view() : null'),
+  show: async (dest) => String((await askPage(`window.__locusLive ? window.__locusLive.show(${JSON.stringify(String(dest))}) : 'Locus is still starting.'`)) ?? 'Nothing happened.'),
+});
+onTerminalOutput(tell);
 
 /** A .locus file, a folder, or a locus://open?repo=owner/name link passed on the command line. */
 function openRequestFrom(argv: string[]): string | null {
@@ -833,3 +877,4 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => app.quit());
+app.on('before-quit', () => stopTerminal());

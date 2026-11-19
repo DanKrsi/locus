@@ -48,7 +48,7 @@ function run(cmd: string, args: string[], timeout = 60000): Promise<{ ok: boolea
 }
 
 /** The claude command, if Claude Code is installed. */
-async function findClaudeCli(): Promise<string | null> {
+export async function findClaudeCli(): Promise<string | null> {
   const where = await run('where', ['claude'], 10000);
   if (where.ok) {
     const first = where.out.split(/\r?\n/).map((l) => l.trim()).find((l) => /\.(exe|cmd)$/i.test(l));

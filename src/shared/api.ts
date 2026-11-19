@@ -130,6 +130,9 @@ export interface Settings {
   viewerTabLimit: number;
   /** App version the Claude prompt was last shown for (so it asks once, and again after updates). */
   claudeOffered?: string;
+  /** The Claude panel on the right: open or not, and its width in pixels. */
+  claudePanel?: boolean;
+  claudeWidth?: number;
 }
 
 /** Claude apps on this computer and the Locus tools installed in them. */
@@ -139,6 +142,10 @@ export interface ClaudeStatus {
 }
 
 /** Where updating Locus from GitHub has got to. */
+/** What runs in the Claude panel: Claude Code, or a plain terminal. */
+export type TerminalKind = 'claude' | 'shell';
+export type TerminalStart = { ok: true; kind: TerminalKind } | { ok: false; reason: 'no-claude' | 'no-workspace' | 'failed'; message?: string };
+
 export interface UpdateStatus {
   /**
    * off: not an installed copy (development and test runs don't update). checking, then current
@@ -173,6 +180,13 @@ export interface Api {
   checkForUpdates(): Promise<UpdateStatus>;
   /** Closes Locus, installs the downloaded update and opens Locus again. */
   installUpdate(): Promise<void>;
+  /** Starts (or restarts) the Claude panel's terminal in the workspace folder. */
+  terminalStart(kind: TerminalKind, cols: number, rows: number): Promise<TerminalStart>;
+  terminalWrite(data: string): Promise<void>;
+  terminalResize(cols: number, rows: number): Promise<void>;
+  terminalStop(): Promise<void>;
+  /** What is running in the panel, if anything. */
+  terminalState(): Promise<{ kind: TerminalKind } | null>;
   head(): Promise<string | null>;
   versions(path?: string): Promise<Version[]>;
   changesSince(rev: string): Promise<FileChange[]>;
@@ -259,6 +273,7 @@ export interface Api {
 
 export const API_METHODS: (keyof Api)[] = [
   'openWorkspace', 'createWorkspace', 'listFiles', 'readFile', 'readText', 'writeText', 'writeNewFile', 'exists', 'fileChangedSince', 'claudeStatus', 'connectClaude', 'restartClaudeDesktop', 'appVersion', 'updateStatus', 'checkForUpdates', 'installUpdate',
+  'terminalStart', 'terminalWrite', 'terminalResize', 'terminalStop', 'terminalState',
   'head', 'versions', 'changesSince', 'uncommitted', 'saveVersion', 'ensureVersion', 'diffHunks',
   'getSettings', 'setSettings', 'pickExternalFiles', 'readExternal', 'openExternally', 'setTitleBarColors',
   'renameFile', 'restoreVersion', 'undoRestore', 'findMoved', 'citations', 'versionChanges', 'updateLinks', 'undoLinkUpdate', 'ensureNoteId', 'findNoteById',

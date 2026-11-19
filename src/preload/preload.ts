@@ -22,4 +22,15 @@ contextBridge.exposeInMainWorld('locusEvents', {
   onUpdateStatus(cb: (status: unknown) => void) {
     ipcRenderer.on('update-status', (_e, status: unknown) => cb(status));
   },
+  /** Output of the Claude panel's terminal, and its end. Each returns a function that stops listening. */
+  onTerminalData(cb: (data: string) => void) {
+    const fn = (_e: unknown, data: string) => cb(data);
+    ipcRenderer.on('terminal-data', fn);
+    return () => ipcRenderer.removeListener('terminal-data', fn);
+  },
+  onTerminalExit(cb: (info: { code: number }) => void) {
+    const fn = (_e: unknown, info: { code: number }) => cb(info);
+    ipcRenderer.on('terminal-exit', fn);
+    return () => ipcRenderer.removeListener('terminal-exit', fn);
+  },
 });

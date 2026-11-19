@@ -1,7 +1,7 @@
 {
   "name": "locus",
   "productName": "Locus",
-  "version": "0.6.22",
+  "version": "0.6.23",
   "description": "Write markdown notes that link to exact places in PDFs, code, spreadsheets and their versions.",
   "license": "MIT",
   "private": true,
@@ -19,6 +19,7 @@
     "test:editing": "npm run build && node scripts/make-test-workspace.mjs && node scripts/test-editing.mjs",
     "test:update": "npm run build && node scripts/test-update.mjs",
     "test:tour": "npm run build && node scripts/make-test-workspace.mjs && node scripts/test-tour.mjs",
+    "test:panel": "npm run build && node scripts/make-test-workspace.mjs && node scripts/test-claude-panel.mjs",
     "test:tables": "npm run build && node scripts/make-test-workspace.mjs && node scripts/test-table-cells.mjs",
     "build:mcp": "node scripts/build-mcp.mjs",
     "build:plugin": "node scripts/build-mcp.mjs plugin/server/server.mjs --minify",
@@ -35,7 +36,8 @@
   },
   "dependencies": {
     "dugite": "^3.3.0",
-    "electron-updater": "^6.8.11"
+    "electron-updater": "^6.8.11",
+    "node-pty": "^1.1.0"
   },
   "devDependencies": {
     "@codemirror/commands": "^6.11.1",
@@ -55,6 +57,8 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
     "@xyflow/react": "^12.12.0",
     "electron": "^45.0.0",
     "electron-builder": "^26.15.3",
@@ -97,8 +101,10 @@
         "to": "Locus-demo.locus"
       }
     ],
+    "npmRebuild": false,
     "asarUnpack": [
       "node_modules/dugite/**",
+      "node_modules/node-pty/**",
       "plugin/**"
     ],
     "win": {

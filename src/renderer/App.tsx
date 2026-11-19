@@ -5,7 +5,9 @@ import {
   escapeLabel,
   fileKind,
   formatReference,
+  parseDestination,
   resolvePath,
+  splitLinkTarget,
   type Heading,
   type Location,
   type Reference,
@@ -35,6 +37,7 @@ import { allLinks, insertReference, replaceLink, setActiveLink, type LinkInfo, t
 import type { EditorView } from '@codemirror/view';
 import { renderHoverCard } from './notes/hoverCard';
 import { NotesPane, type NotesHandle } from './notes/NotesPane';
+import { ClaudePanel, type PanelChip } from './ClaudePanel';
 import { longDate, term, versionBadge } from './terms';
 import type { ViewerHandle } from './viewers/types';
 import type { CiteMode } from './viewers/CiteButton';
@@ -135,6 +138,12 @@ export function App() {
   const [citedRevs, setCitedRevs] = useState(new Map<string, Set<string>>());
   const [dragging, setDragging] = useState(false);
   const [split, setSplit] = useState(0.5);
+  /** The Claude panel: shown or not, ever shown (it stays mounted so its session goes on), its width, and dragging its edge. */
+  const [claudeOpen, setClaudeOpen] = useState(false);
+  const [claudeMounted, setClaudeMounted] = useState(false);
+  const [claudeWidth, setClaudeWidth] = useState(440);
+  const [claudeDrag, setClaudeDrag] = useState(false);
+  const openNotes = useRef<string[]>([]);
   const [isDark, setIsDark] = useState(false);
   const [citations, setCitations] = useState<Citation[]>([]);
   const [tour, setTour] = useState<{ index: number; count: number; label: string } | null>(null);
@@ -173,6 +182,11 @@ export function App() {
     api.getSettings().then(async (s) => {
       setSettings(s);
       setSplit(s.splitRatio);
+      if (s.claudeWidth) setClaudeWidth(s.claudeWidth);
+      if (s.claudePanel) {
+        setClaudeOpen(true);
+        setClaudeMounted(true);
+      }
       const last = s.recentWorkspaces[0];
       if (last) await openWorkspace(last).catch(() => undefined);
       void offerClaude(s);
@@ -1406,11 +1420,125 @@ export function App() {
     else await applyLinkUpdates([link.verdict === 'deleted' ? pinFor(link) : updateFor(link)]);
   };
 
+  // ---------- Claude panel ----------
+
+  const showClaude = (open: boolean) => {
+    setClaudeOpen(open);
+    if (open) setClaudeMounted(true);
+    void updateSettings({ claudePanel: open });
+  };
+
+  /** The selection in the active note, as a reference to its lines with the text quoted. */
+  const noteSelection = (): { path: string; lines: { start: number; end: number }; text: string; link: string; label: string } | null => {
+    const view = notes.current?.activeView();
+    const path = notes.current?.activePath();
+    if (!view || !path) return null;
+    const sel = view.state.selection.main;
+    if (sel.empty) return null;
+    const text = view.state.sliceDoc(sel.from, sel.to);
+    if (!text.trim()) return null;
+    const lines = { start: view.state.doc.lineAt(sel.from).number, end: view.state.doc.lineAt(sel.to).number };
+    const ref: Reference = { path, pathKind: 'root', loc: { lines }, extra: [] };
+    const label = defaultLabel(path, ref.loc);
+    const span = lines.start === lines.end ? `line ${lines.start}` : `lines ${lines.start}-${lines.end}`;
+    return { path, lines, text, link: formatReference(label, ref, text), label: `${label} ${span}` };
+  };
+
+  /**
+   * The place picked out (or in view) in the active document, as a reference. Nothing is recorded
+   * to make it: a link to the latest version stays a link to the file as it is.
+   */
+  const docPlace = (): { tab: DocTab; kind: 'selected' | 'view'; link: string; label: string; quote?: string } | null => {
+    const tab = live.current.docTabs.find((t) => t.id === live.current.activeDoc);
+    if (!tab) return null;
+    const target = handles.current.get(tab.id)?.citeTarget();
+    if (!target) return null;
+    const ref: Reference = tab.external
+      ? { path: tab.path, pathKind: 'external', loc: target.loc, extra: [] }
+      : { path: tab.path, pathKind: 'root', loc: target.loc, rev: tab.rev ? shortSha(tab.rev) : undefined, extra: [] };
+    const label = defaultLabel(tab.path, target.loc, target.pageLabel);
+    const l = target.loc;
+    const picked = !!(target.quote || l.viewrect || l.rect || l.sheet);
+    const span = l.lines ? (l.lines.start === l.lines.end ? ` line ${l.lines.start}` : ` lines ${l.lines.start}-${l.lines.end}`) : '';
+    return { tab, kind: picked ? 'selected' : 'view', link: formatReference(label, ref, target.quote), label: label + span, quote: target.quote };
+  };
+
+  /** The chip above the panel's terminal: what was picked out in the pane last worked in. */
+  const panelChip = (): PanelChip | null => {
+    const n = noteSelection();
+    const noteChip: PanelChip | null = n ? { kind: 'selected', where: 'note', label: n.label, link: n.link } : null;
+    const d = docPlace();
+    const docChip: PanelChip | null = d ? { kind: d.kind, where: 'document', label: d.label, link: d.link } : null;
+    if (lastPane.current === 'docs') return docChip?.kind === 'selected' ? docChip : (noteChip ?? docChip);
+    return noteChip ?? docChip;
+  };
+
+  // What the panel's Claude reads of the window and how it opens places (src/main/live.ts asks).
+  useEffect(() => {
+    const view = () => {
+      const w = live.current.ws;
+      if (!w) return null;
+      const activeNote = notes.current?.activePath() ?? null;
+      const editor = notes.current?.activeView() ?? null;
+      const sel = noteSelection();
+      const d = docPlace();
+      const kindOf = (t: DocTab) => (isCanvas(t.path) ? 'flowchart' : t.kind);
+      return {
+        workspace: { name: w.name, folder: w.root },
+        note: activeNote
+          ? {
+              path: activeNote,
+              cursorLine: editor ? editor.state.doc.lineAt(editor.state.selection.main.head).number : undefined,
+              selection: sel ? { lines: sel.lines, text: sel.text.slice(0, 4000), link: sel.link } : null,
+            }
+          : null,
+        document: d
+          ? {
+              path: d.tab.path,
+              kind: kindOf(d.tab),
+              external: d.tab.external || undefined,
+              version: d.tab.rev ? shortSha(d.tab.rev) : 'latest',
+              comparingWith: d.tab.compare ? (d.tab.compare === 'LATEST' ? 'latest' : shortSha(d.tab.compare)) : undefined,
+              [d.kind === 'selected' ? 'selected' : 'inView']: { link: d.link, quote: d.quote },
+            }
+          : null,
+        openNotes: openNotes.current,
+        openDocuments: live.current.docTabs.map((t) => ({ path: t.path, kind: kindOf(t), version: t.rev ? shortSha(t.rev) : 'latest' })),
+        touring: live.current.tour ? true : undefined,
+      };
+    };
+    const show = async (input: string) => {
+      if (!live.current.ws) return 'No workspace is open in Locus.';
+      const text = String(input).trim();
+      const md = text.match(/\]\(([^]*)\)\s*$/);
+      const dest = md ? splitLinkTarget(md[1]).dest : text.replace(/^<([^]*)>$/, '$1');
+      const ref = parseDestination(dest);
+      if (!ref || !dest) return `"${text}" is not a Locus link or destination.`;
+      if (ref.pathKind === 'web') return 'That is a web address; show opens places in the workspace.';
+      const notePath = notes.current?.activePath() ?? '/';
+      const path = ref.path ? (ref.pathKind === 'external' ? ref.path : resolvePath(ref, notePath)) : notePath;
+      if (ref.path && ref.pathKind !== 'external' && !ref.rev && !(await api.exists(path).catch(() => false)) && !ref.at)
+        return `Nothing is at ${path} in this workspace.`;
+      // A note at some lines opens in the notes pane with those lines flashed.
+      if (ref.path && fileKind(path) === 'markdown' && !ref.rev && ref.loc.lines) {
+        await notes.current?.revealLine(path, ref.loc.lines.start);
+        return `Showing ${path} at line ${ref.loc.lines.start} in the notes pane.`;
+      }
+      const info = { from: 0, to: 0, labelFrom: 0, labelTo: 0, label: '', dest, ref, image: false };
+      await followRef(info, notePath);
+      const where = fileKind(path) === 'markdown' || isCanvas(path) ? 'the notes pane' : 'the viewer on the right';
+      return `Showing ${dest} in ${where}.`;
+    };
+    (window as unknown as { __locusLive?: unknown }).__locusLive = { view, show };
+  });
+
   // ---------- Keyboard ----------
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!live.current.ws) return;
+      // Keys typed in the Claude panel are the terminal's.
+      if (e.target instanceof Element && e.target.closest('.claude-panel')) return;
       const k = e.key.toLowerCase();
       const zoomIn = e.key === '=' || e.key === '+' || e.code === 'NumpadAdd';
       const zoomOut = e.key === '-' || e.key === '_' || e.code === 'NumpadSubtract';
@@ -1475,6 +1603,9 @@ export function App() {
 
   // ---------- Render ----------
 
+  /** Room the Claude panel and its edge take from the notes and documents. */
+  const panelSpace = claudeOpen ? claudeWidth + 5 : 0;
+
   if (!settings) return null;
 
   return (
@@ -1506,6 +1637,15 @@ export function App() {
           </>
         )}
         <div className="spacer" />
+        {ws && (
+          <button
+            className={'outline claude-toggle' + (claudeOpen ? ' active' : '')}
+            title={claudeOpen ? 'Hide the Claude panel (what runs in it keeps going)' : 'Claude Code in a panel on the right: it sees what you have open and selected'}
+            onClick={() => showClaude(!claudeOpen)}
+          >
+            <Icon name="terminal" /> Claude
+          </button>
+        )}
         <button
           className="icon"
           title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
@@ -1657,17 +1797,22 @@ export function App() {
         <div
           className="panes"
           onMouseMove={(e) => {
-            if (!dragging) return;
             const r = e.currentTarget.getBoundingClientRect();
-            setSplit(Math.min(0.8, Math.max(0.2, (e.clientX - r.left) / r.width)));
+            if (claudeDrag) return setClaudeWidth(Math.round(Math.min(r.width * 0.6, Math.max(320, r.right - e.clientX))));
+            if (!dragging) return;
+            setSplit(Math.min(0.8, Math.max(0.2, (e.clientX - r.left) / (r.width - panelSpace))));
           }}
           onMouseUp={() => {
+            if (claudeDrag) {
+              setClaudeDrag(false);
+              void updateSettings({ claudeWidth });
+            }
             if (!dragging) return;
             setDragging(false);
             void updateSettings({ splitRatio: split });
           }}
         >
-          <div data-pane="notes" style={{ width: `${split * 100}%`, display: 'flex', minWidth: 0 }}>
+          <div data-pane="notes" style={{ width: `calc((100% - ${panelSpace}px) * ${split})`, display: 'flex', minWidth: 0 }}>
             <NotesPane
               key={ws.root}
               ref={notes}
@@ -1676,7 +1821,10 @@ export function App() {
               autosave={settings.autosave}
               tabLimit={settings.editorTabLimit ?? 0}
               callbacks={editorCallbacks}
-              onSessionChange={(paths, active) => persistSession({ notes: paths, activeNote: active })}
+              onSessionChange={(paths, active) => {
+                openNotes.current = paths;
+                persistSession({ notes: paths, activeNote: active });
+              }}
               onActiveChange={(p) => {
                 setActiveNote(p);
                 if (live.current.tour) tourStop();
@@ -1777,6 +1925,28 @@ export function App() {
               }}
             />
           </div>
+          {claudeOpen && (
+            <div
+              className={'divider' + (claudeDrag ? ' dragging' : '')}
+              title="Drag to resize the Claude panel"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                setClaudeDrag(true);
+              }}
+            />
+          )}
+          {claudeMounted && (
+            <div style={{ width: claudeWidth, flex: 'none', display: claudeOpen ? 'flex' : 'none', minWidth: 0 }}>
+              <ClaudePanel
+                visible={claudeOpen}
+                dark={isDark}
+                workspace={ws.root}
+                pick={panelChip}
+                onClose={() => showClaude(false)}
+                onSetup={() => setClaudeDialog('settings')}
+              />
+            </div>
+          )}
         </div>
       )}
 

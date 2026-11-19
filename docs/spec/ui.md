@@ -134,7 +134,8 @@ files is refused rather than written into.
   - A bracket typed into a link's label is saved as `\[` or `\]`, and backslash escapes show
     as the character alone.
 - Tables are always shown as tables, including straight after **Table** inserts one. Clicking a
-  cell edits it in place (same formatted view); Tab / Shift+Tab and Enter move between cells,
+  cell edits it in place (same formatted view). The cell keeps its size while edited and its text
+  wraps inside it, so the table never grows past the note. Tab / Shift+Tab and Enter move between cells,
   Tab from the last cell adds a row, Esc finishes. While a cell is edited, buttons under the
   table insert a row above or below, a column left or right, align the column (left, centre,
   right; the same button again clears it), or delete the row, column or table.

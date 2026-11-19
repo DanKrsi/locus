@@ -272,6 +272,11 @@ function startEdit(view: EditorView, wrap: HTMLElement, row: number, col: number
   const t = readTable(view.state, tableFrom(wrap));
   if (!td || !t) return;
   const original = t.rows[row]?.[col]?.text ?? '';
+  // The cell keeps the size it has: its text wraps inside it while it is edited, rather than the
+  // cell (and the table) growing as wide as the text, past the edge of the note.
+  const width = td.getBoundingClientRect().width;
+  td.style.boxSizing = 'border-box';
+  td.style.width = td.style.minWidth = td.style.maxWidth = `${width}px`;
   td.textContent = '';
   td.classList.add('editing-cell');
   const move = (r: number, c: number) => {
@@ -318,6 +323,7 @@ function startEdit(view: EditorView, wrap: HTMLElement, row: number, col: number
           ]),
         ),
         inlineEditorExtensions(opts),
+        EditorView.lineWrapping,
         EditorView.domEventHandlers({
           blur: () => {
             // Leaving the table (not moving to another cell or the toolbar) saves the cell.
@@ -355,6 +361,7 @@ function finishEdit(view: EditorView, wrap: HTMLElement, opts: NoteEditorOptions
     const td = cellAt(wrap, e.row, e.col);
     if (td) {
       td.classList.remove('editing-cell');
+      td.style.boxSizing = td.style.width = td.style.minWidth = td.style.maxWidth = '';
       fillCell(td, cell ?? { text: '', from: -1 }, view, opts);
     }
     wrap.classList.remove('editing');

@@ -224,6 +224,9 @@ svg.ico { width: 16px; height: 16px; flex: none; }
 .tab .close { width: 18px; height: 18px; border-radius: 4px; display: grid; place-items: center; color: var(--faint); }
 .tab .close:hover { background: var(--accent-soft); color: var(--text); }
 .tab .dot { color: var(--accent); font-size: 12px; }
+.tab .dot.conflict { color: var(--danger); font-weight: 700; }
+.conflict-notice { flex-wrap: wrap; }
+.conflict-notice .notice-body { flex: 1 1 260px; }
 .tab-add { color: var(--accent); padding: 4px 8px; margin-bottom: 3px; }
 
 .toolbar {

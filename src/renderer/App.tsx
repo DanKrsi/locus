@@ -54,6 +54,7 @@ interface Session {
 
 /** The note the demo workspace opens on. */
 const DEMO_NOTE = '/notes/Start here.md';
+const WAITING_NOTE = 'A note changed outside Locus while you had unsaved changes. Choose what to keep in the bar above it first.';
 
 /** One of the links a notice is about: named in the notice, and marked in the note. */
 interface NoticeLink {
@@ -386,9 +387,11 @@ export function App() {
   }, []);
 
   async function openWorkspace(dir?: string, create = false, opened?: WorkspaceInfo) {
+    // Save before Locus moves to the other folder; a note waiting for the user to choose what to
+    // keep stops the move (unless the other workspace is already open).
+    if ((await notes.current?.saveAll()) === false && !opened) return showToast(WAITING_NOTE);
     const info = opened ?? (create ? await api.createWorkspace() : await api.openWorkspace(dir));
     if (!info) return;
-    await notes.current?.saveAll();
     let s: Session = { notes: [], activeNote: null, docs: [], activeDoc: 0 };
     try {
       s = { ...s, ...JSON.parse(localStorage.getItem(sessionKey(info.root)) ?? '{}') };
@@ -495,7 +498,7 @@ export function App() {
   }, []);
 
   const restartToUpdate = async () => {
-    await notes.current?.saveAll();
+    if ((await notes.current?.saveAll()) === false) return showToast(WAITING_NOTE);
     void api.installUpdate();
   };
 
@@ -1852,6 +1855,7 @@ export function App() {
               }}
               linksTo={(path) => citations.filter((c) => c.path === path && c.note !== path).length}
               onExport={(path, text, kind) => void exportNote(path, text, kind)}
+              onShowFile={(path) => openDoc(path, false)}
             />
           </div>
           <div

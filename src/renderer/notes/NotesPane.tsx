@@ -1,5 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import type { EditorView } from '@codemirror/view';
+import { isolateHistory } from '@codemirror/commands';
 import { basename, dirname, formatReference, slugify, stem } from '../../core/link';
 import { api } from '../api';
 import { decodeText } from '../files';
@@ -28,8 +29,9 @@ import {
 } from './editor';
 import { insertTable } from './tables';
 import { setEditorZoom, ZoomControl } from '../zoom';
-import { isCanvas, newCanvas, serializeCanvas } from '../../core/canvas';
-import { joinNoteId, splitNoteId } from '../../core/noteid';
+import { isCanvas, newCanvas, parseCanvas, serializeCanvas } from '../../core/canvas';
+import { addNoteId, joinNoteId, readNoteId, splitNoteId } from '../../core/noteid';
+import { merge3 } from '../../core/merge';
 import { FlowEditor, type FlowHandle } from '../flow/FlowEditor';
 import { ConfirmDialog, ContextMenu, PathDialog, type ConfirmRequest, type MenuItem, type MenuState, type PathRequest } from '../menus';
 
@@ -45,7 +47,8 @@ export interface NotesHandle {
   open(path: string): Promise<EditorView | null>;
   newNote(): Promise<EditorView | null>;
   newFlowchart(): Promise<void>;
-  saveAll(): Promise<void>;
+  /** Saves every open note; false when one changed outside Locus and waits for the user to choose. */
+  saveAll(): Promise<boolean>;
   /** Re-render references (after link checks or version changes). */
   refresh(): void;
   revealHeading(path: string, slug: string): void;
@@ -95,6 +98,8 @@ interface Props {
   linksTo(path: string): number;
   /** Exports a note as a web page or a PDF; `text` is what the tab shows now. */
   onExport(path: string, text: string, kind: 'html' | 'pdf' | 'folder'): void;
+  /** Opens a note's file as it is on disk in the viewer (to compare with unsaved changes). */
+  onShowFile(path: string): void;
 }
 
 /** An open flowchart (.canvas file); its editor reports changes as file text. */
@@ -105,6 +110,10 @@ interface Flow {
   text: string;
   handle: FlowHandle | null;
   timer?: number;
+  /** A save in progress (saves of one file go one at a time). */
+  saving?: Promise<boolean>;
+  /** The file's text, when it was changed outside Locus while the flowchart had unsaved changes. */
+  conflict?: string;
 }
 
 interface Doc {
@@ -118,6 +127,48 @@ interface Doc {
   /** The note's hidden identity (the last line of the file), kept out of the editor. */
   noteId?: string;
   timer?: number;
+  /** A save in progress (saves of one file go one at a time). */
+  saving?: Promise<boolean>;
+  /** The file's text, when it was changed outside Locus while the note had unsaved changes. */
+  conflict?: string;
+}
+
+/** Text as it matters for "is this still what we last saw?": line endings, a BOM and a final line break don't count. */
+const plain = (s: string) => s.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').replace(/\n$/, '');
+const sameText = (a: string, b: string) => plain(a) === plain(b);
+
+/** Flowcharts compared without the identity Locus may add to the file while it is open. */
+function sameFlow(a: string, b: string): boolean {
+  try {
+    const { locusId: _a, ...x } = parseCanvas(a) as Record<string, unknown>;
+    const { locusId: _b, ...y } = parseCanvas(b) as Record<string, unknown>;
+    return JSON.stringify(x) === JSON.stringify(y);
+  } catch {
+    return sameText(a, b);
+  }
+}
+
+/** Merges a note's unsaved changes with the file's, ignoring whether each ends in a line break. */
+function mergeNote(base: string, mine: string, theirs: string) {
+  const nl = (s: string) => (s.endsWith('\n') ? s : s + '\n');
+  const r = merge3(nl(base), nl(mine), nl(theirs));
+  return { ...r, text: mine.endsWith('\n') ? r.text : r.text.replace(/\n$/, '') };
+}
+
+/** Changes the editor to `text` in one step (so Ctrl+Z undoes it), touching only what differs. */
+function replaceText(view: EditorView, text: string) {
+  const old = view.state.sliceDoc();
+  if (old === text) return;
+  const max = Math.min(old.length, text.length);
+  let start = 0;
+  while (start < max && old.charCodeAt(start) === text.charCodeAt(start)) start++;
+  let end = 0;
+  while (end < max - start && old.charCodeAt(old.length - 1 - end) === text.charCodeAt(text.length - 1 - end)) end++;
+  view.dispatch({
+    changes: { from: start, to: old.length - end, insert: text.slice(start, text.length - end) },
+    // Its own undo step, never joined to typing just before it.
+    annotations: isolateHistory.of('full'),
+  });
 }
 
 export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, ref) {
@@ -144,37 +195,168 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
 
   const setDirty = (path: string, dirty: boolean) =>
     setTabs((ts) => ts.map((t) => (t.path === path && t.dirty !== dirty ? { ...t, dirty } : t)));
+  const setConflict = (path: string, conflict: NoteTab['conflict']) =>
+    setTabs((ts) => ts.map((t) => (t.path === path && t.conflict !== conflict ? { ...t, conflict } : t)));
 
-  const save = async (path: string, announce = false) => {
+  /** The note's text on disk as the editor holds it (without its identity line), or null. */
+  const readNote = async (path: string) => {
+    const bytes = await api.readFile(path).catch(() => null);
+    if (!bytes) return null;
+    const { body, id } = splitNoteId(decodeText(bytes).text);
+    return { body: body.replace(/\r\n/g, '\n'), id };
+  };
+  const readFlow = (path: string) => api.readFile(path).then((b) => decodeText(b).text, () => null);
+
+  /** The file changed outside Locus while the tab had unsaved changes: stop saving it and ask. */
+  const noteConflict = (d: Doc, disk: string) => {
+    d.conflict = disk;
+    clearTimeout(d.timer);
+    setConflict(d.path, mergeNote(d.savedText, docText(d.view), disk).clean ? 'clean' : 'overlap');
+  };
+  const flowConflict = (fl: Flow, disk: string) => {
+    fl.conflict = disk;
+    clearTimeout(fl.timer);
+    setConflict(fl.path, 'keep');
+  };
+  const endConflict = (x: Doc | Flow) => {
+    x.conflict = undefined;
+    setConflict(x.path, undefined);
+  };
+  const refused = (path: string, announce: boolean) => {
+    if (announce) p.toast(`${basename(path)} changed outside Locus. Choose what to keep in the bar above it.`);
+    return false;
+  };
+
+  /**
+   * Writes a tab to its file. A file changed outside Locus since it was last read or written is
+   * never written over: the tab is marked and false returned, and the user chooses in its bar.
+   */
+  const save = async (path: string, announce = false): Promise<boolean> => {
     const fl = flows.current.get(path);
     if (fl) {
       clearTimeout(fl.timer);
+      if (fl.conflict !== undefined) return refused(path, announce);
+      while (fl.saving) await fl.saving;
       const text = fl.handle?.text() ?? fl.text;
       if (text !== fl.savedText) {
-        await api.writeText(path, text);
-        fl.savedText = text;
-        p.onSaved(path);
+        fl.saving = (async () => {
+          const disk = await readFlow(path);
+          if (disk !== null && !sameFlow(disk, fl.savedText) && !sameFlow(disk, text)) {
+            flowConflict(fl, disk);
+            return false;
+          }
+          // Keep an identity given to the file while it was open.
+          const id = disk !== null ? readNoteId(path, disk) : undefined;
+          await api.writeText(path, id ? addNoteId(path, text, id) : text);
+          fl.savedText = text;
+          p.onSaved(path);
+          return true;
+        })();
+        const ok = await fl.saving.finally(() => (fl.saving = undefined));
+        if (!ok) return refused(path, announce);
       }
-      setDirty(path, false);
+      setDirty(path, (fl.handle?.text() ?? fl.text) !== fl.savedText);
       if (announce) p.toast(`Saved ${basename(path)}`);
+      return true;
+    }
+    const d = docs.current.get(path);
+    if (!d) return true;
+    clearTimeout(d.timer);
+    if (d.conflict !== undefined) return refused(path, announce);
+    while (d.saving) await d.saving;
+    const text = docText(d.view);
+    if (text !== d.savedText) {
+      d.saving = (async () => {
+        const disk = await readNote(path);
+        if (disk) {
+          // Something may have linked to this note since it was opened, giving it an identity.
+          if (disk.id) d.noteId = disk.id;
+          if (!sameText(disk.body, d.savedText)) {
+            if (!sameText(disk.body, text)) {
+              noteConflict(d, disk.body);
+              return false;
+            }
+            // Whatever changed the file wrote what is on screen.
+            d.savedText = text;
+            return true;
+          }
+        }
+        await api.writeText(path, (d.bom ? '\uFEFF' : '') + withEol(joinNoteId(text, d.noteId, '\n'), d.eol));
+        d.savedText = text;
+        p.onSaved(path);
+        return true;
+      })();
+      const ok = await d.saving.finally(() => (d.saving = undefined));
+      if (!ok) return refused(path, announce);
+    }
+    setDirty(path, docText(d.view) !== d.savedText);
+    if (announce) p.toast(`Saved ${basename(path)}`);
+    return true;
+  };
+
+  /** Settles a file changed outside Locus while its tab had unsaved changes. */
+  const resolveConflict = async (path: string, how: 'merge' | 'mine' | 'file') => {
+    const fl = flows.current.get(path);
+    if (fl) {
+      const disk = await readFlow(path);
+      if (how === 'file') {
+        if (disk === null) return p.toast(`${basename(path)} is no longer on disk`);
+        endConflict(fl);
+        fl.savedText = fl.text = disk;
+        fl.handle?.load(disk);
+        setDirty(path, false);
+        return;
+      }
+      endConflict(fl);
+      if (disk !== null) fl.savedText = disk;
+      await save(path, true);
       return;
     }
     const d = docs.current.get(path);
     if (!d) return;
-    clearTimeout(d.timer);
-    const text = docText(d.view);
-    if (text !== d.savedText) {
-      // Something may have linked to this note since it was opened, giving it an identity.
-      d.noteId ??= await api
-        .readText(path)
-        .then((t) => splitNoteId(t).id)
-        .catch(() => undefined);
-      await api.writeText(path, (d.bom ? '﻿' : '') + withEol(joinNoteId(text, d.noteId, '\n'), d.eol));
-      d.savedText = text;
-      p.onSaved(path);
+    // Read the file again: it may have changed more since the bar went up.
+    const disk = await readNote(path);
+    if (!disk) {
+      if (how === 'file') return p.toast(`${basename(path)} is no longer on disk`);
+      endConflict(d);
+      await save(path, true);
+      return;
     }
-    setDirty(path, false);
-    if (announce) p.toast(`Saved ${basename(path)}`);
+    if (disk.id) d.noteId = disk.id;
+    if (how === 'file') {
+      endConflict(d);
+      replaceText(d.view, disk.body);
+      d.savedText = docText(d.view);
+      setDirty(path, false);
+      d.view.focus();
+      return;
+    }
+    if (how === 'merge') {
+      const m = mergeNote(d.savedText, docText(d.view), disk.body);
+      if (!m.clean) {
+        noteConflict(d, disk.body);
+        return p.toast("Your changes and the file's now change the same lines, so they can't be merged");
+      }
+      endConflict(d);
+      d.savedText = disk.body;
+      replaceText(d.view, m.text);
+    } else {
+      endConflict(d);
+      d.savedText = disk.body;
+    }
+    await save(path, true);
+    d.view.focus();
+  };
+
+  /** While a note waits for the user to choose, typing may settle it or change whether it merges. */
+  const recheckConflict = (d: Doc) => {
+    if (d.conflict === undefined) return;
+    const text = docText(d.view);
+    if (sameText(text, d.conflict)) {
+      d.savedText = text;
+      endConflict(d);
+      setDirty(d.path, false);
+    } else setConflict(d.path, mergeNote(d.savedText, text, d.conflict).clean ? 'clean' : 'overlap');
   };
 
   /** Saves a pasted or dropped picture as a new file under /images/<note name>/. */
@@ -257,7 +439,8 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
         onChange: () => {
           setDirty(doc.path, docText(doc.view) !== doc.savedText);
           clearTimeout(doc.timer);
-          if (autosaveRef.current) doc.timer = window.setTimeout(() => void save(doc.path), 900);
+          if (doc.conflict !== undefined) doc.timer = window.setTimeout(() => recheckConflict(doc), 300);
+          else if (autosaveRef.current) doc.timer = window.setTimeout(() => void save(doc.path), 900);
         },
       });
       const view = doc.view;
@@ -269,24 +452,32 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
     return promise;
   };
 
-  /** Closes a tab, saving it first unless `discard` is set. */
-  const close = async (path: string, discard = false) => {
+  /** A tab that can't close yet: its file changed outside Locus and the user hasn't chosen. */
+  const keptOpen = (path: string) => {
+    setActive(path);
+    p.toast(`${basename(path)} stays open: it changed outside Locus while you had unsaved changes. Choose what to keep first.`);
+    return false;
+  };
+
+  /** Closes a tab, saving it first unless `discard` is set; false when it has to stay open. */
+  const close = async (path: string, discard = false): Promise<boolean> => {
     const fl = flows.current.get(path);
     if (fl) {
       if (discard) clearTimeout(fl.timer);
-      else await save(path);
+      else if (!(await save(path))) return keptOpen(path);
       flows.current.delete(path);
     }
     const d = docs.current.get(path);
     if (d) {
       if (discard) clearTimeout(d.timer);
-      else if (docText(d.view) !== d.savedText) await save(path);
+      else if (docText(d.view) !== d.savedText && !(await save(path))) return keptOpen(path);
       d.view.destroy();
       docs.current.delete(path);
     }
     const remaining = tabsRef.current.filter((t) => t.path !== path);
     setTabs((ts) => ts.filter((t) => t.path !== path));
     if (active === path) setActive(remaining.length ? remaining[remaining.length - 1].path : null);
+    return true;
   };
 
   // Keep within the tab limit by closing the tabs viewed longest ago (close saves them first).
@@ -299,7 +490,8 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
     const open = tabs.filter((t) => !closing.current.has(t.path));
     if (!p.tabLimit || open.length <= p.tabLimit) return;
     const seen = (path: string) => viewed.current.get(path) ?? 0;
-    const oldest = open.filter((t) => t.path !== active).sort((a, b) => seen(a.path) - seen(b.path));
+    // A tab waiting for the user to choose what to keep stays open.
+    const oldest = open.filter((t) => t.path !== active && !t.conflict).sort((a, b) => seen(a.path) - seen(b.path));
     for (const t of oldest.slice(0, open.length - p.tabLimit)) {
       closing.current.add(t.path);
       viewed.current.delete(t.path);
@@ -484,7 +676,9 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
     newNote,
     newFlowchart,
     saveAll: async () => {
-      for (const path of [...docs.current.keys(), ...flows.current.keys()]) await save(path);
+      let ok = true;
+      for (const path of [...docs.current.keys(), ...flows.current.keys()]) if (!(await save(path))) ok = false;
+      return ok;
     },
     refresh: () => {
       for (const d of docs.current.values()) d.view.dispatch({ effects: refreshEffect.of(null) });
@@ -542,23 +736,44 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
     },
     reloadFromDisk: async () => {
       for (const [path, fl] of flows.current) {
-        if ((fl.handle?.text() ?? fl.text) !== fl.savedText) continue;
-        const bytes = await api.readFile(path).catch(() => null);
-        if (!bytes) continue;
-        const { text } = decodeText(bytes);
-        if (text === fl.savedText) continue;
-        fl.savedText = fl.text = text;
-        fl.handle?.load(text);
+        if (fl.saving) continue;
+        const disk = await readFlow(path);
+        if (disk === null) continue;
+        const onScreen = fl.handle?.text() ?? fl.text;
+        if (onScreen !== fl.savedText) {
+          // Unsaved changes are never replaced; changed outside Locus too, the user chooses.
+          if (sameFlow(disk, fl.savedText)) continue;
+          if (sameFlow(disk, onScreen)) {
+            fl.savedText = onScreen;
+            endConflict(fl);
+            setDirty(path, false);
+          } else flowConflict(fl, disk);
+          continue;
+        }
+        if (disk === fl.savedText) continue;
+        fl.savedText = fl.text = disk;
+        fl.handle?.load(disk);
+        if (fl.conflict !== undefined) endConflict(fl);
       }
       for (const [path, d] of docs.current) {
-        if (docText(d.view) !== d.savedText) continue;
-        const bytes = await api.readFile(path).catch(() => null);
-        if (!bytes) continue;
-        const { body: text, id } = splitNoteId(decodeText(bytes).text);
-        if (id) d.noteId = id;
-        const normalized = text.replace(/\r\n/g, '\n');
-        if (normalized === d.savedText.replace(/\r\n/g, '\n')) continue;
-        d.view.dispatch({ changes: { from: 0, to: d.view.state.doc.length, insert: normalized } });
+        if (d.saving) continue;
+        const disk = await readNote(path);
+        if (!disk) continue;
+        if (disk.id) d.noteId = disk.id;
+        const onScreen = docText(d.view);
+        if (onScreen !== d.savedText) {
+          // Unsaved changes are never replaced; changed outside Locus too, the user chooses.
+          if (sameText(disk.body, d.savedText)) continue;
+          if (sameText(disk.body, onScreen)) {
+            d.savedText = onScreen;
+            endConflict(d);
+            setDirty(path, false);
+          } else noteConflict(d, disk.body);
+          continue;
+        }
+        if (sameText(disk.body, d.savedText)) continue;
+        if (d.conflict !== undefined) endConflict(d);
+        replaceText(d.view, disk.body);
         d.savedText = docText(d.view);
         setDirty(path, false);
       }
@@ -589,6 +804,7 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
   }, [active]);
 
   const view = () => (active ? docs.current.get(active)?.view ?? null : null);
+  const conflictTab = tabs.find((t) => t.path === active);
   const activeIsFlow = !!active && isCanvas(active);
   const run = (fn: (v: EditorView) => unknown) => () => {
     const v = view();
@@ -640,7 +856,9 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
             }}
           >
             <span className="title">{basename(t.path)}</span>
-            {t.dirty ? (
+            {t.conflict ? (
+              <span className="dot conflict" title="Changed outside Locus while you had unsaved changes: choose what to keep">!</span>
+            ) : t.dirty ? (
               <span className="dot">●</span>
             ) : (
               <span className="close" onMouseDown={(e) => { e.stopPropagation(); void close(t.path); }}><Icon name="x" size={12} /></span>
@@ -696,6 +914,26 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
           <Icon name="presentation" /> Tour
         </button>
       </div>
+      {conflictTab?.conflict && (
+        <div className="notice danger conflict-notice">
+          <div className="notice-body">
+            <div>{basename(conflictTab.path)} was changed outside Locus while you had unsaved changes.</div>
+            <div className="notice-help">
+              Saving is paused for this {isCanvas(conflictTab.path) ? 'flowchart' : 'note'}, so neither version is lost.{' '}
+              {conflictTab.conflict === 'clean' && 'Merge keeps both sets of changes and saves. '}
+              {conflictTab.conflict === 'overlap' && "You both changed the same lines, so they can't be merged. "}
+              Keep mine saves what you see over the file. Use the file's drops your unsaved changes
+              {isCanvas(conflictTab.path) ? '.' : ' (Ctrl+Z brings them back).'} Show the file's opens the file as it is now on the right.
+            </div>
+          </div>
+          {conflictTab.conflict === 'clean' && (
+            <button className="outline" onClick={() => void resolveConflict(conflictTab.path, 'merge')}>Merge</button>
+          )}
+          <button className="outline" onClick={() => void resolveConflict(conflictTab.path, 'mine')}>Keep mine</button>
+          <button className="outline" onClick={() => void resolveConflict(conflictTab.path, 'file')}>Use the file's</button>
+          <button className="outline" onClick={() => p.onShowFile(conflictTab.path)}>Show the file's</button>
+        </div>
+      )}
       {tabs.length === 0 && (
         <div className="empty">
           <h3>No note open</h3>

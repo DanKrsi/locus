@@ -150,7 +150,7 @@ try {
     seen = (await editorText()).includes('Claude added this line.');
   }
   check(seen, 'an edit written to the open note (as Claude would) shows in it straight away');
-  // A note with unsaved changes: what becomes of each side.
+  // A note with unsaved changes, written meanwhile: neither side is lost, and the user chooses.
   await win.locator('[data-pane="notes"] .cm-line').last().click();
   await win.keyboard.press('Control+End');
   await win.keyboard.type(' Typed by the user.');
@@ -158,10 +158,14 @@ try {
   await win.waitForTimeout(4000);
   const onDisk = await readFile(notePath, 'utf8');
   const onScreen = await editorText();
-  const sides = (t) => [t.includes('while you typed') && "Claude's", t.includes('Typed by the user') && "the user's"].filter(Boolean).join(' and ') || 'neither';
-  console.log(`info a note with unsaved changes, written meanwhile: the file has ${sides(onDisk)} text; the screen has ${sides(onScreen)}`);
-  await win.keyboard.press('Control+S');
-  await win.waitForTimeout(500);
+  check(
+    onDisk.includes('while you typed') && !onDisk.includes('Typed by the user') && onScreen.includes('Typed by the user'),
+    "with unsaved changes, Claude's write stays in the file and the user's typing stays on screen",
+  );
+  check((await win.locator('.conflict-notice').count()) === 1, 'a bar asks what to keep');
+  await win.locator('.conflict-notice').getByRole('button', { name: 'Keep mine' }).click();
+  await win.waitForTimeout(600);
+  check((await readFile(notePath, 'utf8')).includes('Typed by the user'), 'Keep mine writes the user’s version');
 
   // Keys typed in the terminal are the terminal's: Ctrl+O doesn't open the file browser.
   await terminal().focus();

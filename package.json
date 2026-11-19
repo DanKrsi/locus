@@ -1,7 +1,7 @@
 {
   "name": "locus",
   "productName": "Locus",
-  "version": "0.6.23",
+  "version": "0.6.24",
   "description": "Write markdown notes that link to exact places in PDFs, code, spreadsheets and their versions.",
   "license": "MIT",
   "private": true,
@@ -20,6 +20,7 @@
     "test:update": "npm run build && node scripts/test-update.mjs",
     "test:tour": "npm run build && node scripts/make-test-workspace.mjs && node scripts/test-tour.mjs",
     "test:panel": "npm run build && node scripts/make-test-workspace.mjs && node scripts/test-claude-panel.mjs",
+    "test:outside": "npm run build && node scripts/make-test-workspace.mjs && node scripts/test-outside-edits.mjs",
     "test:tables": "npm run build && node scripts/make-test-workspace.mjs && node scripts/test-table-cells.mjs",
     "build:mcp": "node scripts/build-mcp.mjs",
     "build:plugin": "node scripts/build-mcp.mjs plugin/server/server.mjs --minify",

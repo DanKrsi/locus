@@ -141,6 +141,24 @@ files is refused rather than written into.
   right; the same button again clears it), or delete the row, column or table.
 - The file on disk is the source of truth: only edited lines change; line endings and
   encoding are preserved. Autosave after a pause, with a small "Saved" toast.
+- **Changed outside Locus.** A note or flowchart without unsaved changes shows a change made to
+  its file elsewhere (Claude, another editor, a sync) as soon as it is seen. One with unsaved
+  changes is never written over. Before every save Locus checks that the file still holds what it
+  last read or wrote; when it doesn't (or the watch sees it change), saving that tab pauses, its
+  tab shows a red **!**, and a bar above it says it was changed outside Locus while there were
+  unsaved changes, and why saving is paused:
+  - **Merge** (notes only, offered when the two sets of changes touch different lines,
+    next-door lines included) keeps both and saves. Changes to the same lines, or additions at the
+    same spot, can't be merged and the bar says so.
+  - **Keep mine** saves what is on screen over the file.
+  - **Use the file's** shows the file and drops the unsaved changes; Ctrl+Z brings them back.
+  - **Show the file's** opens the file as it is now in the viewer, to compare.
+  Each choice reads the file again first, so a later outside write is included. Typing until the
+  note matches the file settles it without asking. While the bar is up, Ctrl+S says why it isn't
+  saving, the tab can't be closed (it says why), the tab limit closes other tabs instead, and
+  opening another workspace or restarting for an update waits until the user has chosen. A change
+  Locus wrote itself only counts as its own while the file still holds exactly what it wrote, so
+  an outside write straight after an autosave is still seen.
 - Windows and Unix line endings both count as line breaks, whichever way a file mixes them — a
   checkout that converted them, a script that appended a line, another editor. The file is
   written back with the ending it mostly used, so a Windows file stays a Windows file and a
@@ -526,9 +544,8 @@ to themselves; Locus never handles a Claude login or key.
   a note says it can already see the screen and show places, that Set up adds the tools for
   reference links and notes, and has **Set up** (the Claude dialog, §6.1).
 - **Edits.** Claude edits files directly. A note open without unsaved changes reloads as soon as it
-  is written, so the user sees the edit. **Known gap:** a note with unsaved changes keeps what is
-  on screen, and its next save (autosave included) writes over the edit without a word. Planned:
-  notice the outside write and offer to keep either side or merge.
+  is written, so the user sees the edit. A note with unsaved changes is never written over: the
+  bar described in §4 ("Changed outside Locus") asks what to keep.
 - The panel's width is dragged at its left edge and remembered, as is whether it is open.
 
 ## 7. Export

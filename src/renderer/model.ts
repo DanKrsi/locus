@@ -26,6 +26,12 @@ export interface NoteTab {
   id: string;
   path: string;
   dirty: boolean;
+  /**
+   * The file was changed outside Locus while the tab had unsaved changes: saving waits for the user
+   * to choose. "clean" when the two sets of changes can be merged, "overlap" when they touch the
+   * same lines, "keep" for a flowchart (which is kept or replaced whole).
+   */
+  conflict?: 'clean' | 'overlap' | 'keep';
 }
 
 let nextId = 1;

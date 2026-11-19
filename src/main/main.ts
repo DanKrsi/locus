@@ -61,30 +61,40 @@ const settingsFile = () => join(app.getPath('userData'), 'settings.json');
 let watcher: Watcher | null = null;
 
 /** Paths Locus has just written itself, with the time: the watch passes over them. */
-const ourWrites = new Map<string, number>();
+const ourWrites = new Map<string, { at: number; data?: Buffer }>();
 const OUR_WRITE_MS = 3000;
 
 /** Records a write the app is making, so the watch does not report it back as outside news. */
 function ours(...paths: string[]) {
   const now = Date.now();
-  for (const p of paths) ourWrites.set(p, now);
-  if (ourWrites.size > 500) for (const [p, t] of ourWrites) if (now - t > OUR_WRITE_MS) ourWrites.delete(p);
+  for (const p of paths) ourWrites.set(p, { at: now });
+  if (ourWrites.size > 500) for (const [p, w] of ourWrites) if (now - w.at > OUR_WRITE_MS) ourWrites.delete(p);
 }
 
-function wasOurs(path: string): boolean {
-  const t = ourWrites.get(path);
-  if (t === undefined) return false;
-  if (Date.now() - t > OUR_WRITE_MS) {
+/** Records a file write with what is written: it stays ours only while the file still holds it. */
+function oursWith(path: string, data: string | Uint8Array) {
+  ours(path);
+  ourWrites.set(path, { at: Date.now(), data: typeof data === 'string' ? Buffer.from(data, 'utf8') : Buffer.from(data) });
+}
+
+async function wasOurs(path: string): Promise<boolean> {
+  const w = ourWrites.get(path);
+  if (!w) return false;
+  if (Date.now() - w.at > OUR_WRITE_MS) {
     ourWrites.delete(path);
     return false;
   }
-  return true;
+  if (!w.data) return true;
+  // Someone else (Claude in the panel, say) may write the file straight after Locus did.
+  const now = await fs.readFile(abs(path)).catch(() => null);
+  return !!now && now.equals(w.data);
 }
 
 function watchFiles(root: string) {
   watcher?.close();
-  watcher = watchWorkspace(root, (paths) => {
-    const outside = paths.filter((p) => !wasOurs(p));
+  watcher = watchWorkspace(root, async (paths) => {
+    const outside: string[] = [];
+    for (const p of paths) if (!(await wasOurs(p))) outside.push(p);
     if (!outside.length) return;
     if (win && !win.webContents.isLoading()) win.webContents.send('files-changed', outside);
   });
@@ -335,13 +345,13 @@ const api: Api = {
   },
   async writeText(path, text) {
     const full = abs(path);
-    ours(path);
+    oursWith(path, text);
     await fs.mkdir(dirname(full), { recursive: true });
     await fs.writeFile(full, text, 'utf8');
   },
   async writeNewFile(path, bytes) {
     const full = abs(path);
-    ours(path);
+    oursWith(path, bytes);
     await fs.mkdir(dirname(full), { recursive: true });
     await fs.writeFile(full, bytes, { flag: 'wx' });
   },

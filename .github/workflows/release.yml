@@ -57,7 +57,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           # The demo workspace also ships inside the installer (Welcome > Try the demo).
-          files=(release/Locus-Setup-*.exe build/Locus-demo.locus)
+          # latest.yml and the blockmap are what installed copies read to update themselves.
+          [ -f release/latest.yml ] || { echo "electron-builder made no latest.yml: installed copies could not update"; exit 1; }
+          files=(release/Locus-Setup-*.exe release/Locus-Setup-*.exe.blockmap release/latest.yml build/Locus-demo.locus)
           if gh release view "$TAG" > /dev/null 2>&1; then
             gh release upload "$TAG" "${files[@]}" --clobber
           else

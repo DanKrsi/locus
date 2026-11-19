@@ -126,7 +126,7 @@ Everything here is on Folio's own "not built" list, or absent from it:
 - Hover previews for slides and recordings.
 - Reopen tabs at the place you left them.
 - A designed Find in notes, and spell check.
-- Automatic updates and a signed installer.
+- A signed installer (automatic updates shipped in 0.6.19).
 - Word documents.
 - Drag a selection into the note to cite it.
 - Finding a boxed picture by the **identity of its embedded image** (hash the decoded image in

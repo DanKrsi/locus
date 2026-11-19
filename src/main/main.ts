@@ -20,6 +20,7 @@ import { noteToPage } from './export';
 import { planExport, writeExport, LIMITS } from './exportFolder';
 import * as gh from './github';
 import { watchWorkspace, type Watcher } from './watch';
+import { checkForUpdates, installUpdate, startUpdates, updateStatus } from './update';
 
 const RENDERER_DIR = join(__dirname, '..', 'renderer');
 const WORKSPACE_DIR = '.locus';
@@ -351,6 +352,15 @@ const api: Api = {
   },
   async restartClaudeDesktop() {
     return restartClaudeDesktop();
+  },
+  async updateStatus() {
+    return updateStatus();
+  },
+  async checkForUpdates() {
+    return checkForUpdates();
+  },
+  async installUpdate() {
+    installUpdate();
   },
   async appVersion() {
     return app.getVersion();
@@ -813,6 +823,10 @@ app.whenReady().then(() => {
     return net.fetch(pathToFileURL(file).toString());
   });
   createWindow();
+  // Look on GitHub for a newer Locus; the renderer hears how it goes.
+  startUpdates((s) => {
+    if (win && !win.webContents.isLoading()) win.webContents.send('update-status', s);
+  });
   // Keep the Claude setup Locus made pointing at this install (installed builds only, so a
   // development run never repoints someone's Claude at it).
   if (app.isPackaged || process.env.LOCUS_CLAUDE_REFRESH) void refreshClaude().catch(() => undefined);

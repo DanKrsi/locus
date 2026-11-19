@@ -11,7 +11,7 @@ import {
   type Reference,
 } from '../core/link';
 import { mapLines } from '../core/remap';
-import type { Citation, NoteLinkUpdate, Settings, SharingInfo, SyncResult, Version, WorkspaceInfo } from '../shared/api';
+import type { Citation, NoteLinkUpdate, Settings, SharingInfo, SyncResult, UpdateStatus, Version, WorkspaceInfo } from '../shared/api';
 import { ConflictDialog, GitHubOpenDialog, ShareDialog } from './ShareDialogs';
 import { HistoryDialog } from './HistoryDialog';
 import { movedPath } from '../core/rewrite';
@@ -109,6 +109,8 @@ export function App() {
   const [activeDoc, setActiveDoc] = useState<string | null>(null);
   const [browser, setBrowser] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [update, setUpdate] = useState<UpdateStatus | null>(null);
+  const [updateLater, setUpdateLater] = useState(false);
   /** A question about something the app cannot take back on its own (restoring a file over itself). */
   const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
   /** Bumped when files change on disk, so open documents read them again. */
@@ -470,9 +472,22 @@ export function App() {
     return () => window.removeEventListener('focus', onFocus);
   }, []);
 
+  // Updates from GitHub: main checks when Locus starts and downloads a newer release in the
+  // background; a banner offers to restart once it is ready.
+  useEffect(() => {
+    void api.updateStatus().then(setUpdate);
+    const events = (window as unknown as { locusEvents?: { onUpdateStatus?(cb: (s: UpdateStatus) => void): void } }).locusEvents;
+    events?.onUpdateStatus?.((s) => setUpdate(s));
+  }, []);
+
+  const restartToUpdate = async () => {
+    await notes.current?.saveAll();
+    void api.installUpdate();
+  };
+
   // ---------- Documents ----------
 
-  const openDoc = (path: string, external: boolean, rev?: string, loc?: Location) => {
+  const openDoc =(path: string, external: boolean, rev?: string, loc?: Location) => {
     const tabs = live.current.docTabs;
     const existing = tabs.find((t) => t.path === path && t.external === external && sameRev(t.rev, rev));
     const reveal = loc ? revealOf(loc) : undefined;
@@ -1502,6 +1517,21 @@ export function App() {
         </div>
       )}
 
+      {update?.state === 'ready' && !updateLater && (
+        <div className="notice update-notice">
+          <div className="notice-body">
+            <div>Locus {update.latest} is ready to install (you have {update.current}).</div>
+            <div className="notice-help">
+              It was downloaded from GitHub while you worked. Restart now saves your notes, installs it and opens Locus again; otherwise it installs by itself the next time you close Locus.
+            </div>
+          </div>
+          <button className="outline" onClick={() => void restartToUpdate()}>Restart now</button>
+          <button className="outline" onClick={() => setUpdateLater(true)}>Later</button>
+          <div className="spacer" />
+          <button className="icon" title="Hide until next time" onClick={() => setUpdateLater(true)}><Icon name="x" /></button>
+        </div>
+      )}
+
       {confirm && <ConfirmDialog request={confirm} onClose={() => setConfirm(null)} />}
       {showShortcuts && <Shortcuts onClose={() => setShowShortcuts(false)} />}
       {exporting && (
@@ -1808,6 +1838,9 @@ export function App() {
       {showSettings && (
         <SettingsDialog
           settings={settings}
+          update={update}
+          onCheckUpdates={() => void api.checkForUpdates().then(setUpdate)}
+          onRestartToUpdate={() => void restartToUpdate()}
           onChange={updateSettings}
           onClose={() => setShowSettings(false)}
           onClaude={() => {
@@ -1971,14 +2004,40 @@ function Welcome({
   );
 }
 
+/** What the Updates section says about the update check. */
+function updateLine(u: UpdateStatus | null): string {
+  if (!u) return '';
+  switch (u.state) {
+    case 'off':
+      return 'This copy is not installed, so it does not update itself.';
+    case 'idle':
+    case 'checking':
+      return 'Looking on GitHub for a newer version…';
+    case 'current':
+      return `Up to date${u.checkedAt ? `, checked ${new Date(u.checkedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : ''}.`;
+    case 'downloading':
+      return `Downloading Locus ${u.latest}… ${u.percent ?? 0}%`;
+    case 'ready':
+      return `Locus ${u.latest} is downloaded and installs the next time you close Locus.`;
+    case 'error':
+      return `Couldn't check for updates: ${u.error ?? 'unknown problem'}`;
+  }
+}
+
 function SettingsDialog({
   settings,
+  update,
+  onCheckUpdates,
+  onRestartToUpdate,
   onChange,
   onClose,
   onClaude,
   onDemo,
 }: {
   settings: Settings;
+  update: UpdateStatus | null;
+  onCheckUpdates(): void;
+  onRestartToUpdate(): void;
   onChange(p: Partial<Settings>): void;
   onClose(): void;
   onClaude(): void;
@@ -2068,6 +2127,26 @@ function SettingsDialog({
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <span className="muted" style={{ flex: 1 }}>Let Claude Code or Claude Desktop write notes, tours and flowcharts in your workspaces.</span>
               <button className="outline" onClick={onClaude}>Set up Claude…</button>
+            </div>
+          </section>
+          <section className="settings-updates">
+            <div style={{ fontWeight: 600, marginBottom: 6 }}>Updates</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ flex: 1 }}>
+                <div className="muted">Version {update?.current ?? ''}. Locus looks for a newer version on GitHub each time it starts and installs it when you close Locus.</div>
+                <div className="update-line" style={{ marginTop: 4 }}>{updateLine(update)}</div>
+              </div>
+              {update?.state === 'ready' ? (
+                <button className="outline" onClick={onRestartToUpdate}>Restart now</button>
+              ) : (
+                <button
+                  className="outline"
+                  disabled={!update || update.state === 'off' || update.state === 'checking' || update.state === 'downloading'}
+                  onClick={onCheckUpdates}
+                >
+                  Check for updates
+                </button>
+              )}
             </div>
           </section>
         </div>

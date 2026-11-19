@@ -18,4 +18,8 @@ contextBridge.exposeInMainWorld('locusEvents', {
   onFilesChanged(cb: (paths: string[]) => void) {
     ipcRenderer.on('files-changed', (_e, paths: string[]) => cb(paths));
   },
+  /** How updating Locus from GitHub is going. */
+  onUpdateStatus(cb: (status: unknown) => void) {
+    ipcRenderer.on('update-status', (_e, status: unknown) => cb(status));
+  },
 });

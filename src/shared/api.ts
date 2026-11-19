@@ -138,6 +138,21 @@ export interface ClaudeStatus {
   desktop: { found: boolean; current: string; installed?: { version: string }; running?: boolean };
 }
 
+/** Where updating Locus from GitHub has got to. */
+export interface UpdateStatus {
+  /**
+   * off: not an installed copy (development and test runs don't update). checking, then current
+   * (nothing newer), or downloading and then ready (installs on restart). error: the check failed.
+   */
+  state: 'idle' | 'off' | 'checking' | 'current' | 'downloading' | 'ready' | 'error';
+  /** This copy's version, and the newest one on GitHub once known. */
+  current: string;
+  latest?: string;
+  percent?: number;
+  checkedAt?: number;
+  error?: string;
+}
+
 export interface Api {
   openWorkspace(dir?: string): Promise<WorkspaceInfo | null>;
   createWorkspace(): Promise<WorkspaceInfo | null>;
@@ -154,6 +169,10 @@ export interface Api {
   connectClaude(target: 'code' | 'desktop'): Promise<{ ok: boolean; message: string }>;
   restartClaudeDesktop(): Promise<{ ok: boolean; message: string }>;
   appVersion(): Promise<string>;
+  updateStatus(): Promise<UpdateStatus>;
+  checkForUpdates(): Promise<UpdateStatus>;
+  /** Closes Locus, installs the downloaded update and opens Locus again. */
+  installUpdate(): Promise<void>;
   head(): Promise<string | null>;
   versions(path?: string): Promise<Version[]>;
   changesSince(rev: string): Promise<FileChange[]>;
@@ -239,7 +258,7 @@ export interface Api {
 }
 
 export const API_METHODS: (keyof Api)[] = [
-  'openWorkspace', 'createWorkspace', 'listFiles', 'readFile', 'readText', 'writeText', 'writeNewFile', 'exists', 'fileChangedSince', 'claudeStatus', 'connectClaude', 'restartClaudeDesktop', 'appVersion',
+  'openWorkspace', 'createWorkspace', 'listFiles', 'readFile', 'readText', 'writeText', 'writeNewFile', 'exists', 'fileChangedSince', 'claudeStatus', 'connectClaude', 'restartClaudeDesktop', 'appVersion', 'updateStatus', 'checkForUpdates', 'installUpdate',
   'head', 'versions', 'changesSince', 'uncommitted', 'saveVersion', 'ensureVersion', 'diffHunks',
   'getSettings', 'setSettings', 'pickExternalFiles', 'readExternal', 'openExternally', 'setTitleBarColors',
   'renameFile', 'restoreVersion', 'undoRestore', 'findMoved', 'citations', 'versionChanges', 'updateLinks', 'undoLinkUpdate', 'ensureNoteId', 'findNoteById',

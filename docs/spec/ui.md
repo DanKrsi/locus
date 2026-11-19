@@ -404,7 +404,7 @@ per line, so diffs stay readable.
 ## 6. Settings
 
 Terminology, theme and colours, autosave, motion, tab limits, **Demo workspace** (a fresh copy of
-the demo wherever you choose, see §3) and Claude.
+the demo wherever you choose, see §3), Claude and **Updates** (§6.2).
 
 ### 6.1 Claude
 
@@ -433,6 +433,24 @@ opens the same dialog any time, with each app's status and a Connect / Update / 
   skill, or Locus moved); it never touches anything it didn't write.
 - Uninstalling Locus (not updating it) removes the plugin folder and the Desktop entry.
 - Nothing leaves the computer; no config files are edited by hand.
+
+### 6.2 Updates
+
+An installed Locus looks on GitHub (`DanKrsi/locus` releases) for a newer version each time it
+starts, and downloads it in the background without asking.
+
+- Once it is downloaded a banner says "Locus *X* is ready to install (you have *Y*)", with the help
+  line saying it came from GitHub and what each choice does. **Restart now** saves open notes,
+  installs it and opens Locus again; **Later** (or ×) hides the banner, and the update installs by
+  itself the next time Locus closes. Settings and sign-in are kept.
+- **Settings → Updates** shows the version, what the last check found (up to date, downloading with
+  a percentage, ready, or why it could not check), and **Check for updates** (or **Restart now**
+  once one is ready).
+- A failed check (no internet, GitHub down) only shows there; it never interrupts.
+- Only full releases count, not pre-releases. A copy run from source never updates itself.
+- Each release carries `latest.yml` and the installer's `.blockmap`, which is what installed copies
+  read; the release workflow refuses to publish without them.
+- Copies older than 0.6.19 have no updater, so moving to 0.6.19 is a manual install once.
 
 - **Terminology**: *Simple* (default) or *Git*. Changes words only, never behaviour, except
   that Git mode also shows branches, SHAs and separate Pull/Push buttons.

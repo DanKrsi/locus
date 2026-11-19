@@ -1,7 +1,7 @@
 {
   "name": "locus",
   "productName": "Locus",
-  "version": "0.6.18",
+  "version": "0.6.19",
   "description": "Write markdown notes that link to exact places in PDFs, code, spreadsheets and their versions.",
   "license": "MIT",
   "private": true,
@@ -17,6 +17,7 @@
     "test-workspace": "node scripts/make-test-workspace.mjs",
     "smoke": "node scripts/smoke.mjs",
     "test:editing": "npm run build && node scripts/make-test-workspace.mjs && node scripts/test-editing.mjs",
+    "test:update": "npm run build && node scripts/test-update.mjs",
     "build:mcp": "node scripts/build-mcp.mjs",
     "build:plugin": "node scripts/build-mcp.mjs plugin/server/server.mjs --minify",
     "test:mcp": "node scripts/build-mcp.mjs && node scripts/make-test-workspace.mjs && node scripts/test-mcp.mjs",
@@ -31,7 +32,8 @@
     "build:viewer": "vite build --config vite.viewer.config.ts"
   },
   "dependencies": {
-    "dugite": "^3.3.0"
+    "dugite": "^3.3.0",
+    "electron-updater": "^6.8.11"
   },
   "devDependencies": {
     "@codemirror/commands": "^6.11.1",
@@ -109,6 +111,13 @@
       "icon": "build/icon.png",
       "artifactName": "Locus-Setup-${version}.exe"
     },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "DanKrsi",
+        "repo": "locus"
+      }
+    ],
     "nsis": {
       "oneClick": true,
       "perMachine": false,

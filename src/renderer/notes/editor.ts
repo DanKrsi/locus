@@ -1,12 +1,15 @@
 // Markdown note editor: CodeMirror 6 with Obsidian-style live preview, reference widgets,
 // the inline rename box used when citing, and hover cards (UI spec §4).
 import {
+  Annotation,
+  ChangeSet,
   EditorSelection,
   EditorState,
   Prec,
   RangeSet,
   StateEffect,
   StateField,
+  Transaction,
   findClusterBreak,
   type ChangeSpec,
   type Extension,
@@ -23,8 +26,8 @@ import {
   type DecorationSet,
   type ViewUpdate,
 } from '@codemirror/view';
-import { defaultKeymap, history, historyKeymap, indentWithTab, redo, undo } from '@codemirror/commands';
-import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
+import { defaultKeymap, history, historyKeymap, indentWithTab, insertNewlineAndIndent, redo, undo } from '@codemirror/commands';
+import { insertNewlineContinueMarkup, markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
 import { HighlightStyle, syntaxHighlighting, syntaxTree } from '@codemirror/language';
 import { searchKeymap, highlightSelectionMatches } from '@codemirror/search';
@@ -782,7 +785,8 @@ function buildDecorations(view: EditorView, opts: NoteEditorOptions): Preview {
             const title = web ? info.dest : mark ? status!.reason : undefined;
             decos.push(Decoration.mark({ class: cls + ' cm-link-label', attributes: title ? { title } : undefined }).range(info.labelFrom, info.labelTo));
             conceal(status?.badge || status?.changed ? Decoration.replace({ widget: new LinkBadgeWidget(status) }) : hide, info.labelTo, info.to);
-            return false;
+            // Bold, italic and code in the label are drawn too.
+            return;
           }
           case 'Blockquote': {
             eachLine(node.from, node.to, 'cm-quote');
@@ -808,19 +812,26 @@ function buildDecorations(view: EditorView, opts: NoteEditorOptions): Preview {
           }
           case 'ListMark': {
             const text = state.sliceDoc(node.from, node.to);
+            // The space after a list marker belongs to it: the text starts after it.
+            const end = state.sliceDoc(node.to, node.to + 1) === ' ' ? node.to + 1 : node.to;
             if (!/^[-*+]$/.test(text)) {
-              decos.push(markCls('cm-listmark').range(node.from, node.to));
+              decos.push(markCls('cm-listmark').range(node.from, end));
               return;
             }
             // Task items show only their checkbox; plain items get a bullet.
             const isTask = /^\s?\[[ xX]\]/.test(state.sliceDoc(node.to, node.to + 5));
-            const end = isTask && state.sliceDoc(node.to, node.to + 1) === ' ' ? node.to + 1 : node.to;
             conceal(isTask ? hide : Decoration.replace({ widget: new BulletWidget() }), node.from, end);
             return;
           }
           case 'TaskMarker': {
             const done = /x/i.test(state.sliceDoc(node.from, node.to));
-            conceal(Decoration.replace({ widget: new TaskWidget(done, node.from) }), node.from, node.to);
+            const end = state.sliceDoc(node.to, node.to + 1) === ' ' ? node.to + 1 : node.to;
+            conceal(Decoration.replace({ widget: new TaskWidget(done, node.from) }), node.from, end);
+            return;
+          }
+          case 'Escape': {
+            // "\*" shows as "*": the backslash only keeps the character from being markup.
+            conceal(hide, node.from, node.from + 1);
             return;
           }
         }
@@ -873,23 +884,28 @@ function livePreview(opts: NoteEditorOptions): Extension {
     EditorView.inputHandler.of((view, from, to, text) => {
       if (view.state.readOnly) return false;
       const info = from === to ? labelEndingAt(view.state, from) : null;
-      if (!info) return false;
-      view.dispatch({ changes: { from: info.to, insert: text }, selection: { anchor: info.to + text.length }, userEvent: 'input.type' });
-      return true;
+      if (info) {
+        view.dispatch({ changes: { from: info.to, insert: text }, selection: { anchor: info.to + text.length }, userEvent: 'input.type' });
+        return true;
+      }
+      // A bracket typed into a link's label is a bracket, not the end of the link.
+      if (/[[\]]/.test(text) && !view.state.field(renameField, false) && wrapsAround(view.state, from).some((w) => w.name === 'Link' && from >= w.textFrom && to <= w.textTo)) {
+        const insert = escapeLabel(text);
+        view.dispatch({ changes: { from, to, insert }, selection: { anchor: from + insert.length }, userEvent: 'input.type' });
+        return true;
+      }
+      return false;
     }),
-    Prec.high(
+    // Filters run last to first: the cursor is placed once the formatting is tidied.
+    cursorAfterLineMarks,
+    keepFormatting,
+    // Ahead of the markdown keys, so Backspace at the start of a list item takes its bullet away
+    // whole (rather than leaving its indent showing).
+    Prec.highest(
       keymap.of([
+        { key: 'Enter', run: enterSmart },
         { key: 'Backspace', run: (v) => deleteSmart(v, preview(v), -1) },
         { key: 'Delete', run: (v) => deleteSmart(v, preview(v), 1) },
-        {
-          // A new line from the end of a label starts after the link (then Enter runs as usual).
-          key: 'Enter',
-          run: (v) => {
-            const info = v.state.selection.ranges.length === 1 && v.state.selection.main.empty ? labelEndingAt(v.state, v.state.selection.main.head) : null;
-            if (info) v.dispatch({ selection: { anchor: info.to } });
-            return false;
-          },
-        },
       ]),
     ),
   ];
@@ -938,6 +954,12 @@ const WRAPPED: Record<string, string> = {
  * would be emptied goes entirely (deleting a link's last letter deletes the link).
  */
 function safeDeletion(state: EditorState, from: number, to: number): { from: number; to: number }[] {
+  // A line's marks (bullet, number, checkbox, heading, quote) go whole or not at all: part of
+  // "1. " left behind would show as text, and joining a line keeps none of the next line's marks.
+  const first = state.doc.lineAt(from);
+  if (from > first.from && from < textStart(state, first)) from = first.from;
+  const last = state.doc.lineAt(to);
+  if (to < textStart(state, last) && (from < last.from || to > last.from)) to = textStart(state, last);
   let ranges = [{ from, to }];
   const cut = (a: number, b: number) => {
     ranges = ranges.flatMap((r) =>
@@ -972,7 +994,6 @@ function safeDeletion(state: EditorState, from: number, to: number): { from: num
       } else return;
       if (from <= text[0] && to >= text[1]) ranges.push({ from: n.from, to: n.to });
       else for (const [a, b] of markup) cut(a, b);
-      return n.name === 'Link' ? false : undefined;
     },
   });
   ranges.sort((a, b) => a.from - b.from);
@@ -985,8 +1006,380 @@ function safeDeletion(state: EditorState, from: number, to: number): { from: num
   return merged;
 }
 
+// ---------- Keeping formatting whole while editing ----------
+
+/** Marks a transaction already made safe here, so the filter leaves it as it is. */
+const safeEdit = Annotation.define<boolean>();
+
+interface Wrap {
+  name: string;
+  /** The whole construct, the text inside it, and its opening and closing markup. */
+  from: number;
+  to: number;
+  textFrom: number;
+  textTo: number;
+}
+
+/** Bold, italic, strikethrough, code or a link label, as its markup and its text. */
+function wrapOf(state: EditorState, node: SyntaxNode): Wrap | null {
+  if (node.name === 'Link') {
+    const info = linkFromNode(state, node);
+    if (!info || state.field(revealField, false)?.from === info.from) return null;
+    return { name: 'Link', from: info.from, to: info.to, textFrom: info.labelFrom, textTo: info.labelTo };
+  }
+  const markName = WRAPPED[node.name];
+  if (!markName) return null;
+  const marks = node.getChildren(markName);
+  if (marks.length < 2) return null;
+  return { name: node.name, from: node.from, to: node.to, textFrom: marks[0].to, textTo: marks[marks.length - 1].from };
+}
+
+/** The constructs whose markup lies around pos, innermost first. */
+function wrapsAround(state: EditorState, pos: number): Wrap[] {
+  const out: Wrap[] = [];
+  syntaxTree(state).iterate({
+    from: pos,
+    to: pos,
+    enter: (n) => {
+      if (n.from >= pos || n.to <= pos) return;
+      const w = wrapOf(state, n.node);
+      if (w) out.push(w);
+    },
+  });
+  return out.sort((a, b) => a.to - a.from - (b.to - b.from));
+}
+
+/** Where the cursor can go at the start of a line: after its hidden quote, bullet, checkbox or heading marks. */
+function textStart(state: EditorState, line: { from: number; to: number }): number {
+  const marks = new Map<number, number>();
+  syntaxTree(state).iterate({
+    from: line.from,
+    to: Math.min(line.to, line.from + 40),
+    enter: (n) => {
+      if (n.name === 'QuoteMark' || n.name === 'HeaderMark' || n.name === 'ListMark' || n.name === 'TaskMarker') marks.set(n.from, n.to);
+    },
+  });
+  let pos = line.from;
+  for (let end = marks.get(pos); end !== undefined; end = marks.get(pos)) {
+    // A heading mark with nothing after it ("#") is not a heading yet.
+    if (state.sliceDoc(end, end + 1) === ' ') end++;
+    else if (end === line.to) break;
+    pos = end;
+  }
+  return pos;
+}
+
+const EDGE_SPACE = new Set(['StrongEmphasis', 'Emphasis', 'Strikethrough']);
+
+/** A cursor at `at` (before tidying) goes to `to`, on this side of anything inserted there. */
+type Move = [at: number, to: number, assoc: 1 | -1];
+
+/** Where a cursor goes when the tidy changes are made. */
+function moveCursor(pos: number, moves: Move[], set: ChangeSet): number {
+  const m = moves.find(([at]) => at === pos);
+  return m ? set.mapPos(m[1], m[2]) : set.mapPos(pos, -1);
+}
+
+/**
+ * Tidies the formatting an edit touched, so it stays formatting (changes against the new text):
+ * bold or italic made with "_" becomes "*" (which also works inside a word), spaces at the inside
+ * edge of bold, italic or strikethrough move outside it (where they don't undo it), formatting
+ * left with no text goes, and two pieces of the same formatting that now touch become one.
+ */
+function tidyAfter(start: EditorState, changes: ChangeSet, doc: EditorState['doc']): { specs: ChangeSpec[]; moves: Move[] } {
+  const touched: { from: number; to: number }[] = [];
+  changes.iterChangedRanges((a, b) => touched.push({ from: a, to: b }));
+  const moves: Move[] = [];
+  if (!touched.length) return { specs: [], moves };
+  // Formatting just inside other formatting ("**" in "***") counts as touched too.
+  const near = (w: Wrap) => touched.some((t) => t.from <= w.to + 3 && t.to >= w.from - 3);
+  const wraps: Wrap[] = [];
+  const lo = Math.max(0, Math.min(...touched.map((t) => t.from)) - 4);
+  const hi = Math.min(start.doc.length, Math.max(...touched.map((t) => t.to)) + 4);
+  syntaxTree(start).iterate({
+    from: lo,
+    to: hi,
+    enter: (n) => {
+      if (n.name === 'Link' || !WRAPPED[n.name]) return;
+      const w = wrapOf(start, n.node);
+      if (w && near(w)) wraps.push(w);
+    },
+  });
+  interface Piece {
+    w: Wrap;
+    open: [number, number];
+    close: [number, number];
+    mark: string;
+    gone: boolean;
+  }
+  const pieces: Piece[] = [];
+  for (const w of wraps) {
+    const open: [number, number] = [changes.mapPos(w.from, 1), changes.mapPos(w.textFrom, -1)];
+    const close: [number, number] = [changes.mapPos(w.textTo, 1), changes.mapPos(w.to, -1)];
+    const mark = start.sliceDoc(w.from, w.textFrom);
+    // Markup the edit took away or changed is left alone.
+    if (doc.sliceString(open[0], open[1]) !== mark || doc.sliceString(close[0], close[1]) !== start.sliceDoc(w.textTo, w.to)) continue;
+    if (close[0] < open[1]) continue;
+    pieces.push({ w, open, close, mark, gone: false });
+  }
+  const out: ChangeSpec[] = [];
+  const star = (m: string) => m.replace(/_/g, '*');
+  // Touching pieces of the same formatting join: "**a****b**" is "**ab**". Formatting inside
+  // formatting joins once the outer markup between them has gone ("***a******b***").
+  const joinedOpen = new Set<Piece>();
+  const joinedClose = new Set<Piece>();
+  const gaps: [number, number][] = [];
+  for (let joined = true; joined; ) {
+    joined = false;
+    for (const a of pieces) {
+      if (joinedClose.has(a)) continue;
+      const b = pieces.find((p) => {
+        if (p === a || joinedOpen.has(p) || p.w.name !== a.w.name || star(p.mark) !== star(a.mark)) return false;
+        return p.open[0] === a.close[1] || gaps.some(([x, y]) => x === a.close[1] && y === p.open[0]);
+      });
+      if (!b) continue;
+      joinedClose.add(a);
+      joinedOpen.add(b);
+      const inner = gaps.findIndex(([x, y]) => x === a.close[1] && y === b.open[0]);
+      if (inner >= 0) gaps.splice(inner, 1);
+      gaps.push([a.close[0], b.open[1]]);
+      joined = true;
+    }
+  }
+  for (const [from, to] of gaps) out.push({ from, to });
+  // Spaces leaving bold that starts or ends together with italic leave both.
+  const before = (pos: number): number => {
+    const q = pieces.find((q) => q.open[1] === pos && q.open[0] < pos && !joinedOpen.has(q));
+    return q ? before(q.open[0]) : pos;
+  };
+  const after = (pos: number): number => {
+    const q = pieces.find((q) => q.close[0] === pos && q.close[1] > pos && !joinedClose.has(q));
+    return q ? after(q.close[1]) : pos;
+  };
+  for (const p of pieces) {
+    const text = doc.sliceString(p.open[1], p.close[0]);
+    const code = p.w.name === 'InlineCode';
+    if ((code ? !text : !text.trim()) && !joinedOpen.has(p) && !joinedClose.has(p)) {
+      // Nothing left to format (or only spaces): the markup goes, the spaces stay.
+      out.push({ from: p.open[0], to: p.open[1] }, { from: p.close[0], to: p.close[1] });
+      continue;
+    }
+    const lead = EDGE_SPACE.has(p.w.name) && !joinedOpen.has(p) ? text.length - text.trimStart().length : 0;
+    const trail = EDGE_SPACE.has(p.w.name) && !joinedClose.has(p) ? text.length - text.trimEnd().length : 0;
+    const mark = p.mark.includes('_') ? star(p.mark) : null;
+    if (!joinedOpen.has(p)) {
+      if (lead) {
+        const to = before(p.open[0]);
+        out.push({ from: to, insert: text.slice(0, lead) }, { from: p.open[1], to: p.open[1] + lead });
+        // A cursor after the spaces stays after them; one before them stays before them.
+        moves.push([p.open[1] + lead, to, 1], [p.open[1], to, -1]);
+      }
+      if (mark) out.push({ from: p.open[0], to: p.open[1], insert: mark });
+    }
+    if (!joinedClose.has(p)) {
+      if (trail) {
+        const to = after(p.close[1]);
+        out.push({ from: p.close[0] - trail, to: p.close[0] }, { from: to, insert: text.slice(text.length - trail) });
+        moves.push([p.close[0], to, 1], [p.close[0] - trail, to, -1]);
+      }
+      if (mark) out.push({ from: p.close[0], to: p.close[1], insert: mark });
+    }
+  }
+  return { specs: out, moves };
+}
+
+/**
+ * A numbered list whose first item stopped being one (its number taken away, joined to the line
+ * above) would turn the rest into plain text, since a list can only follow a paragraph when it
+ * starts at 1: the items after it are numbered again from 1 (changes against the new text).
+ */
+function renumberAfter(start: EditorState, changes: ChangeSet, doc: EditorState['doc']): ChangeSpec[] {
+  const out: ChangeSpec[] = [];
+  const seen = new Set<number>();
+  changes.iterChangedRanges((_a, _b, _fromB, toB) => {
+    const line = doc.lineAt(toB);
+    if (line.number >= doc.lines || seen.has(line.number)) return;
+    seen.add(line.number);
+    if (!line.text.trim() || /^\s*([-*+]|\d+[.)])(\s|$)/.test(line.text) || /^\s/.test(line.text)) return;
+    let n = 1;
+    for (let l = line.number + 1; l <= doc.lines; l++) {
+      const next = doc.line(l);
+      const m = next.text.match(/^(\d+)([.)] )/);
+      if (!m || (l === line.number + 1 && (m[1] === '1' || !wasNumbered(start, changes.invertedDesc.mapPos(next.from, 1))))) break;
+      if (+m[1] !== n) out.push({ from: next.from, to: next.from + m[1].length, insert: String(n) });
+      n++;
+    }
+  });
+  return out;
+}
+
+/** Whether pos was in a numbered list before the edit (so "2." there was a list item, not text). */
+function wasNumbered(state: EditorState, pos: number): boolean {
+  for (let n: SyntaxNode | null = syntaxTree(state).resolveInner(Math.min(pos + 1, state.doc.length), -1); n; n = n.parent)
+    if (n.name === 'OrderedList') return true;
+  return false;
+}
+
+/** Edits made by hand that can take text away: typing or pasting over a selection, cutting, dragging. */
+const HAND_EDIT = ['input.type', 'input.paste', 'input.drop', 'delete', 'move.drop'];
+
+/**
+ * Keeps formatting whole whatever the edit: text taken away by typing over a selection, pasting,
+ * cutting or deleting a word goes the way Backspace takes it (markup only partly selected stays),
+ * and then what the edit touched is tidied (see tidyAfter).
+ */
+const keepFormatting = EditorState.transactionFilter.of((tr) => {
+  const start = tr.startState;
+  if (!tr.docChanged || start.readOnly || start.field(renameField, false)) return tr;
+  if (!HAND_EDIT.some((e) => tr.isUserEvent(e)) || tr.isUserEvent('input.type.compose')) return tr;
+  let changes = tr.changes;
+  let selection: EditorSelection | undefined = tr.selection;
+  if (!tr.annotation(safeEdit)) {
+    const specs: ChangeSpec[] = [];
+    let deletes = false;
+    let last = -1;
+    let lastLength = 0;
+    tr.changes.iterChanges((fromA, toA, _fromB, _toB, inserted) => {
+      if (toA > fromA) deletes = true;
+      const safe = toA > fromA ? safeDeletion(start, fromA, toA) : [];
+      specs.push(...safe);
+      // What is typed over a selection takes the formatting of the first character it replaces.
+      const at = safe.length ? safe[0].from : fromA;
+      if (inserted.length) specs.push({ from: at, insert: inserted });
+      last = at;
+      lastLength = inserted.length;
+    });
+    if (deletes) {
+      changes = start.changes(specs);
+      // The cursor goes after what was typed or pasted, where the selection started.
+      const single = start.selection.ranges.length === 1 && (!selection || (selection.ranges.length === 1 && selection.main.empty));
+      selection = single ? EditorSelection.single(changes.mapPos(last, -1) + lastLength) : start.selection.map(changes, 1);
+    }
+  }
+  const doc = changes.apply(start.doc);
+  const tidy = tidyAfter(start, changes, doc);
+  tidy.specs.push(...renumberAfter(start, changes, doc));
+  if (changes === tr.changes && !tidy.specs.length) return tr;
+  const first = changes === tr.changes ? tr : {
+    changes,
+    selection,
+    effects: tr.effects,
+    scrollIntoView: tr.scrollIntoView,
+    annotations: [Transaction.userEvent.of(tr.annotation(Transaction.userEvent)!), safeEdit.of(true)],
+  };
+  if (!tidy.specs.length) return first;
+  // A cursor beside spaces that moved out of the formatting moves with them.
+  const set = ChangeSet.of(tidy.specs, doc.length);
+  const base = selection ?? start.selection.map(changes);
+  const moved = EditorSelection.create(
+    base.ranges.map((r) => (r.empty ? EditorSelection.cursor(moveCursor(r.head, tidy.moves, set)) : r.map(set))),
+    base.mainIndex,
+  );
+  return [first, { changes: set, selection: moved, sequential: true }];
+});
+
+/** The cursor never stands before a line's hidden marks, where typing would undo the heading or bullet. */
+const cursorAfterLineMarks = EditorState.transactionFilter.of((tr) => {
+  const sel = tr.selection;
+  if (!sel || sel.ranges.length > 1 || !sel.main.empty) return tr;
+  const state = tr.state;
+  const line = state.doc.lineAt(sel.main.head);
+  if (sel.main.head - line.from > 40) return tr;
+  const at = textStart(state, line);
+  return sel.main.head < at ? [tr, { selection: { anchor: at }, sequential: true }] : tr;
+});
+
+/**
+ * Enter that keeps formatting: at the start of bold (or italic, code, a link) the line breaks before
+ * it, at its end after it, and in the middle the formatting is closed on the first line and opened
+ * again on the next, so both halves stay formatted (whatever kind of line it is). Lists and quotes
+ * continue as usual.
+ */
+function enterSmart(view: EditorView): boolean {
+  let state = view.state;
+  if (state.readOnly || state.field(renameField, false) || state.selection.ranges.length > 1) return false;
+  let changes = state.changes([]);
+  const step = (spec: ChangeSpec[], anchor: number) => {
+    const set = state.changes(spec);
+    changes = changes.compose(set);
+    state = state.update({ changes: set, selection: { anchor: set.mapPos(anchor, 1) } }).state;
+  };
+  const sel = state.selection.main;
+  let pos = sel.head;
+  if (!sel.empty) {
+    // The selection goes as Backspace takes it, and the formatting either side is tidied.
+    const start = state;
+    step(safeDeletion(state, sel.from, sel.to), sel.from);
+    let at = changes.mapPos(sel.from, -1);
+    const tidy = tidyAfter(start, changes, state.doc);
+    if (tidy.specs.length) {
+      const set = ChangeSet.of(tidy.specs, state.doc.length);
+      at = moveCursor(at, tidy.moves, set);
+      step(tidy.specs, 0);
+    }
+    pos = at;
+  }
+  // Step out of formatting the cursor is at the edge of.
+  for (let moved = true; moved; ) {
+    moved = false;
+    for (const w of wrapsAround(state, pos)) {
+      if (pos <= w.textFrom && pos < w.textTo) pos = w.from;
+      else if (pos >= w.textTo) pos = w.to;
+      else continue;
+      moved = true;
+      break;
+    }
+  }
+  const inside = wrapsAround(state, pos).filter((w) => pos > w.textFrom && pos < w.textTo);
+  if (inside.length) {
+    // Close inside the spaces at the break and open again after them.
+    const before = state.sliceDoc(Math.max(...inside.map((w) => w.textFrom)), pos);
+    const after = state.sliceDoc(pos, Math.min(...inside.map((w) => w.textTo)));
+    const a = pos - (before.length - before.trimEnd().length);
+    const b = pos + (after.length - after.trimStart().length);
+    const close = inside.map((w) => state.sliceDoc(w.textTo, w.to)).join('');
+    const open = [...inside].reverse().map((w) => state.sliceDoc(w.from, w.textFrom)).join('');
+    step([{ from: a, insert: close }, { from: b, insert: open }], pos);
+    // The cursor stays between the spaces, after what closes and before what opens.
+    pos += close.length;
+  }
+  // The new line starts at its first word, not with the spaces that were after the cursor.
+  const rest = state.sliceDoc(pos, state.doc.lineAt(pos).to);
+  const spaces = rest.length - rest.trimStart().length;
+  if (spaces && spaces < rest.length) step([{ from: pos, to: pos + spaces }], pos);
+  // Enter on an empty checkbox item ends the list, as on an empty bullet.
+  const line = state.doc.lineAt(pos);
+  const emptyTask = line.text.match(/^(\s*(?:> ?)*[-*+] )\[[ xX]\] ?$/);
+  if (emptyTask && pos === line.to) {
+    step([{ from: line.from + emptyTask[1].length, to: line.to }], line.from);
+    pos = state.doc.lineAt(changes.mapPos(line.from)).to;
+  }
+  state = state.update({ selection: { anchor: pos } }).state;
+  let newline: Transaction | null = null;
+  const capture = { state, dispatch: (t: Transaction) => (newline = t) };
+  if (!insertNewlineContinueMarkup(capture)) insertNewlineAndIndent(capture);
+  if (!newline) return false;
+  const nl = newline as Transaction;
+  // A checkbox left with nothing after it keeps the space that makes it a checkbox.
+  const fix: ChangeSpec[] = [];
+  const at = nl.newDoc.lineAt(nl.state.selection.main.head).number;
+  for (let l = Math.max(1, at - 2); l <= at; l++) {
+    const t = nl.newDoc.line(l);
+    if (/^\s*(?:> ?)*[-*+] \[[ xX]\]$/.test(t.text)) fix.push({ from: t.to, insert: ' ' });
+  }
+  const fixSet = ChangeSet.of(fix, nl.newDoc.length);
+  view.dispatch({
+    changes: changes.compose(nl.changes).compose(fixSet),
+    selection: nl.selection!.map(fixSet),
+    scrollIntoView: true,
+    userEvent: 'input',
+    annotations: safeEdit.of(true),
+  });
+  return true;
+}
+
 /** Line formatting that Backspace at the start of the text removes (heading, bullet, task, quote). */
-const LINE_FORMAT = /^\s*(#{1,6} |[-*+] \[[ xX]\] |[-*+] |> ?)$/;
+const LINE_FORMAT = /^\s*(#{1,6} |[-*+] \[[ xX]\] |[-*+] |\d+[.)] |> ?)$/;
 
 /** Backspace (dir -1) and Delete (dir 1) that treat the formatted text as the text. */
 function deleteSmart(view: EditorView, preview: Preview | undefined, dir: -1 | 1): boolean {
@@ -1037,7 +1430,13 @@ function deleteSmart(view: EditorView, preview: Preview | undefined, dir: -1 | 1
   if (!changes.length) return true;
   const set = state.changes(changes as ChangeSpec[]);
   const anchor = set.mapPos(sel.empty ? Math.min(...changes.map((c) => c.from)) : sel.from, -1);
-  view.dispatch({ changes: set, selection: { anchor }, scrollIntoView: true, userEvent: dir < 0 ? 'delete.backward' : 'delete.forward' });
+  view.dispatch({
+    changes: set,
+    selection: { anchor },
+    scrollIntoView: true,
+    userEvent: dir < 0 ? 'delete.backward' : 'delete.forward',
+    annotations: safeEdit.of(true),
+  });
   return true;
 }
 

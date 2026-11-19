@@ -1,7 +1,7 @@
 {
   "name": "locus",
   "productName": "Locus",
-  "version": "0.6.17",
+  "version": "0.6.18",
   "description": "Write markdown notes that link to exact places in PDFs, code, spreadsheets and their versions.",
   "license": "MIT",
   "private": true,
@@ -16,6 +16,7 @@
     "test": "node --test src/core/*.test.ts src/renderer/notes/*.test.ts",
     "test-workspace": "node scripts/make-test-workspace.mjs",
     "smoke": "node scripts/smoke.mjs",
+    "test:editing": "npm run build && node scripts/make-test-workspace.mjs && node scripts/test-editing.mjs",
     "build:mcp": "node scripts/build-mcp.mjs",
     "build:plugin": "node scripts/build-mcp.mjs plugin/server/server.mjs --minify",
     "test:mcp": "node scripts/build-mcp.mjs && node scripts/make-test-workspace.mjs && node scripts/test-mcp.mjs",

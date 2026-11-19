@@ -116,8 +116,23 @@ files is refused rather than written into.
   hidden while editing; the cursor steps over hidden markup. Markdown shortcuts work as you type.
   A link's label is ordinary text: Backspace and typing inside it edit it, deleting its last
   letter removes the link, and typing at its end writes after the link. Backspace at the start
-  of a heading, bullet, task or quote removes that formatting. **Edit target** in a link's hover
+  of a heading, bullet, number, task or quote removes that formatting. **Edit target** in a link's hover
   card shows that link's markdown until the cursor leaves it.
+- Editing never breaks formatting (`scripts/test-editing.mjs` tries every cursor place and
+  selection in a set of sample notes):
+  - Typing, pasting, cutting or deleting a word over a selection takes text away the way
+    Backspace does: markup only partly selected stays, and formatting whose text is all selected
+    goes with it.
+  - Enter at the start of bold (italic, code, a link) breaks the line before it, at its end after
+    it, and in the middle closes it on the first line and opens it again on the next.
+  - Spaces typed or left at the inside edge of bold, italic or strikethrough move just outside
+    it. Two pieces of the same formatting that come to touch become one. Bold or italic written
+    with `_` becomes `*` when edited, since `_` stops working inside a word.
+  - The cursor never stands before a line's hidden bullet, checkbox, heading or quote marks.
+    Joining two lines drops the second line's marks. A numbered list whose first item stops
+    being one is numbered again from 1.
+  - A bracket typed into a link's label is saved as `\[` or `\]`, and backslash escapes show
+    as the character alone.
 - Tables are always shown as tables, including straight after **Table** inserts one. Clicking a
   cell edits it in place (same formatted view); Tab / Shift+Tab and Enter move between cells,
   Tab from the last cell adds a row, Esc finishes. While a cell is edited, buttons under the

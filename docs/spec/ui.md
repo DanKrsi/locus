@@ -318,10 +318,11 @@ older version still has its old links, and Record fixes them.
 ### 4.7 Tour mode
 
 Steps through the note's references in order with ←/→ (or PageUp/PageDown); the viewer
-follows and the current reference is highlighted in the note. Esc exits. A stop that links to
-another note or flowchart opens it on the right, read-only, so the note being toured stays in
-front and the tour goes on; one that links to a heading of the same note scrolls to it. Switching
-to another note on the left ends the tour.
+follows and the current reference is highlighted in the note. Esc exits. Each stop puts its link
+in the middle of the note and keeps it there while pictures above it finish loading (until the
+reader scrolls). A stop that links to another note, a flowchart or a section of the same note
+opens it on the right, read-only, so the note being toured stays at the link and the tour goes
+on. Switching to another note on the left ends the tour.
 
 ### 4.8 Flowcharts
 

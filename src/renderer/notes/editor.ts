@@ -287,7 +287,7 @@ export function flashRange(view: EditorView, from: number, to: number) {
 export function flashRanges(view: EditorView, ranges: { from: number; to: number }[]) {
   if (!ranges.length) return;
   const sorted = [...ranges].sort((a, b) => a.from - b.from);
-  view.dispatch({ effects: [flashEffect.of(sorted), EditorView.scrollIntoView(sorted[0].from, { y: 'center' })] });
+  centreOn(view, sorted[0].from, undefined, [flashEffect.of(sorted)]);
   setTimeout(() => view.dispatch({ effects: flashEffect.of(null) }), 1600);
 }
 
@@ -320,7 +320,54 @@ const activeLinkField = StateField.define<number | null>({
 });
 
 export function setActiveLink(view: EditorView, from: number | null) {
-  view.dispatch({ effects: [setActiveEffect.of(from), ...(from !== null ? [EditorView.scrollIntoView(from, { y: 'center' })] : [])] });
+  view.dispatch({ effects: setActiveEffect.of(from) });
+  if (from !== null) centreOn(view, from, () => view.state.field(activeLinkField, false) === from);
+}
+
+/**
+ * Scrolls a place to the middle of the note and keeps it there while pictures near it finish
+ * loading: a picture above it arrives with no height, then pushes everything below it down. It
+ * stops following after a few seconds, when `still` says the place no longer matters, or as soon as
+ * the reader scrolls or types.
+ */
+function centreOn(view: EditorView, pos: number, still: () => boolean = () => true, extra: StateEffect<unknown>[] = []) {
+  view.dispatch({ effects: [...extra, EditorView.scrollIntoView(pos, { y: 'center' })] });
+  const scroller = view.scrollDOM;
+  const recentre = (e: Event) => {
+    if (!(e.target as HTMLElement).classList?.contains('cm-image')) return;
+    if (!still() || pos > view.state.doc.length) return stop();
+    view.dispatch({ effects: EditorView.scrollIntoView(pos, { y: 'center' }) });
+  };
+  const stop = () => {
+    clearTimeout(timer);
+    clearTimeout(late);
+    checks = 99;
+    view.dom.removeEventListener('load', recentre, true);
+    scroller.removeEventListener('wheel', stop);
+    scroller.removeEventListener('mousedown', stop);
+    view.dom.removeEventListener('keydown', stop);
+  };
+  // Scrolling goes by the heights the editor knows, and lines it has not drawn for a while (or a
+  // picture it has not measured since it loaded) can be off. Look where the place really is once
+  // drawn, and scroll again if it is not near the middle.
+  let checks = 0;
+  const check = () => {
+    if (!still() || pos > view.state.doc.length || checks++ > 3) return;
+    const at = view.coordsAtPos(pos);
+    const box = scroller.getBoundingClientRect();
+    const off = at ? (at.top + at.bottom) / 2 - (box.top + box.height / 2) : Infinity;
+    if (Math.abs(off) > Math.max(24, box.height * 0.08)) {
+      view.dispatch({ effects: EditorView.scrollIntoView(pos, { y: 'center' }) });
+      requestAnimationFrame(() => requestAnimationFrame(check));
+    }
+  };
+  requestAnimationFrame(() => requestAnimationFrame(check));
+  const late = setTimeout(check, 350);
+  const timer = setTimeout(stop, 4000);
+  view.dom.addEventListener('load', recentre, true);
+  scroller.addEventListener('wheel', stop, { passive: true });
+  scroller.addEventListener('mousedown', stop);
+  view.dom.addEventListener('keydown', stop);
 }
 
 /** Scrolls to a line and flashes it ("Cited in" jumps). */
@@ -511,6 +558,8 @@ class ImageWidget extends WidgetType {
     wrap.className = 'cm-image-wrap';
     const img = document.createElement('img');
     img.className = 'cm-image';
+    // Its height is known only once it loads: measure again so scrolling knows where things are.
+    img.addEventListener('load', () => view.requestMeasure());
     img.src = this.src;
     img.alt = this.alt;
     img.draggable = false;

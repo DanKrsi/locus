@@ -622,8 +622,9 @@ export function App() {
   };
 
   /**
-   * Opens what a link cites. On a tour the note being toured stays in front, so a link to another
-   * note or flowchart opens it on the right, read-only, as the tour's other stops do.
+   * Opens what a link cites. On a tour the note being toured stays in front at the link, so a link
+   * to another note, a flowchart or a section of this note opens on the right, read-only, as the
+   * tour's other stops do.
    */
   const followRef = async (info: LinkInfo, notePath: string, touring = false) => {
     // Only the link followed last opens anything: an earlier one still looking (at the history, say)
@@ -641,7 +642,10 @@ export function App() {
     if (!noticeRef.current?.links?.length) say(null);
     if (ref.pathKind === 'web') return;
     if (!ref.path) {
-      if (ref.loc.heading) notes.current?.revealHeading(notePath, ref.loc.heading);
+      // On a tour the note stays at the link; the section it points to opens on the right.
+      if (touring) {
+        if (ref.loc.heading) openDoc(notePath, false, undefined, ref.loc);
+      } else if (ref.loc.heading) notes.current?.revealHeading(notePath, ref.loc.heading);
       return;
     }
     const external = ref.pathKind === 'external';
@@ -652,9 +656,7 @@ export function App() {
       const id = linkNoteId(ref.extra);
       if (id && !(await api.exists(path).catch(() => true))) path = (await api.findNoteById(id).catch(() => null)) ?? path;
       if (touring) {
-        if (path === notePath) {
-          if (ref.loc.heading) notes.current?.revealHeading(notePath, ref.loc.heading);
-        } else if (!stale()) openDoc(path, false, undefined, ref.loc);
+        if (!stale()) openDoc(path, false, undefined, ref.loc);
         return;
       }
       if (stale()) return;

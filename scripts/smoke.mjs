@@ -927,7 +927,7 @@ await step('Pick in the document: draw the area on the right', async () => {
   await win.mouse.down();
   await win.mouse.move(view.x + 330, view.y + 250, { steps: 8 });
   await win.mouse.up();
-  const cite = win.locator('.viewer:not(.hidden) button.cite').first();
+  const cite = win.locator('.viewer:not(.hidden) button.cite:not(.embed-button)').first();
   await cite.filter({ hasText: 'Cite area' }).waitFor({ timeout: 5000 });
   await bar.getByRole('button', { name: 'Use this place' }).click();
   const dlg = win.locator('.citation-editor');
@@ -949,7 +949,7 @@ await step('a box drawn by hand quotes what is inside it', async () => {
   await win.mouse.down();
   await win.mouse.move(view.x + 420, view.y + 260, { steps: 8 });
   await win.mouse.up();
-  await pdf.locator('button.cite').first().filter({ hasText: 'Cite area' }).waitFor({ timeout: 5000 });
+  await pdf.locator('button.cite:not(.embed-button)').first().filter({ hasText: 'Cite area' }).waitFor({ timeout: 5000 });
   // The words inside the box are read before citing, so the link carries them.
   await win.locator('.editor-wrap .cm-content').first().click();
   await win.keyboard.press('Control+End');

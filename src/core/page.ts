@@ -37,6 +37,12 @@ img { max-width: 100%; height: auto; border-radius: 6px; }
 table { border-collapse: collapse; margin: 0.9em 0; font-size: 0.95em; }
 th, td { border: 1px solid var(--border); padding: 5px 10px; text-align: left; vertical-align: top; }
 th { background: var(--accent-soft); font-weight: 600; }
+.embed { display: inline-block; max-width: 100%; vertical-align: top; }
+.embed img { display: block; border: 1px solid var(--border); background: #fff; }
+.embed table.embed-table { margin: 0; }
+.embed table.embed-table td { padding: 2px 8px; white-space: nowrap; }
+.embed table.embed-table td.tinted { color: var(--c); }
+.embed-caption { display: block; margin-top: 2px; font-size: 0.8em; color: var(--muted); }
 .export-head { max-width: 820px; margin: 0 auto; padding: 22px 28px 0; color: var(--faint); font-size: 12.5px; }
 @media print {
   body { background: #fff; }

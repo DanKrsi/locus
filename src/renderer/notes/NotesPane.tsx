@@ -66,7 +66,7 @@ export interface NotesHandle {
   showLink(path: string, dest: string): Promise<void>;
 }
 
-type EditorCallbacks = Pick<NoteEditorOptions, 'onFollow' | 'refStatus' | 'imageUrl' | 'renderHoverCard'>;
+type EditorCallbacks = Pick<NoteEditorOptions, 'onFollow' | 'refStatus' | 'imageUrl' | 'renderHoverCard' | 'embedContent' | 'onEmbed'>;
 
 interface Props {
   initialPaths: string[];

@@ -133,6 +133,30 @@ the note, the app finds it by this identity. A copy of a note is a new note with
 `#w=<pixels>` on a picture's address records a width chosen in the editor. Other markdown tools
 ignore it and show the picture at its own size.
 
+### 2.7 Embedded views
+
+A reference written as a markdown picture, with `!` in front, to a PDF, a slide deck or a
+spreadsheet shows what it cites in the note instead of linking to it (UI spec §4.9):
+
+```markdown
+![Figure 3](</docs/BDS-100.pdf#page=5&viewrect=72,140,300,220&at=817340b0b8>)
+![Kickoff slide](/decks/kickoff.pptx#slide=2&rev=2e5414fdc4&w=480)
+![Load cases](</data/Bracket loads.xlsx#'Load cases'!B4:D12&at=4edd7411ee>)
+```
+
+- PDF: a picture of the page, or of the `viewrect` box on it.
+- Slides: a picture of the slide, or of the `viewrect` box on it (in slide pixels, 960 wide).
+- Spreadsheet: a read-only table of the range's values (formulas shown as their results, merged
+  cells merged). A spreadsheet view needs a range. Long ranges are cut to the first 200 rows and
+  30 columns, and say so.
+- Live (`at=`) views show the file as it is now and are drawn again when it changes; if the file
+  leaves the workspace they show the version they were cited from, and say so. Pinned (`rev=`)
+  views always show that version. `w=` sets the width, as for pictures (§2.6).
+- Other markdown tools show these as broken pictures, so exports draw them first (UI spec §7):
+  a web page or PDF carries the picture or table itself; a folder for someone without Locus
+  carries a link to the file instead.
+- Any other file kind written with `!` is a plain picture (§2.6), or a broken one.
+
 ## 5. Automatic versions
 
 - **Simple mode / app-managed workspaces**: an automatic version is a normal commit with the

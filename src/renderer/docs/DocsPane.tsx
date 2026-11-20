@@ -35,7 +35,8 @@ interface Props {
   onOpen(): void;
   /** Moves a tab to sit before another one. */
   onReorder(id: string, beforeId: string): void;
-  onCite(tab: DocTab): void;
+  /** Inserts a link to what is picked out in the tab; with `embed`, a picture or table of it. */
+  onCite(tab: DocTab, embed?: boolean): void;
   /** Kind of link the Cite buttons insert when viewing the latest version. */
   citeMode: CiteMode;
   onCiteMode(mode: CiteMode): void;
@@ -356,7 +357,7 @@ function DocView({ tab, visible, hop, ...p }: Props & { tab: DocTab; visible: bo
           {head}
           <div className="compare-split">
             <div className="side">
-              <CiteModeContext.Provider value={{ mode: p.citeMode, setMode: p.onCiteMode, pinnedOnly: true, hidden: tab.review }}>
+              <CiteModeContext.Provider value={{ mode: p.citeMode, setMode: p.onCiteMode, pinnedOnly: true, hidden: tab.review, onEmbed: () => p.onCite(leftTab, true) }}>
               <ViewerBody
                 kind={tab.kind}
                 path={tab.path}
@@ -425,7 +426,7 @@ function DocView({ tab, visible, hop, ...p }: Props & { tab: DocTab; visible: bo
           </span>
         </div>
       )}
-      <CiteModeContext.Provider value={{ mode: p.citeMode, setMode: p.onCiteMode, pinnedOnly: !!tab.rev, hidden: tab.review }}>{body}</CiteModeContext.Provider>
+      <CiteModeContext.Provider value={{ mode: p.citeMode, setMode: p.onCiteMode, pinnedOnly: !!tab.rev, hidden: tab.review, onEmbed: () => p.onCite(tab, true) }}>{body}</CiteModeContext.Provider>
       {strip}
     </div>
   );

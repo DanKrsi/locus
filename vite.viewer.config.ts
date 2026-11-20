@@ -2,11 +2,12 @@
 // with no module loading, so a page opened from a disk (file://) runs it without a server.
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { libraryFixes } from './vite.fixes';
 
 export default defineConfig({
   root: 'src/viewer',
   base: './',
-  plugins: [react()],
+  plugins: [react(), libraryFixes()],
   build: {
     outDir: '../../dist/viewer',
     emptyOutDir: true,

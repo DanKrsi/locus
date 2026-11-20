@@ -3,7 +3,7 @@
 // install and no server, so every file travels inside the folder as a script the page loads.
 import { promises as fs } from 'node:fs';
 import { basename as pathBase, dirname, join } from 'node:path';
-import { basename, extname, fileKind, parseDestination, resolvePath, slugify, stem, type Location } from '../core/link';
+import { basename, extname, fileKind, isEmbed, parseDestination, resolvePath, slugify, stem, type Location } from '../core/link';
 import { isCanvas } from '../core/canvas';
 import { extractLinks } from '../core/mdlinks';
 import { renderMarkdown, escapeHtml } from '../core/render';
@@ -91,8 +91,9 @@ export async function planExport(ctx: PlanContext): Promise<ExportPlan> {
         if (!seenNotes.has(path)) queue.push({ path });
         continue;
       }
-      // A picture shown in the note is already inside the page.
-      if (link.image) continue;
+      // A picture shown in the note is already inside the page. A view of a page, slide or cells
+      // goes out as a link to the file, so the file goes with it.
+      if (link.image && !isEmbed(ref, true)) continue;
       const k = key(path, ref.rev);
       if (files.has(k)) continue;
       let size = 0;

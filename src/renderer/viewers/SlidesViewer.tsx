@@ -12,7 +12,7 @@ import JSZip from 'jszip';
  *   renderer skips those blocks whole, so the slide comes up missing them; putting PowerPoint's
  *   own fallback picture in their place is what the fallback is for (see core/slides).
  */
-async function sanitize(data: Uint8Array): Promise<ArrayBuffer> {
+export async function sanitize(data: Uint8Array): Promise<ArrayBuffer> {
   const zip = await JSZip.loadAsync(data);
   let changed = false;
   const types = await zip.file('[Content_Types].xml')?.async('string');
@@ -41,7 +41,7 @@ import type { ViewerProps } from './types';
 import { centred, glide, pulse, settled, showTravel } from './travel';
 
 /** Slide elements produced by pptx-preview, in order. */
-function slideElements(root: HTMLElement): HTMLElement[] {
+export function slideElements(root: HTMLElement): HTMLElement[] {
   const wrapper = root.querySelector<HTMLElement>('.pptx-preview-wrapper') ?? root;
   const direct = [...wrapper.querySelectorAll<HTMLElement>('.pptx-preview-slide-wrapper')];
   return direct.length ? direct : ([...wrapper.children] as HTMLElement[]).filter((c) => c.offsetHeight > 50);
@@ -170,8 +170,15 @@ export function SlidesViewer({ data, reveal, onCite, handle, marks, onMark, onPl
   useEffect(() => {
     if (reveal?.loc.slide) {
       pending.current = reveal.loc.slide;
-      setCited(reveal.loc.viewrect ? { slide: reveal.loc.slide, rect: reveal.loc.viewrect } : null);
-      setArea(null);
+      if (reveal.draw) {
+        // Picking the place again: the box it has now is drawn, ready to be replaced.
+        setCited(null);
+        setArea(reveal.loc.viewrect ? { slide: reveal.loc.slide, rect: reveal.loc.viewrect } : null);
+        setAreaMode(true);
+      } else {
+        setCited(reveal.loc.viewrect ? { slide: reveal.loc.slide, rect: reveal.loc.viewrect } : null);
+        setArea(null);
+      }
       goTo(reveal.loc.slide, true, !reveal.follow);
     }
   }, [reveal]);
@@ -297,6 +304,7 @@ export function SlidesViewer({ data, reveal, onCite, handle, marks, onMark, onPl
           label={area ? 'Cite area' : 'Cite slide'}
           title="Insert a link to this slide into the note (Ctrl+Shift+L)"
           onCite={onCite}
+          embed={{ label: 'Insert picture', icon: 'image', title: area ? 'Show a picture of this box in the note' : 'Show a picture of this slide in the note (draw a box with Area for part of it)' }}
         />
       </div>
       <div className="slides-scroll" ref={scrollRef} onScroll={onScroll}>

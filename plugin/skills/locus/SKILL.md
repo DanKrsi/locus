@@ -27,6 +27,11 @@ so explain in your own words and let the links show the source.
 5. Labels are short and say what the reader will see: "the retry loop", "Table 5",
    "load cases B4:D12". Never use "here" or "this link". Don't put line numbers in a label for
    code ("client.py L12-18"): lines move, and the link follows them.
+6. **Show, when seeing it matters.** `make_reference` with `embed: true` puts the place in the
+   note instead of a link: a picture of a PDF page (or the highlighted passage) or a slide, or a
+   read-only table of a spreadsheet range. Live views follow the file; pass `version` to pin one.
+   Put each on a line of its own, and use them sparingly: for the table of numbers the note is
+   about, the figure page, the key slide. Code can't be shown this way; link to it.
 
 ## Workflow for a tour
 
@@ -108,8 +113,9 @@ that is published again (monthly statistics) is a new dated file, never an overw
 - `make_reference` tells you when the same words are on other pages. Prefer the place the figure
   is stated (the table, the body) over its repeat in a summary, and pass `page`.
 - A chart or figure has no text to quote. Quote its caption with `highlight: true`, describe in
-  your own words what it shows, and say you are reading it from the picture. (The box cannot be
-  drawn on the chart itself from here; the person can draw one in the app with Cite area.)
+  your own words what it shows, and say you are reading it from the picture. To let the reader
+  see it, show the page with `page` and `embed: true`. (The box cannot be drawn on the chart
+  itself from here; the person can draw one in the app with Cite area, or Change area on the view.)
 - CSV and workbook cells are cited by `range`; a derived number cites the cells of the model that
   produced it, and each input of the model cites its source.
 - Every number in a note has a link. If you cannot link it, say it is your estimate.

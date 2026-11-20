@@ -375,6 +375,40 @@ per line, so diffs stay readable.
   the loop side) and every citation is verified.
 - Not yet: tour mode, hover cards and Fix links for flowcharts.
 
+### 4.9 Embedded views
+
+Instead of a link, a note can show what it cites: a picture of a PDF page, a slide, or a box drawn
+on either, or a table of spreadsheet cells. The syntax is a `!` reference (link format §2.7).
+
+- **Inserting.** Next to **Cite** on the right: **Insert picture** for a PDF or slide deck (the
+  box drawn with Area, else the page or slide), **Insert table** for a spreadsheet (the selected
+  cells). Shortcut **Ctrl+Shift+E**. The view goes in its own paragraph below the cursor, with the
+  usual rename box. Files that can't be shown (code, notes, media, flowcharts) get a link and a
+  toast saying why. A link already in the note can become a view from its hover card (**Show as
+  picture** / **Show as table**), and back (**Show as link**).
+- **What it shows.** Live views show the latest file and are drawn again when it changes on disk;
+  the old picture stays until the new one is ready. Pinned views show their version only. Under
+  the view: the file icon, its name, a **Live** / **Pinned** / **Outside** chip, **Changed** when
+  what it cites changed since it was cited, and a line when a live view's file is gone and the cited
+  version is shown instead.
+- **Tables are read-only**: the cells' values, number formats and merges, fixed column widths.
+  Nothing in them can be edited or selected for editing.
+- **Using it.** Clicking the view opens the file on the right at the place. Hovering shows tools on
+  the caption line (never over the view): **Open**, **Change area** / **Change cells** (opens the
+  file with the current box or cells shown, and a notice with **Use this box** / **Use these
+  cells** and Cancel), **Show as link**, and **…** for the full hover card (pin, make live, compare,
+  rename, edit, remove). A name Locus suggested follows a new area or cells; a name the user typed
+  stays.
+- **Size.** Drag the bottom-right corner to resize (it writes `w=`); double-click it for the natural
+  size. Views never make the note wider than its pane.
+- **When it can't be drawn**, the view says why in red with a help line (page or slide past the
+  end, box outside the page, sheet or range gone, pinned version missing, file missing, file
+  unreadable). A file caught half-saved keeps the last picture.
+- In a flowchart box or a note table cell, which are too small for it, a view shows as a link to
+  what it cites.
+- Backspace or Delete next to a view removes it whole; Ctrl+Z puts it back. A read-only note shows
+  views without the tools that change it.
+
 ## 5. Right pane: documents
 
 - Document tabs show a version badge when not on the latest version. Files come from this
@@ -555,8 +589,8 @@ never changes the note.
 
 ### 7.1 As a web page or a PDF
 
-One file: the note formatted as it looks in the app, with its pictures inside it, and its links
-still working. A link opens the file it cites on this computer: a PDF at its page, a note at its
+One file: the note formatted as it looks in the app, with its pictures and embedded views
+(§4.9) inside it, and its links still working. A view that can't be drawn goes out as a link. A link opens the file it cites on this computer: a PDF at its page, a note at its
 heading, anything else at the file. A section link stays inside the page. The recorded version
 isn't part of the link, so what opens is the file as it is now. The PDF is printed by Locus
 itself, with no print dialog (Letter paper, 0.7 inch margins).
@@ -612,6 +646,7 @@ copies. Single-file `.locus` package (git bundle) for sharing without accounts.
 | Table | Ctrl+T |
 | Nest / un-nest a list item | Tab / Shift+Tab |
 | Cite what's shown on the right | Ctrl+Shift+L |
+| Insert a picture or table of what's shown on the right | Ctrl+Shift+E |
 | Link to a section of a note | Ctrl+Alt+L |
 | Search open document | Ctrl+F |
 | Zoom the pane you're in (notes or documents) | Ctrl+= / Ctrl+− or Ctrl+mouse wheel |

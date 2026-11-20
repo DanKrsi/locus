@@ -325,13 +325,33 @@ export function escapeLabel(label: string): string {
   return label.replace(/([\\\[\]])/g, '\\$1');
 }
 
-export function formatReference(label: string, ref: Reference, quote?: string): string {
+/** A reference; with `embed`, the "!" form that shows what it cites in the note (an embedded view). */
+export function formatReference(label: string, ref: Reference, quote?: string, embed = false): string {
   let title = '';
   if (quote) {
     const q = quote.replace(/\s+/g, ' ').trim().slice(0, 200).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
     if (q) title = ` "${q}"`;
   }
-  return `[${escapeLabel(label)}](${formatDestination(ref)}${title})`;
+  return `${embed ? '!' : ''}[${escapeLabel(label)}](${formatDestination(ref)}${title})`;
+}
+
+// ---------- Embedded views ----------
+
+/**
+ * What an embedded view of a file shows: a picture of a PDF page or slide (or of a box on one), or
+ * the cells of a spreadsheet range as a table. Null for files shown as themselves (pictures) or
+ * not shown at all.
+ */
+export function embedKind(path: string): 'picture' | 'table' | null {
+  const kind = fileKind(path);
+  if (kind === 'pdf' || kind === 'slides') return 'picture';
+  if (kind === 'sheet') return 'table';
+  return null;
+}
+
+/** Whether a "!" link is an embedded view of a place in a document, rather than a plain picture. */
+export function isEmbed(ref: Reference, image: boolean): boolean {
+  return image && ref.pathKind !== 'web' && !!ref.path && embedKind(ref.path) !== null;
 }
 
 /** The default label for a new reference (link-format spec §3). */

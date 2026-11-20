@@ -234,7 +234,8 @@ export interface Api {
    * inside the file and links are rewritten to open the files on this computer. Asks where to
    * save unless `file` is given. Returns the file, or null if cancelled.
    */
-  exportNotePage(notePath: string, markdown: string, kind: 'html' | 'pdf', file?: string): Promise<string | null>;
+  /** `embeds`: the HTML for each embedded view (by link address), drawn by the app, since only it can draw them. */
+  exportNotePage(notePath: string, markdown: string, kind: 'html' | 'pdf', file?: string, embeds?: Record<string, string>): Promise<string | null>;
   /** What an export for someone without Locus would hold. */
   planExport(notePath: string, markdown: string, scope: 'linked' | 'workspace'): Promise<ExportSummary>;
   /** Writes that export into a new folder, asking where unless `dest` is given. */

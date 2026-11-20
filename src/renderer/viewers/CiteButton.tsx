@@ -5,7 +5,14 @@ import { Icon, type IconName } from '../icons';
 
 export type CiteMode = 'live' | 'pinned';
 
-export const CiteModeContext = createContext<{ mode: CiteMode; setMode(m: CiteMode): void; pinnedOnly: boolean; hidden?: boolean }>({
+export const CiteModeContext = createContext<{
+  mode: CiteMode;
+  setMode(m: CiteMode): void;
+  pinnedOnly: boolean;
+  hidden?: boolean;
+  /** Inserts what is picked out as an embedded view (a picture or a table) instead of a link. */
+  onEmbed?(): void;
+}>({
   mode: 'live',
   setMode: () => undefined,
   pinnedOnly: false,
@@ -16,8 +23,21 @@ const MODES: [CiteMode, string, string][] = [
   ['pinned', 'Pinned', 'Always opens this exact version, even after the file changes.'],
 ];
 
-export function CiteButton({ icon, label, title, onCite }: { icon: IconName; label: string; title?: string; onCite(): void }) {
-  const { mode, setMode, pinnedOnly, hidden } = useContext(CiteModeContext);
+export function CiteButton({
+  icon,
+  label,
+  title,
+  onCite,
+  embed,
+}: {
+  icon: IconName;
+  label: string;
+  title?: string;
+  onCite(): void;
+  /** Offers to put it in the note as a picture or table too: the button's words and icon. */
+  embed?: { label: string; icon: IconName; title: string };
+}) {
+  const { mode, setMode, pinnedOnly, hidden, onEmbed } = useContext(CiteModeContext);
   const shown: CiteMode = pinnedOnly ? 'pinned' : mode;
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -29,6 +49,13 @@ export function CiteButton({ icon, label, title, onCite }: { icon: IconName; lab
   }, [open]);
   if (hidden) return null;
   return (
+    <>
+    {embed && onEmbed && (
+      // It never takes the focus: the note keeps it, and Enter names the view rather than pressing this again.
+      <button className="cite embed-button" onMouseDown={(e) => e.preventDefault()} onClick={onEmbed} title={`${embed.title} (Ctrl+Shift+E). Live or Pinned as chosen on Cite.`}>
+        <Icon name={embed.icon} /> {embed.label}
+      </button>
+    )}
     <div className="cite-split" ref={ref}>
       <button className="cite" onClick={onCite} title={title ?? 'Insert a link to this into the note (Ctrl+Shift+L)'}>
         <Icon name={icon} /> {label}
@@ -61,5 +88,6 @@ export function CiteButton({ icon, label, title, onCite }: { icon: IconName; lab
         </div>
       )}
     </div>
+    </>
   );
 }

@@ -2,7 +2,7 @@
 // is parsed with the same grammar the editor uses, so what comes out matches what was on screen.
 import { parser as baseParser, GFM } from '@lezer/markdown';
 import type { SyntaxNode, Tree } from '@lezer/common';
-import { splitLinkTarget } from './link.ts';
+import { basename, isEmbed, parseDestination, splitLinkTarget } from './link.ts';
 
 const parser = baseParser.configure(GFM);
 
@@ -11,6 +11,11 @@ export interface RenderOptions {
   href(dest: string, title?: string): string | null;
   /** Where a picture comes from; null leaves the picture out. */
   img(dest: string): string | null;
+  /**
+   * The HTML of an embedded view (a picture of a PDF or slide area, a table of cells), drawn by
+   * the app. Without it, the view is written as a link to what it shows, so nothing is lost.
+   */
+  embed?(dest: string): string | null;
   /** Added to every link (`target="_blank"`, say). */
   linkAttrs?(dest: string): string;
   /** The id for a heading, for section links. Defaults to the GitHub slug. */
@@ -101,6 +106,14 @@ export function renderMarkdown(md: string, opts: RenderOptions): string {
       case 'Image': {
         const p = linkParts(md, node);
         if (!p) return text(node.from, node.to);
+        const ref = parseDestination(p.dest);
+        if (ref && isEmbed(ref, true)) {
+          const html = opts.embed?.(p.dest);
+          if (html) return html;
+          const label = escapeHtml(md.slice(p.labelFrom, p.labelTo) || basename(ref.path));
+          const href = opts.href(p.dest, p.title);
+          return href ? `<a href="${escapeHtml(href)}">${label}</a>` : label;
+        }
         const src = opts.img(p.dest);
         if (!src) return '';
         const w = p.dest.match(WIDTH);

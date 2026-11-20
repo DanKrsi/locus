@@ -56,6 +56,21 @@ await call('make_reference', { path: 'notes/design-basis.md', heading: 'Factors 
 const bad = await client.callTool({ name: 'make_reference', arguments: { path: 'docs/BDS-100 Bracket Design Standard.pdf', quote: 'this sentence is not in the pdf' } });
 console.log(`${bad.isError ? 'ok  ' : 'FAIL'} make_reference rejects a quote that isn't there`);
 if (!bad.isError) failures++;
+await call('make_reference', { path: 'data/Bracket loads.xlsx', range: 'Margins!B2:C6', label: 'margins', embed: true }, /^!\[margins\]\(\/data\/Bracket loads\.xlsx#Margins!B2:C6&at=|^!\[margins\]\(<\/data\/Bracket loads\.xlsx#Margins!B2:C6&at=/);
+await call('make_reference', { path: 'docs/BDS-100 Bracket Design Standard.pdf', page: 5, embed: true }, /^!\[BDS-100 Bracket Design Standard p5\]\(<\/docs\/BDS-100 Bracket Design Standard\.pdf#page=5&at=/);
+for (const [args, what] of [
+  [{ path: 'data/Bracket loads.xlsx', embed: true }, 'a table in the note without a range'],
+  [{ path: 'src/net/client.py', lines: [1, 4], embed: true }, 'code shown in the note'],
+]) {
+  const r = await client.callTool({ name: 'make_reference', arguments: args });
+  console.log(`${r.isError ? 'ok  ' : 'FAIL'} make_reference rejects ${what}: ${r.content[0].text.slice(0, 90)}`);
+  if (!r.isError) failures++;
+}
+await call(
+  'validate_note',
+  { path: 'notes/embed-check.md', markdown: '# x\n\n![loads](</data/Bracket loads.xlsx#Margins!B2:C6>)\n\n![whole](</data/Bracket loads.xlsx>)\n' },
+  /No version recorded[\s\S]*needs a range|needs a range[\s\S]*No version recorded/,
+);
 await call('validate_note', { path: 'notes/review.md' }, /BROKEN[\s\S]*old analysis[\s\S]*MOVED[\s\S]*backoff\(\)|MOVED[\s\S]*BROKEN/);
 await call('file_history', { path: 'src/net/client.py' }, /Retry refactor/);
 await call(

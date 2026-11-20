@@ -2,9 +2,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   basename,
   defaultLabel,
+  embedKind,
   escapeLabel,
   fileKind,
   formatReference,
+  isEmbed,
   parseDestination,
   resolvePath,
   splitLinkTarget,
@@ -13,6 +15,7 @@ import {
   type Reference,
 } from '../core/link';
 import { mapLines } from '../core/remap';
+import { extractLinks } from '../core/mdlinks';
 import type { Citation, NoteLinkUpdate, Settings, SharingInfo, SyncResult, UpdateStatus, Version, WorkspaceInfo } from '../shared/api';
 import { ConflictDialog, GitHubOpenDialog, ShareDialog } from './ShareDialogs';
 import { HistoryDialog } from './HistoryDialog';
@@ -33,7 +36,8 @@ import { ExportDialog } from './ExportDialog';
 import type { CiteTarget } from './viewers/types';
 import { Icon, Logo } from './icons';
 import { newId, revealOf, type DocTab } from './model';
-import { allLinks, insertReference, replaceLink, setActiveLink, type LinkInfo, type RefStatus } from './notes/editor';
+import { allLinks, insertEmbed, insertReference, replaceLink, setActiveLink, type LinkInfo, type RefStatus } from './notes/editor';
+import { embedContent, embedReady, tableElement, type EmbedRequest } from './notes/embeds';
 import type { EditorView } from '@codemirror/view';
 import { renderHoverCard } from './notes/hoverCard';
 import { NotesPane, type NotesHandle } from './notes/NotesPane';
@@ -504,10 +508,11 @@ export function App() {
 
   // ---------- Documents ----------
 
-  const openDoc =(path: string, external: boolean, rev?: string, loc?: Location) => {
+  /** Opens a document at a place; with `draw`, ready to draw a new box or pick other cells there. */
+  const openDoc = (path: string, external: boolean, rev?: string, loc?: Location, draw = false) => {
     const tabs = live.current.docTabs;
     const existing = tabs.find((t) => t.path === path && t.external === external && sameRev(t.rev, rev));
-    const reveal = loc ? revealOf(loc) : undefined;
+    const reveal = loc ? { ...revealOf(loc), draw } : undefined;
     if (existing) {
       if (reveal) setDocTabs((ts) => ts.map((t) => (t.id === existing.id ? { ...t, reveal } : t)));
       setActiveDoc(existing.id);
@@ -785,7 +790,12 @@ export function App() {
     onFollow: (info: LinkInfo) => void followRef(info, notePath()),
     refStatus: (info: LinkInfo) => refStatus(info, notePath()),
     imageUrl: (info: LinkInfo) => imageUrl(info, notePath()),
-    renderHoverCard: (info: LinkInfo, view: import('@codemirror/view').EditorView) =>
+    embedContent: (info: LinkInfo, redraw: () => void) => embedContent(embedRequest(info, notePath()), redraw),
+    onEmbed: (info: LinkInfo, action: 'reselect' | 'link', view: EditorView) => {
+      if (action === 'link') replaceLink(view, info, formatReference(info.label, info.ref, info.title));
+      else void reselectEmbed(info, notePath(), view);
+    },
+    renderHoverCard:(info: LinkInfo, view: import('@codemirror/view').EditorView) =>
       renderHoverCard(info, view, {
         notePath: notePath(),
         terminology: live.current.settings?.terminology ?? 'simple',
@@ -824,6 +834,78 @@ export function App() {
       })
       .catch(() => undefined);
     return null;
+  };
+
+  // ---------- Embedded views ----------
+
+  /** What an embedded view draws: the file at its pinned version, or as it is now. */
+  const embedRequest = ({ ref }: { ref: Reference }, notePath: string): EmbedRequest => {
+    const external = ref.pathKind === 'external';
+    return { path: external ? ref.path : resolvePath(ref, notePath), external, rev: ref.rev, fallbackRev: ref.rev ? undefined : ref.at, loc: ref.loc };
+  };
+
+  /**
+   * Change area / Change cells: the file opens on the right at what the view shows (the version it
+   * is pinned to, or the latest), ready for a new box or other cells, and the notice's button
+   * writes the new place into the view. Its name, size, and live or pinned, stay as they are.
+   */
+  const reselectEmbed = async (info: LinkInfo, notePath: string, view: EditorView) => {
+    const ref = info.ref;
+    const external = ref.pathKind === 'external';
+    const path = external ? ref.path : resolvePath(ref, notePath);
+    const name = basename(path);
+    if (!ref.rev && !(await api.exists(path).catch(() => false)) && !(external && (await api.readExternal(path).then(() => true).catch(() => false))))
+      return showToast(`${name} isn't there any more, so there is nothing to pick from. Edit in the … menu can point the view at another file.`);
+    const table = embedKind(path) === 'table';
+    openDoc(path, external, ref.rev, ref.loc, true);
+    const dest = info.dest;
+    const use = async () => {
+      const tab = live.current.docTabs.find((t) => t.path === path && t.external === external && sameRev(t.rev, ref.rev));
+      const target = tab ? handles.current.get(tab.id)?.citeTarget() : null;
+      if (!target) return showToast(table ? 'Select the cells on the right first' : 'Open the file on the right first');
+      if (table && !target.loc.sheet) return showToast('Select the cells on the right first');
+      if (!view.dom.isConnected) {
+        setNotice(null);
+        return showToast('The note was closed, so the view was left as it was');
+      }
+      const link = allLinks(view.state).find((l) => l.image && l.dest === dest);
+      if (!link) {
+        setNotice(null);
+        return showToast('The view was changed or removed in the note meanwhile, so nothing was written');
+      }
+      let at = ref.at;
+      if (!external && !ref.rev) {
+        // Picked from the file as it is now: the view now cites that version.
+        const sha = await api.ensureVersion(path).catch(() => null);
+        if (sha) at = shortSha(sha);
+      }
+      const next: Reference = { ...ref, loc: target.loc, at: ref.rev ? undefined : at };
+      // The same place picked again keeps its quote when the viewer has none to give.
+      const same = JSON.stringify(target.loc) === JSON.stringify(ref.loc);
+      // A name Locus suggested names the old place, so it follows; one the user typed stays.
+      const suggested = link.label.trim() === defaultLabel(path, ref.loc).trim();
+      const label = suggested ? defaultLabel(path, target.loc, target.pageLabel) : link.label;
+      replaceLink(view, link, formatReference(label, next, target.quote ?? (same ? link.title : undefined), true));
+      setNotice(null);
+      forgetStatuses();
+      notes.current?.refresh();
+      if (!external && !ref.rev) void refreshVersions();
+      showToast(table ? 'The table shows the new cells' : 'The picture shows the new area');
+    };
+    setNotice({
+      text: table
+        ? `Select the cells this table should show in ${name}, then press Use these cells.`
+        : `Draw a box over what this picture should show in ${name}, then press Use this box.`,
+      help: table
+        ? 'Drag across the cells on the right; the table in the note will show their values. It stays live or pinned as it is, and keeps a name you gave it.'
+        : `The box it shows now is drawn on the right: drag a new one over it. Clear the box (×) to show the whole ${fileKind(path) === 'slides' ? 'slide' : 'page'}. The picture stays live or pinned as it is, and keeps a name you gave it.`,
+      notePath,
+      links: [{ dest, label: info.label.trim() || name }],
+      actions: [
+        { label: table ? 'Use these cells' : 'Use this box', run: () => void use() },
+        { label: 'Cancel', run: () => setNotice(null) },
+      ],
+    });
   };
 
   // ---------- Compare, citations, moved files ----------
@@ -921,7 +1003,8 @@ export function App() {
     const out: { link: LinkInfo; path: string; kind: 'version' | 'note' }[] = [];
     for (const l of allLinks(view.state)) {
       const ref = l.ref;
-      if (l.image || ref.rev || !ref.path || (ref.pathKind !== 'root' && ref.pathKind !== 'relative')) continue;
+      // A picture shows the file as it is on purpose; an embedded view is a reference like any other.
+      if ((l.image && !isEmbed(ref, true)) || ref.rev || !ref.path || (ref.pathKind !== 'root' && ref.pathKind !== 'relative')) continue;
       const path = resolvePath(ref, notePath);
       // A link to a heading of the note it is written in resolves and loses nothing: leave it be.
       if (path === notePath) continue;
@@ -996,7 +1079,7 @@ export function App() {
         if (!sha) continue;
         ref = { ...ref, at: shortSha(sha) };
       }
-      changes.push({ from: link.from, to: link.to, insert: formatReference(link.label, ref, link.title) });
+      changes.push({ from: link.from, to: link.to, insert: formatReference(link.label, ref, link.title, link.image) });
     }
     if (!changes.length) return;
     view.dispatch({ changes });
@@ -1029,7 +1112,7 @@ export function App() {
       .map((l) => ({
         from: l.from,
         to: l.to,
-        insert: formatReference(l.label, { ...l.ref, path: fixes.get(l.dest)!, pathKind: 'root' }, l.title),
+        insert: formatReference(l.label, { ...l.ref, path: fixes.get(l.dest)!, pathKind: 'root' }, l.title, l.image),
       }));
     view.dispatch({ changes });
     forgetStatuses();
@@ -1064,7 +1147,7 @@ export function App() {
 
   const tourLinks = () => {
     const view = notes.current?.activeView();
-    return view ? allLinks(view.state).filter((l) => !l.image && l.ref.pathKind !== 'web') : [];
+    return view ? allLinks(view.state).filter((l) => (!l.image || isEmbed(l.ref, true)) && l.ref.pathKind !== 'web') : [];
   };
 
   const tourGo = (i: number) => {
@@ -1112,11 +1195,17 @@ export function App() {
     setCitedRevs(map);
   };
 
-  const cite = async (tab?: DocTab) => {
+  /**
+   * Inserts a link to what is picked out in the document on the right. With `embed`, it goes in as
+   * an embedded view instead: a picture of the page, slide or box, or a table of the cells.
+   */
+  const cite = async (tab?: DocTab, embed = false) => {
     tab ??= live.current.docTabs.find((t) => t.id === live.current.activeDoc);
     if (!tab) return showToast('Open a document on the right first');
     const target = handles.current.get(tab.id)?.citeTarget();
     if (!target) return showToast('Nothing to cite yet');
+    if (embed && !embedKind(tab.path)) return showToast('Only PDFs, slide decks and spreadsheets can be shown in a note as a picture or table');
+    if (embed && embedKind(tab.path) === 'table' && !target.loc.sheet) return showToast('Select the cells to show first');
     // A flowchart takes the citation into a box; otherwise it goes into the active note.
     const flow = notes.current?.activeFlow() ?? null;
     let view = flow ? null : (notes.current?.activeView() ?? null);
@@ -1140,7 +1229,11 @@ export function App() {
       ref = { path: tab.path, pathKind: 'root', loc: target.loc, rev, at, extra: noteId ? withLinkNoteId([], noteId) : [] };
     }
     const label = defaultLabel(tab.path, target.loc, target.pageLabel);
-    if (flow) flow.insertCitation((l) => formatReference(l, ref, target.quote), label);
+    if (flow) {
+      flow.insertCitation((l) => formatReference(l, ref, target.quote), label);
+      // A flowchart box holds words and links, not pictures: it gets the link.
+      if (embed) showToast('Flowchart boxes show links, not pictures or tables, so a link went in');
+    } else if (embed) insertEmbed(view!, (l) => formatReference(l, ref, target.quote, true), label);
     else insertReference(view!, (l) => formatReference(l, ref, target.quote), label);
     if (!tab.external && !tab.rev) void refreshVersions();
     setTimeout(recomputeCited, 0);
@@ -1218,11 +1311,41 @@ export function App() {
   };
 
   /** Export a note as a web page or a PDF: what is on screen, with its pictures inside it. */
+  /**
+   * The embedded views of a note, drawn for an export: a picture as a data address, a table as its
+   * cells. Only the app can draw them; one it can't draw goes out as a link instead.
+   */
+  const embedsFor = async (notePath: string, text: string): Promise<Record<string, string>> => {
+    const out: Record<string, string> = {};
+    const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+    for (const l of extractLinks(text)) {
+      const ref = l.image ? parseDestination(l.dest) : undefined;
+      if (!ref || !isEmbed(ref, true) || l.dest in out) continue;
+      const content = await embedReady(embedRequest({ ref }, notePath)).catch(() => null);
+      const w = /[#&]w=(\d+)(?:&|$)/.exec(l.dest)?.[1];
+      const caption = `<span class="embed-caption">${esc(l.label || basename(ref.path))}</span>`;
+      if (content?.kind === 'picture') {
+        const data = await new Promise<string>((resolve) => {
+          const fr = new FileReader();
+          fr.onload = () => resolve(String(fr.result));
+          fr.onerror = () => resolve('');
+          fr.readAsDataURL(content.blob);
+        });
+        if (data) out[l.dest] = `<span class="embed"><img src="${data}" alt="${esc(l.label)}" width="${w ?? Math.round(content.width)}">${caption}</span>`;
+      } else if (content?.kind === 'table') {
+        const table = tableElement(content.table, !!w);
+        if (w) table.style.width = `${w}px`;
+        out[l.dest] = `<span class="embed">${table.outerHTML}${caption}</span>`;
+      }
+    }
+    return out;
+  };
+
   const exportNote = async (notePath: string, text: string, kind: 'html' | 'pdf' | 'folder') => {
     if (kind === 'folder') return setExporting({ notePath, markdown: text });
     showToast(kind === 'pdf' ? 'Making the PDF…' : 'Making the web page…');
     try {
-      const file = await api.exportNotePage(notePath, text, kind);
+      const file = await api.exportNotePage(notePath, text, kind, undefined, await embedsFor(notePath, text));
       if (!file) return;
       setNotice({ text: `Exported ${basename(file)}.`, actions: [{ label: 'Show in folder', run: () => void api.showInFolder(file) }] });
     } catch (e) {
@@ -1289,7 +1412,9 @@ export function App() {
     const noteId = isNote && !rev ? await api.ensureNoteId(target.path).catch(() => null) : null;
     const extra = samePath ? e.info.ref.extra.filter((x) => !x.startsWith('id=')) : [];
     const ref: Reference = { path: target.path, pathKind: 'root', loc: target.loc, rev, at, extra: noteId ? withLinkNoteId(extra, noteId) : extra };
-    replaceLink(e.view, e.info, formatReference(e.info.label, ref, target.quote));
+    // An embedded view stays one, if what it now points at can be shown (a picture stays a picture).
+    const keepEmbed = e.info.image && (!isEmbed(e.info.ref, true) || !!embedKind(target.path));
+    replaceLink(e.view, e.info, formatReference(e.info.label, ref, target.quote, keepEmbed));
     forgetStatuses();
     notes.current?.refresh();
     void refreshVersions();
@@ -1552,6 +1677,9 @@ export function App() {
       } else if (e.ctrlKey && e.shiftKey && k === 'l') {
         e.preventDefault();
         void cite();
+      } else if (e.ctrlKey && e.shiftKey && k === 'e') {
+        e.preventDefault();
+        void cite(undefined, true);
       } else if (e.ctrlKey && e.altKey && k === 'l') {
         e.preventDefault();
         openSectionLink();
@@ -1906,7 +2034,7 @@ export function App() {
                   return rest;
                 })
               }
-              onCite={(t) => void cite(t)}
+              onCite={(t, embed) => void cite(t, embed)}
               noteCallbacks={(path) => editorCallbacks(() => path)}
               onEditInNotes={(path) => void notes.current?.open(path)}
               citeMode={citeMode}

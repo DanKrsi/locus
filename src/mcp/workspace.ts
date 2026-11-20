@@ -4,8 +4,10 @@ import { promises as fs } from 'node:fs';
 import { basename as pathBase, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import {
   defaultLabel,
+  embedKind,
   fileKind,
   formatReference,
+  isEmbed,
   normalizePath,
   parseA1Range,
   parseDestination,
@@ -157,6 +159,8 @@ export interface ReferenceRequest {
   time?: string;
   version?: string;
   notePath?: string;
+  /** Show the place in the note (a picture of a PDF page or box, or a slide; a table of cells) instead of linking to it. */
+  embed?: boolean;
 }
 
 export interface ReferenceResult {
@@ -172,6 +176,7 @@ export async function makeReference(ws: Workspace, req: ReferenceRequest): Promi
   const pinned = req.version && req.version !== 'live' ? await git.resolveRev(ws.root, req.version) : undefined;
   if (!(await fileExists(ws, path, pinned))) throw new Error(`${path} doesn't exist${pinned ? ' in that version' : ''}`);
   const notes: string[] = [];
+  if (req.embed && !embedKind(path)) throw new Error(`${path} can't be shown in a note: only PDFs, slide decks and spreadsheets can (leave out embed to link to it)`);
   const loc: Location = {};
   let quote = req.quote?.trim() || undefined;
   let pageLabel: string | undefined;
@@ -283,7 +288,8 @@ export async function makeReference(ws: Workspace, req: ReferenceRequest): Promi
     }
   }
   const label = req.label?.trim() || defaultLabel(path, loc, pageLabel);
-  return { markdown: formatReference(label, reference, quote), location: describe(loc), version, notes };
+  if (req.embed && kind === 'sheet' && !loc.sheet) throw new Error('A table in the note needs the cells it shows: give range');
+  return { markdown: formatReference(label, reference, quote, !!req.embed), location: describe(loc), version, notes };
 }
 
 function roundRect(r: { x: number; y: number; w: number; h: number }) {
@@ -357,7 +363,7 @@ async function checkReference(
   ref: Reference,
   title: string | undefined,
   head: string | null,
-  /** Embedded images show the latest version on purpose, so they need no recorded version. */
+  /** Pictures shown in the note show the latest file on purpose, so they need no recorded version (views of a page, slide or cells still do). */
   image = false,
 ): Promise<Pick<LinkCheck, 'status' | 'detail'>> {
   if (ref.pathKind === 'external') {
@@ -374,7 +380,9 @@ async function checkReference(
   const rev = ref.rev;
   const warnings: string[] = [];
   if (ref.pathKind === 'relative') warnings.push('Relative path: prefer a workspace-root path starting with "/" so moving the note never breaks it');
-  if (!rev && !ref.at && ws.isRepo && !image && fileKind(path) !== 'markdown') warnings.push('No version recorded (at=): the app cannot follow this file through changes');
+  const embedded = isEmbed(ref, image);
+  if (embedded && fileKind(path) === 'sheet' && !ref.loc.sheet) return { status: 'broken', detail: 'A table shown in the note needs a range of cells' };
+  if (!rev && !ref.at && ws.isRepo && (!image || embedded) && fileKind(path) !== 'markdown') warnings.push('No version recorded (at=): the app cannot follow this file through changes');
 
   if (!(await fileExists(ws, path, rev))) {
     if (!rev && ref.at && (await fileExists(ws, path, ref.at))) return { status: 'broken', detail: `${path} existed at ${ref.at} but is gone now (moved or deleted)` };

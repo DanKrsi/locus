@@ -74,13 +74,19 @@ async function imagesOf(md: string, ctx: ExportContext): Promise<Map<string, str
 }
 
 /** The whole page for one note: markdown in, one HTML document out. */
-export async function noteToPage(markdown: string, ctx: ExportContext, workspaceName: string): Promise<{ html: string; title: string }> {
+export async function noteToPage(
+  markdown: string,
+  ctx: ExportContext,
+  workspaceName: string,
+  embeds: Record<string, string> = {},
+): Promise<{ html: string; title: string }> {
   const md = splitNoteId(markdown).body;
   const images = await imagesOf(md, ctx);
   const title = stem(ctx.notePath);
   const body = renderMarkdown(md, {
     href: (dest) => exportHref(dest, ctx),
     img: (dest) => images.get(dest) ?? null,
+    embed: (dest) => (Object.prototype.hasOwnProperty.call(embeds, dest) ? embeds[dest] : null),
     headingId: slugify,
   });
   const when = new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });

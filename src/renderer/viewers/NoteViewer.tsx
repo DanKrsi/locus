@@ -11,7 +11,7 @@ import { setEditorZoom } from '../zoom';
 import { CiteButton } from './CiteButton';
 import type { ViewerProps } from './types';
 
-export type NoteCallbacks = Pick<NoteEditorOptions, 'onFollow' | 'refStatus' | 'imageUrl' | 'renderHoverCard'>;
+export type NoteCallbacks = Pick<NoteEditorOptions, 'onFollow' | 'refStatus' | 'imageUrl' | 'renderHoverCard' | 'embedContent' | 'onEmbed'>;
 
 interface Props extends ViewerProps {
   callbacks: NoteCallbacks;

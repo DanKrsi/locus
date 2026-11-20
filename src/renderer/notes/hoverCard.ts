@@ -4,10 +4,12 @@ import {
   basename,
   colLetters,
   dirname,
+  embedKind,
   fileKind,
   formatReference,
   formatSheetRef,
   formatTime,
+  isEmbed,
   parseA1Range,
   resolvePath,
   type Location,
@@ -179,7 +181,11 @@ function fillCard(card: HTMLElement, info: LinkInfo, view: EditorView, ctx: Hove
     actions.append(b);
   };
   // Turns the link into the other kind, keeping its label, location and quote.
-  const relink = (ref: Reference) => replaceLink(view, info, formatReference(info.label, ref, info.title));
+  // An embedded view stays one (and a picture a picture).
+  const relink = (ref: Reference) => replaceLink(view, info, formatReference(info.label, ref, info.title, info.image));
+  const embedded = isEmbed(info.ref, info.image);
+  // A link to a page, slide or cells can be shown in the note instead (a table needs its cells).
+  const canEmbed = info.image || (embedKind(src.path) === 'table' && !info.ref.loc.sheet) ? null : embedKind(src.path);
   button('Open', 'primary', () => ctx.follow(info));
   // A note viewed read-only offers what doesn't change it.
   const editable = !view.state.readOnly;
@@ -192,11 +198,16 @@ function fillCard(card: HTMLElement, info: LinkInfo, view: EditorView, ctx: Hove
     if (editable) button(ctx.status.changed ? 'Pin to cited version' : 'Pin to this version', 'outline', () => relink({ ...info.ref, rev: at, at: undefined }));
   }
   if (editable && ctx.redraw && kind === 'pdf' && info.ref.loc.viewrect && !rev) button('Redraw area', 'outline', () => ctx.redraw!(info));
+  if (editable && embedded) button('Show as link', 'outline', () => replaceLink(view, info, formatReference(info.label, info.ref, info.title)));
+  else if (editable && canEmbed)
+    button(canEmbed === 'table' ? 'Show as table' : 'Show as picture', 'outline', () => replaceLink(view, info, formatReference(info.label, info.ref, info.title, true)));
   if (editable) {
     button('Rename', 'outline', () => renameLink(view, info));
     if (ctx.edit) button('Edit', 'outline', () => ctx.edit!(info, view));
     else button('Edit target', 'outline', () => revealLink(view, info));
-    button('Remove link', 'danger-text', () => removeLink(view, info));
+    // A view goes whole; a link leaves its words behind.
+    if (embedded) button('Remove', 'danger-text', () => replaceLink(view, info, ''));
+    else button('Remove link', 'danger-text', () => removeLink(view, info));
   }
   infoEl.append(actions);
   card.append(infoEl);

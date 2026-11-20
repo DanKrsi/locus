@@ -172,7 +172,8 @@ server.registerTool(
 - Spreadsheet: give range, e.g. "'Load cases'!B4:D12", "Margins!B2:C6" or a named range.
 - Markdown note: give heading.
 - Audio/video: give time "m:ss".
-version: omit for a live link to the latest file; pass a commit SHA to pin the link to that past version (use file_history to find SHAs).`,
+version: omit for a live link to the latest file; pass a commit SHA to pin the link to that past version (use file_history to find SHAs).
+embed=true shows the place in the note instead of linking to it: a picture of the PDF page (or the highlighted box) or slide, or a table of the spreadsheet range (read-only). Live views follow the file; pinned ones keep that version. Put it on a line of its own.`,
     inputSchema: {
       workspace: workspaceArg,
       path: z.string(),
@@ -186,6 +187,7 @@ version: omit for a live link to the latest file; pass a commit SHA to pin the l
       heading: z.string().optional(),
       time: z.string().optional(),
       version: z.string().optional(),
+      embed: z.boolean().optional().describe('PDF, PowerPoint or spreadsheet: show a picture of the page, box or slide, or a table of the range, in the note'),
     },
   },
   wrap(async (a) => {

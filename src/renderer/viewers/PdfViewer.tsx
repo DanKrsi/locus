@@ -145,8 +145,15 @@ export function PdfViewer({ data, reveal, onCite, handle, marks, onMark, onPlace
       // Keeping the sides of a comparison together: the same page and position, nothing marked.
       scrollToPage(loc.page, loc.viewrect?.y);
     } else if (loc.page) {
-      setCited({ page: loc.page, rect: loc.viewrect });
-      setArea(null);
+      if (reveal.draw) {
+        // Picking the place again: the box it has now is drawn, ready to be replaced.
+        setCited(null);
+        setArea(loc.viewrect ? { page: loc.page, rect: loc.viewrect } : null);
+        setAreaMode(true);
+      } else {
+        setCited({ page: loc.page, rect: loc.viewrect });
+        setArea(null);
+      }
       const el = scrollRef.current;
       // A tab just brought to the front has lost its scroll place, so there is nowhere to glide
       // from: it jumps, the same way as a first open.
@@ -301,7 +308,12 @@ export function PdfViewer({ data, reveal, onCite, handle, marks, onMark, onPlace
         </button>
         {area && <button className="icon" title="Clear the box" onClick={() => setArea(null)}><Icon name="x" /></button>}
         <div className="spacer" />
-        <CiteButton icon="pdf" label={area ? 'Cite area' : 'Cite page'} onCite={onCite} />
+        <CiteButton
+          icon="pdf"
+          label={area ? 'Cite area' : 'Cite page'}
+          onCite={onCite}
+          embed={{ label: 'Insert picture', icon: 'image', title: area ? 'Show a picture of this box in the note' : 'Show a picture of this page in the note (draw a box with Area for part of it)' }}
+        />
       </div>
       <div className="pdf-scroll" ref={scrollRef} onScroll={onScroll}>
         <div className="pdf-pages">

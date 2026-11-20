@@ -396,7 +396,13 @@ export function SheetViewer({ data, path, reveal, onCite, handle, onPlace, zoom 
         />
         <span className="muted" style={{ fontStyle: 'italic', fontFamily: 'Georgia, serif', padding: '0 4px' }}>fx</span>
         <div className="formula" title={focusCell?.formula}>{focusCell?.formula ?? ''}</div>
-        <CiteButton icon="grid" label="Cite range" title="Insert a link to these cells into the note (Ctrl+Shift+L)" onCite={onCite} />
+        <CiteButton
+          icon="grid"
+          label="Cite range"
+          title="Insert a link to these cells into the note (Ctrl+Shift+L)"
+          onCite={onCite}
+          embed={{ label: 'Insert table', icon: 'table', title: 'Show these cells in the note as a table of their values' }}
+        />
       </div>
       <div className="sheet">
         <div

@@ -19,6 +19,8 @@ export interface RevealRequest {
   nonce: number;
   /** Just show this place (keeping the sides of a comparison together): no citation highlight, no glide. */
   follow?: boolean;
+  /** Ready to pick the place again: the box drawn (and area drawing on), or the cells selected. */
+  draw?: boolean;
 }
 
 /** A place in this document that some note cites ("Cited in" markers). */

@@ -578,9 +578,9 @@ const api: Api = {
       }),
     );
   },
-  async exportNotePage(notePath, markdown, kind, file) {
+  async exportNotePage(notePath, markdown, kind, file, embeds) {
     const w = ws();
-    const page = await noteToPage(markdown, { root: w.root, notePath }, w.name);
+    const page = await noteToPage(markdown, { root: w.root, notePath }, w.name, embeds);
     if (!file) {
       const r = await dialog.showSaveDialog(win!, {
         title: kind === 'pdf' ? 'Export as PDF' : 'Export as a web page',

@@ -33,8 +33,9 @@ import { HighlightStyle, syntaxHighlighting, syntaxTree } from '@codemirror/lang
 import { searchKeymap, highlightSelectionMatches } from '@codemirror/search';
 import { tags } from '@lezer/highlight';
 import type { SyntaxNode } from '@lezer/common';
-import { escapeLabel, fileKind, parseDestination, splitLinkTarget, type Reference } from '../../core/link';
+import { basename, embedKind, escapeLabel, fileKind, isEmbed, parseDestination, splitLinkTarget, type Reference } from '../../core/link';
 import { iconSvg, kindIcon } from '../icons';
+import { tableElement, type EmbedContent } from './embeds';
 import { renderedTables } from './tables';
 import { editorZoom } from '../zoom';
 import { nestList, setHeading, toggleLinePrefix, toggleWrap } from './format';
@@ -76,6 +77,13 @@ export interface NoteEditorOptions {
   onCursor?(): void;
   /** Saves a pasted or dropped picture into the workspace and returns its path. */
   saveImage?(file: File): Promise<string | null>;
+  /**
+   * What an embedded view (a "!" link to a PDF, slide deck or workbook) shows now. `redraw` is
+   * called when that changes (the drawing landed, or the file changed), to show it.
+   */
+  embedContent?(info: LinkInfo, redraw: () => void): EmbedContent;
+  /** An embedded view's own buttons: pick the area or cells again, or show it as a plain link. */
+  onEmbed?(info: LinkInfo, action: 'reselect' | 'link', view: EditorView): void;
 }
 
 /** Ask the editor to rebuild decorations (e.g. after async link checks finish). */
@@ -232,6 +240,33 @@ export function insertReference(view: EditorView, build: (label: string) => stri
     changes: { from: sel.from, to: sel.to, insert: text },
     selection: EditorSelection.range(labelFrom, labelTo),
     effects: startRename.of({ labelFrom, labelTo, linkTo: sel.from + text.length, defaultLabel: label }),
+    scrollIntoView: true,
+    userEvent: 'input.cite',
+  });
+  view.focus();
+}
+
+/**
+ * Inserts an embedded view ("![label](…)") on a line of its own, after the line the cursor is on
+ * (or on it, when it is empty), and opens the rename box over its caption.
+ */
+export function insertEmbed(view: EditorView, build: (label: string) => string, defaultLabel: string) {
+  const { state } = view;
+  const line = state.doc.lineAt(state.selection.main.head);
+  const filled = (n: number) => n >= 1 && n <= state.doc.lines && !!state.doc.line(n).text.trim();
+  const blank = !line.text.trim();
+  const at = blank ? line.from : line.to;
+  // A paragraph of its own: a blank line between it and any text above or below.
+  const before = blank ? (filled(line.number - 1) ? '\n' : '') : '\n\n';
+  const text = build(defaultLabel);
+  const after = filled(line.number + 1) ? '\n' : '';
+  const start = at + before.length;
+  const labelFrom = start + 2;
+  const labelTo = labelFrom + escapeLabel(defaultLabel).length;
+  view.dispatch({
+    changes: { from: at, to: blank ? line.to : at, insert: before + text + after },
+    selection: EditorSelection.range(labelFrom, labelTo),
+    effects: startRename.of({ labelFrom, labelTo, linkTo: start + text.length, defaultLabel }),
     scrollIntoView: true,
     userEvent: 'input.cite',
   });
@@ -611,6 +646,261 @@ class ImageWidget extends WidgetType {
   }
 }
 
+/**
+ * A corner handle that resizes `frame` by dragging (the width is written into the link as "w=")
+ * and puts it back to its own size on a double-click.
+ */
+function resizeHandle(view: EditorView, wrap: HTMLElement, frame: HTMLElement, size: (w: number | null) => void): HTMLElement {
+  const handle = document.createElement('span');
+  handle.className = 'cm-image-handle';
+  handle.title = 'Drag to resize · double-click for full size';
+  handle.onmousedown = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const zoom = parseFloat(getComputedStyle(wrap).getPropertyValue('--zoom')) || 1;
+    const startX = e.clientX;
+    const startW = frame.getBoundingClientRect().width;
+    let moved = false;
+    wrap.classList.add('resizing');
+    const onMove = (ev: MouseEvent) => {
+      moved = true;
+      size(Math.max(40, Math.round((startW + ev.clientX - startX) / zoom)));
+    };
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      wrap.classList.remove('resizing');
+      // Never drawn wider than the note, so record what is actually shown.
+      if (moved) setImageWidth(view, wrap, Math.round(frame.getBoundingClientRect().width / zoom));
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  };
+  handle.ondblclick = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setImageWidth(view, wrap, null);
+  };
+  handle.onclick = (e) => e.stopPropagation();
+  return handle;
+}
+
+/** The details card of an embedded view, opened from its "…" button, until a click elsewhere. */
+function showEmbedCard(view: EditorView, anchor: HTMLElement, info: LinkInfo, opts: NoteEditorOptions) {
+  document.querySelector('.cm-embed-popover')?.remove();
+  const pop = document.createElement('div');
+  pop.className = 'cm-embed-popover';
+  pop.append(opts.renderHoverCard(info, view));
+  document.body.append(pop);
+  const a = anchor.getBoundingClientRect();
+  const w = pop.offsetWidth;
+  const h = pop.offsetHeight;
+  pop.style.left = `${Math.max(8, Math.min(a.right - w, window.innerWidth - w - 8))}px`;
+  pop.style.top = `${a.bottom + h + 8 > window.innerHeight ? Math.max(8, a.top - h - 4) : a.bottom + 4}px`;
+  const close = () => {
+    pop.remove();
+    window.removeEventListener('mousedown', outside, true);
+    window.removeEventListener('keydown', key, true);
+    view.scrollDOM.removeEventListener('scroll', close);
+  };
+  const outside = (e: MouseEvent) => {
+    if (!pop.contains(e.target as Node)) close();
+  };
+  const key = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      e.stopPropagation();
+      close();
+    }
+  };
+  // A button in the card does its work and the card goes.
+  pop.addEventListener('click', (e) => {
+    if ((e.target as HTMLElement).closest('button')) setTimeout(close, 0);
+  });
+  setTimeout(() => {
+    window.addEventListener('mousedown', outside, true);
+    window.addEventListener('keydown', key, true);
+    view.scrollDOM.addEventListener('scroll', close, { passive: true });
+  }, 0);
+}
+
+/**
+ * An embedded view: the picture of a box on a PDF page or slide, or the cells of a range, drawn
+ * from the file (UI spec §4.9). It shows the source and whether it is live or pinned under it;
+ * clicking it opens the file at that place, and its tools appear while the pointer is over it.
+ * Nothing in it can be edited: the cells are the workbook's, shown as they are.
+ */
+class EmbedWidget extends WidgetType {
+  constructor(
+    readonly info: LinkInfo,
+    readonly content: EmbedContent,
+    readonly width: number | null,
+    readonly status: RefStatus,
+    readonly opts: NoteEditorOptions,
+  ) {
+    super();
+  }
+  eq(o: EmbedWidget) {
+    const sameContent = o.content === this.content || (o.content.kind === 'loading' && this.content.kind === 'loading');
+    return (
+      sameContent &&
+      o.info.dest === this.info.dest &&
+      o.info.label === this.info.label &&
+      o.info.title === this.info.title &&
+      o.width === this.width &&
+      o.status.state === this.status.state &&
+      o.status.changed === this.status.changed &&
+      o.status.reason === this.status.reason
+    );
+  }
+  toDOM(view: EditorView) {
+    const { info, content, status, opts } = this;
+    const el = (tag: string, cls: string, text?: string) => {
+      const e = document.createElement(tag);
+      e.className = cls;
+      if (text !== undefined) e.textContent = text;
+      return e;
+    };
+    const zoomed = (px: number) => `calc(${Math.round(px)}px * var(--zoom, 1))`;
+    const isTable = embedKind(info.ref.path) === 'table';
+    const wrap = el('span', `cm-embed ${content.kind}${isTable ? ' is-table' : ''}`);
+    const frame = el('span', 'cm-embed-frame');
+    const fresh = () => linkAt(view.state, view.posAtDOM(wrap)) ?? info;
+    let note: string | undefined;
+    let resizable = false;
+    if (content.kind === 'picture') {
+      const img = document.createElement('img');
+      img.className = 'cm-embed-picture';
+      img.alt = info.label;
+      img.draggable = false;
+      img.addEventListener('load', () => view.requestMeasure());
+      img.src = content.url;
+      frame.style.width = zoomed(this.width ?? content.width);
+      frame.append(img);
+      note = content.note;
+      resizable = true;
+    } else if (content.kind === 'table') {
+      const scroller = el('span', 'cm-embed-table-scroll');
+      scroller.append(tableElement(content.table, this.width !== null));
+      if (this.width) frame.style.width = zoomed(this.width);
+      frame.append(scroller);
+      const cut = content.table.cut;
+      if (cut) {
+        const parts = [];
+        if (cut.rows > cut.shownRows) parts.push(`the first ${cut.shownRows} of ${cut.rows} rows`);
+        if (cut.cols > cut.shownCols) parts.push(`the first ${cut.shownCols} of ${cut.cols} columns`);
+        frame.append(el('span', 'cm-embed-cut', `Showing ${parts.join(' and ')}. Open the workbook to see them all.`));
+      }
+      note = content.note;
+      resizable = true;
+    } else if (content.kind === 'loading') {
+      if (content.width) frame.style.width = zoomed(this.width ?? content.width);
+      if (content.ratio) frame.style.aspectRatio = String(1 / content.ratio);
+      frame.append(el('span', 'cm-embed-wait', isTable ? 'Reading the cells…' : 'Drawing…'));
+    } else {
+      const head = el('span', 'cm-embed-msg', content.message);
+      frame.append(head, el('span', 'cm-embed-help', content.help));
+    }
+    // Clicking what it shows opens the file there (a drag to select a value doesn't).
+    let down: { x: number; y: number } | null = null;
+    frame.addEventListener('mousedown', (e) => {
+      down = e.button === 0 ? { x: e.clientX, y: e.clientY } : null;
+    });
+    frame.addEventListener('click', (e) => {
+      if (!down || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 4) return;
+      const sel = window.getSelection();
+      if (sel && !sel.isCollapsed && frame.contains(sel.anchorNode)) return;
+      e.preventDefault();
+      opts.onFollow(fresh());
+    });
+    frame.title = content.kind === 'error' ? '' : 'Click to open the file at this place';
+
+    const caption = el('span', 'cm-embed-caption');
+    const icon = el('span', 'cm-embed-icon');
+    icon.innerHTML = iconSvg(kindIcon(fileKind(info.ref.path)));
+    const label = el('span', 'cm-embed-label', info.label || basename(info.ref.path));
+    label.title = 'Click to open the file at this place';
+    label.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      opts.onFollow(fresh());
+    });
+    caption.append(icon, label);
+    const external = info.ref.pathKind === 'external';
+    const mode = el('span', 'cm-embed-mode ' + (external ? 'outside' : info.ref.rev ? 'pinned' : 'live'), external ? 'Outside the workspace' : info.ref.rev ? 'Pinned' : 'Live');
+    mode.title = external
+      ? 'A file outside the workspace: shown as it is now, with no versions.'
+      : info.ref.rev
+        ? 'Pinned: always shows the version it is pinned to, even after the file changes.'
+        : 'Live: shows the file as it is now, and draws again when it changes.';
+    caption.append(mode);
+    if (status.changed) {
+      const changed = el('span', 'cm-embed-changed', 'Changed');
+      changed.title = `${status.reason ?? 'Changed since it was cited'}. The … menu can update the link or compare the versions.`;
+      caption.append(changed);
+    }
+
+    const tools = el('span', 'cm-embed-tools');
+    const tool = (text: string, title: string, run: (b: HTMLElement) => void) => {
+      const b = el('button', 'cm-embed-tool', text);
+      b.title = title;
+      b.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      });
+      b.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        run(b);
+      });
+      tools.append(b);
+    };
+    tool('Open', 'Open the file at this place on the right', () => opts.onFollow(fresh()));
+    if (!view.state.readOnly && opts.onEmbed) {
+      tool(
+        isTable ? 'Change cells' : 'Change area',
+        isTable ? 'Open the workbook and pick the cells this table shows' : 'Open the file and draw the box this picture shows',
+        () => opts.onEmbed!(fresh(), 'reselect', view),
+      );
+      tool('Show as link', 'Turn this view back into a plain link (the same reference, nothing lost)', () => opts.onEmbed!(fresh(), 'link', view));
+    }
+    tool('…', 'More: pin or make live, compare, rename, edit, remove', (b) => showEmbedCard(view, b, fresh(), opts));
+
+    caption.append(tools);
+    wrap.append(frame, caption);
+    if (note) wrap.append(el('span', 'cm-embed-note', note));
+    if (resizable && !view.state.readOnly) {
+      frame.append(
+        resizeHandle(view, wrap, frame, (w) => {
+          frame.style.width = w === null ? '' : zoomed(w);
+        }),
+      );
+    }
+    return wrap;
+  }
+  ignoreEvent() {
+    return true;
+  }
+}
+
+/** One redraw per editor, at most once a frame, however many embedded views land at once. */
+const redrawers = new WeakMap<EditorView, () => void>();
+function redrawer(view: EditorView): () => void {
+  let fn = redrawers.get(view);
+  if (!fn) {
+    let queued = false;
+    fn = () => {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(() => {
+        queued = false;
+        if (view.dom.isConnected) view.dispatch({ effects: refreshEffect.of(null) });
+      });
+    };
+    redrawers.set(view, fn);
+  }
+  return fn;
+}
+
 /** A picture on the clipboard or in a drop, if there is one. */
 function imageFiles(data: DataTransfer | null): File[] {
   return data ? [...data.files].filter((f) => f.type.startsWith('image/')) : [];
@@ -805,6 +1095,11 @@ function buildDecorations(view: EditorView, opts: NoteEditorOptions): Preview {
             if (revealed && revealed.from === info.from) {
               const paren = state.sliceDoc(info.labelTo, info.labelTo + 2) === '](' ? info.labelTo : -1;
               if (paren >= 0) decos.push(markCls('cm-mdmark').range(paren, info.to));
+              return false;
+            }
+            if (info.image && opts.embedContent && isEmbed(info.ref, true)) {
+              const widget = new EmbedWidget(info, opts.embedContent(info, redrawer(view)), imageWidth(info.dest), opts.refStatus(info), opts);
+              object(Decoration.replace({ widget }), info.from, info.to);
               return false;
             }
             if (info.image) {

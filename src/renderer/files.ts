@@ -26,9 +26,17 @@ export function loadBytes(src: FileSource): Promise<Uint8Array> {
   return p;
 }
 
+const forgetting = new Set<() => void>();
+
+/** Called whenever working-copy reads are forgotten: whatever was drawn from them should look again. */
+export function onInvalidate(fn: () => void) {
+  forgetting.add(fn);
+}
+
 /** Forget cached working-copy reads (after files change on disk). Past versions never change. */
 export function invalidateLatest() {
   for (const key of [...cache.keys()]) if (key.endsWith('@latest')) cache.delete(key);
+  for (const fn of forgetting) fn();
 }
 
 export function decodeText(bytes: Uint8Array): { text: string; bom: boolean; eol: string } {

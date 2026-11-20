@@ -9,7 +9,7 @@
 // back: file writes to it are refused, pointing Claude at edit_note, which changes the editor
 // itself (undoable, never over unsaved typing).
 import { app } from 'electron';
-import { spawn, type ChildProcess } from 'node:child_process';
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import { isAbsolute, join, relative } from 'node:path';
 import type { ChatAnswer, ChatEvent, ChatItem, ChatStart } from '../shared/api';
@@ -165,7 +165,8 @@ function resultText(content: unknown): string {
   return '';
 }
 
-const signInWords = /not logged in|log ?in|\/login|sign ?in|authenticat|oauth|api key|credit balance|subscription/i;
+// Only Claude Code's own "not signed in" message: usage limits and billing are other problems.
+const signInWords = /not logged in|\/login\b/i;
 
 function onMessage(m: Record<string, unknown>) {
   const type = m.type;
@@ -333,6 +334,10 @@ async function startProcess(cwd: string, resume?: string): Promise<ChatStart> {
   p.on('exit', (code) => {
     if (proc !== p) return;
     proc = null;
+    for (const [id] of pending) {
+      const item = items.find((x) => x.id === id);
+      if (item?.t === 'ask') upsert({ ...item, answer: 'cancelled' });
+    }
     pending.clear();
     const wasBusy = busy;
     if (wasBusy || !started) {
@@ -388,8 +393,12 @@ export function chatInterrupt() {
   write({ type: 'control_request', request_id: nextId('int'), request: { subtype: 'interrupt' } });
 }
 
-/** Ends the session; with `clear` the conversation goes too (New chat, or another workspace). */
-export function chatStop(clear = false) {
+/**
+ * Ends the session; with `clear` the conversation goes too (New chat, or another workspace). With
+ * `now` (the window closing, Locus quitting) it is ended at once rather than given a moment to
+ * finish: no timer would outlive Locus to do it.
+ */
+export function chatStop(clear = false, now = false) {
   const p = proc;
   proc = null;
   pending.clear();
@@ -401,11 +410,14 @@ export function chatStop(clear = false) {
     }
     // Only this process and what it started: taskkill /t on its own pid.
     const pid = p.pid;
-    setTimeout(() => {
+    const kill = () => {
       if (p.exitCode !== null || !pid) return;
-      if (process.platform === 'win32') spawn('taskkill', ['/pid', String(pid), '/t', '/f'], { windowsHide: true, stdio: 'ignore' }).on('error', () => undefined);
-      else p.kill();
-    }, 1500);
+      if (process.platform !== 'win32') p.kill();
+      else if (now) spawnSync('taskkill', ['/pid', String(pid), '/t', '/f'], { windowsHide: true, stdio: 'ignore', timeout: 5000 });
+      else spawn('taskkill', ['/pid', String(pid), '/t', '/f'], { windowsHide: true, stdio: 'ignore' }).on('error', () => undefined);
+    };
+    if (now) kill();
+    else setTimeout(kill, 1500);
   }
   if (busy) setBusy(false);
   if (clear) {

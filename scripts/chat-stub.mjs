@@ -10,7 +10,7 @@
 //   save <name>           -> save_version (asks first)
 //   write <path> <text>   -> the built-in Write tool on a file (asks first, unless Locus refuses)
 //   slow                  -> streams for a long time (for Stop)
-//   signin | crash        -> a "not logged in" result / dies at once
+//   signin | limit | crash | askcrash -> a "not logged in" result / a usage-limit result / dies at once / dies while asking
 // Everything it does goes to LOCUS_STUB_OUT (JSON lines) for the test to read.
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, join } from 'node:path';
@@ -84,6 +84,17 @@ async function turn(text) {
   if (t === 'crash') {
     process.stderr.write('Something broke inside the stand-in.\n');
     process.exit(3);
+  }
+  if (t === 'askcrash') {
+    // Asks to change something, then dies before the answer.
+    emit({ type: 'control_request', request_id: randomUUID(), request: { subtype: 'can_use_tool', tool_name: 'Bash', display_name: 'Bash', input: { command: 'echo hi', description: 'Say hi' } } });
+    await sleep(400);
+    process.stderr.write('The stand-in died while asking.\n');
+    process.exit(4);
+  }
+  if (t === 'limit') {
+    emit({ type: 'result', subtype: 'success', is_error: true, result: "You've hit your usage limit for your subscription. It resets at 5pm.", total_cost_usd: 0 });
+    return;
   }
   if (t === 'signin') {
     emit({ type: 'result', subtype: 'success', is_error: true, result: 'Not logged in · Please run /login', total_cost_usd: 0 });

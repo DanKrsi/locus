@@ -135,6 +135,9 @@ try {
   });
   check(!!docTab, 'a link in the reply opens its place in the viewer');
 
+  const outside = await win.evaluate(() => window.__locusLive.show('[ini](<C:/Windows/win.ini>)'));
+  check(/outside the workspace/.test(outside), `show opens nothing outside the workspace for Claude (${outside.slice(0, 60)}…)`);
+
   // ---- Looking needs no approval ----
   await send('view');
   check((await asks().count()) === 0, 'current_view runs without asking');
@@ -271,6 +274,8 @@ try {
   await send('signin');
   const signin = win.locator('.chat-problem.signin').last();
   check((await signin.count()) === 1 && /never handles your sign-in/.test(await signin.textContent()) && /\/login/.test(await signin.textContent()), 'a sign-in problem says what to do, and that Locus never handles the sign-in');
+  await send('limit');
+  check((await win.locator('.chat-problem').last().getAttribute('class')).includes('error') && /usage limit/.test(await win.locator('.chat-problem').last().textContent()), 'a usage limit is shown as it is, not as a sign-in problem');
   await signin.getByRole('button', { name: 'Open the terminal' }).click();
   check(await win.locator('.claude-modes [role="tab"][aria-selected="true"]', { hasText: 'Terminal' }).isVisible(), '“Open the terminal” switches to the terminal');
   await win.locator('.claude-modes').getByRole('tab', { name: 'Chat' }).click();
@@ -286,6 +291,13 @@ try {
   check(!!(await until(async () => (await win.locator('.chat-user').count()) === count, 8000)), 'reloading the window keeps the chat');
   await send('after reload');
   check(/GOT: after reload/.test(await lastClaude()) && (await starts()).length === 1, '…and the same Claude Code session answers');
+  // A change from before the reload can't be mistaken for one made after it.
+  await send('edit Loads come => Loads all come');
+  check((await buffer()).includes('Loads all come'), 'a change after the reload is made (still allowed for this chat)');
+  const firstRow = win.locator('.chat-tool').filter({ hasText: 'Changed the open note', has: win.getByRole('button', { name: 'Undo' }) }).first();
+  await firstRow.getByRole('button', { name: 'Undo' }).click();
+  await win.waitForTimeout(300);
+  check((await buffer()).includes('Loads all come') && /no longer known/.test(await firstRow.textContent()), 'Undo on a change from before the reload leaves the newer change alone, and says why');
 
   // ---- A crash: explained, and the next message picks the conversation back up ----
   await send('crash');
@@ -294,6 +306,12 @@ try {
   await send('after crash');
   const all = await starts();
   check(all.length === 2 && all[1].resume && /GOT: after crash/.test(await lastClaude()), `the next message starts Claude Code again, resuming the conversation (${all.length} sessions, resume ${all[1]?.resume})`);
+
+  // ---- Dying with a question open: the card closes ----
+  await send('askcrash', false);
+  await asks().last().waitFor({ timeout: 10000 });
+  await idle();
+  check((await win.locator('.chat-ask').count()) === 0 && /Not asked any more/.test(await win.locator('.chat-asked').last().textContent()) && !(await win.locator('.chat-working').count()), 'a question open when Claude Code stops is closed, not left waiting');
 
   // ---- New chat ----
   await win.locator('.claude-head button[title^="New chat"]').click();
@@ -305,6 +323,20 @@ try {
   check(!!ended, 'the old session was ended');
 
   check(errors.length === 0, `no page errors${errors.length ? ': ' + errors.join(' | ') : ''}`);
+
+  // ---- Quitting mid-reply ends Claude Code ----
+  await send('slow', false);
+  await until(async () => (await win.locator('.chat-claude.streaming').count()) > 0, 5000);
+  const live = (await starts()).pop();
+  await app.close();
+  const gone = await (async () => {
+    for (let i = 0; i < 20; i++) {
+      if (!(await pidAlive(live?.pid))) return true;
+      await new Promise((r) => setTimeout(r, 200));
+    }
+    return false;
+  })();
+  check(gone, 'quitting Locus while Claude is replying ends Claude Code');
 } catch (e) {
   console.log('FAIL', e);
   failures++;

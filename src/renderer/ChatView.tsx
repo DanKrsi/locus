@@ -265,7 +265,7 @@ export function ChatText({ text, onLink }: { text: string; onLink(link: string):
 // ---------- The chat ----------
 
 /** "(Locus change c3)" at the end of a tool result: the change Show and Undo act on. */
-const changeIdOf = (text: string) => text.match(/\(Locus change (c\d+)\)\s*$/)?.[1] ?? null;
+const changeIdOf = (text: string) => text.match(/\(Locus change (c[0-9a-z]+)\)\s*$/)?.[1] ?? null;
 
 function ToolRow({ item, onChange }: { item: Extract<ChatItem, { t: 'tool' }>; onChange(id: string, action: 'show' | 'undo'): Promise<string | null> }) {
   const [open, setOpen] = useState(false);
@@ -298,7 +298,7 @@ function ToolRow({ item, onChange }: { item: Extract<ChatItem, { t: 'tool' }>; o
         )}
       </div>
       {msg && <div className="chat-tool-msg">{msg}</div>}
-      {open && item.result?.text && <pre className="chat-tool-out">{item.result.text.replace(/\n?\(Locus change c\d+\)\s*$/, '')}</pre>}
+      {open && item.result?.text && <pre className="chat-tool-out">{item.result.text.replace(/\n?\(Locus change c[0-9a-z]+\)\s*$/, '')}</pre>}
     </div>
   );
 }

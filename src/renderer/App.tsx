@@ -1663,6 +1663,9 @@ export function App() {
       const ref = parseDestination(dest);
       if (!ref || !dest) return `"${text}" is not a Locus link or destination.`;
       if (ref.pathKind === 'web') return 'That is a web address; show opens places in the workspace.';
+      // Claude sees what is shown (screenshot, current_view), so it opens nothing outside the workspace the user hasn't opened.
+      if (ref.pathKind === 'external' && !live.current.docTabs.some((t) => t.external && t.path === ref.path))
+        return `${ref.path} is outside the workspace. Locus opens only workspace files for Claude; the user can open that one with Open.`;
       const notePath = notes.current?.activePath() ?? '/';
       const path = ref.path ? (ref.pathKind === 'external' ? ref.path : resolvePath(ref, notePath)) : notePath;
       if (ref.path && ref.pathKind !== 'external' && !ref.rev && !(await api.exists(path).catch(() => false)) && !ref.at)
@@ -1685,6 +1688,8 @@ export function App() {
   /** Changes Claude made, by id, and the note each is in (for Show and Undo in the chat). */
   const claudeChanges = useRef(new Map<string, string>());
   const claudeSeq = useRef(0);
+  /** Ids stay unique across reloads (main keeps the chat, with the ids of earlier changes in it). */
+  const claudeRun = useRef(Date.now().toString(36));
 
   /** A note Claude names ("/notes/a.md", "notes/a.md"), or the one open. */
   const noteFor = (given: unknown): string | null => {
@@ -1795,7 +1800,7 @@ export function App() {
     }
     specs.sort((a, b) => a.from - b.from);
     for (let i = 1; i < specs.length; i++) if (specs[i].from < specs[i - 1].to) return { error: 'Two of the edits overlap. Make them one edit. Nothing was changed.' };
-    const id = `c${++claudeSeq.current}`;
+    const id = `c${claudeRun.current}x${++claudeSeq.current}`;
     const ranges = applyClaudeChange(view, specs, id);
     return changed(path!, id, ranges, view, `Made ${specs.length} change${specs.length === 1 ? '' : 's'}`);
   };
@@ -1862,7 +1867,7 @@ export function App() {
       pos = doc.length;
       insert = blockGap(doc, pos) + text.replace(/\n+$/, '') + '\n';
     }
-    const id = `c${++claudeSeq.current}`;
+    const id = `c${claudeRun.current}x${++claudeSeq.current}`;
     const ranges = applyClaudeChange(view, { from: pos, insert }, id);
     return changed(path!, id, ranges, view, 'Added the text');
   };
@@ -1895,7 +1900,7 @@ export function App() {
       const before = doc.slice(Math.max(0, pos - 1), pos);
       insert = (before && !/\s/.test(before) ? ' ' : '') + link;
     }
-    const id = `c${++claudeSeq.current}`;
+    const id = `c${claudeRun.current}x${++claudeSeq.current}`;
     const ranges = applyClaudeChange(view, { from: pos, insert }, id);
     citedNow(parts.tab);
     return changed(path!, id, ranges, view, `Cited ${parts.tab.path}${embed ? ' as an embedded view' : ''}: ${link}`) ;

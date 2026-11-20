@@ -380,7 +380,7 @@ const api: Api = {
   },
   async installUpdate() {
     stopTerminal();
-    chatStop();
+    chatStop(false, true);
     installUpdate();
   },
   async terminalStart(kind, cols, rows) {
@@ -827,7 +827,7 @@ function createWindow() {
   win.loadURL('app://renderer/index.html');
   win.on('closed', () => {
     stopTerminal();
-    chatStop(true);
+    chatStop(true, true);
     setLivePage(null);
     win = null;
   });
@@ -919,5 +919,5 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => app.quit());
 app.on('before-quit', () => {
   stopTerminal();
-  chatStop();
+  chatStop(false, true);
 });

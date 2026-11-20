@@ -432,13 +432,14 @@ try {
   check(namedRange.kind === 'table' && namedRange.rows > 1, 'a named range is drawn as its cells');
   const csv = await settle('csv');
   check(csv.kind === 'table' && csv.rows === 3, 'a CSV range is drawn as a table');
+  await find('twice');
   const inTable = await win.evaluate(() => {
     const s = [...document.querySelectorAll('[data-pane="notes"] .cm-scroller')].find((x) => x.offsetParent);
-    const cell = [...s.querySelectorAll('td, .cm-table-cell, [class*="table"]')].find((e) => /in a table/.test(e.textContent ?? ''));
-    return cell ? (cell.closest('table, [class*="table"]')?.textContent ?? '').slice(0, 200) : 'no table';
+    const table = [...s.querySelectorAll('.cm-md-table')].find((e) => /in a table/.test(e.textContent ?? ''));
+    if (!table) return { found: false };
+    return { found: true, chip: [...table.querySelectorAll('.cm-ref')].some((r) => r.textContent.trim() === 'cell'), raw: /!\[cell\]\(/.test(table.textContent), img: !!table.querySelector('img') };
   });
-  console.log(`     note table with a view: ${JSON.stringify(inTable)}`);
-  check(!/!\[cell\]\(/.test(inTable) || /cell/.test(inTable), 'a view in a note table cell does not break the table');
+  check(inTable.found && inTable.chip && !inTable.raw && !inTable.img, `a view in a note table cell shows as a link (${JSON.stringify(inTable)})`);
   const tw = await settle('twice');
   const tw2 = await settle('twice too');
   check(tw.kind === 'picture' && tw2.kind === 'picture' && tw.w > 0 && tw2.w > 0, 'the same view twice is drawn twice');
@@ -567,6 +568,19 @@ try {
     const tools = await right.first().locator('.cm-embed-tool').allTextContents();
     const handle = await right.first().locator('.cm-image-handle').count();
     check(!tools.some((t) => /Change|Show as link/.test(t)) && handle === 0, `the read-only note on the right shows its views with only Open and … (${tools.join(', ')})`);
+    await win.locator('[data-pane="docs"] .viewer:not(.hidden) .cm-scroller').evaluate((x) => (x.scrollTop = x.scrollHeight));
+    await win.waitForTimeout(1500);
+    const fit = await win.locator('[data-pane="docs"] .viewer:not(.hidden) .cm-scroller').evaluate((x) => {
+      const right = x.getBoundingClientRect().right;
+      const wrap = x.closest('.editor-wrap');
+      return {
+        by: x.scrollWidth - x.clientWidth,
+        shifted: wrap.scrollLeft + x.scrollLeft,
+        over: [...x.querySelectorAll('.cm-embed')].filter((e) => e.getBoundingClientRect().right > right + 1).length,
+        widest: Math.max(0, ...[...x.querySelectorAll('.cm-embed img')].map((i) => i.naturalWidth)),
+      };
+    });
+    check(fit.by <= 1 && !fit.shifted && !fit.over && fit.widest > 700, `…and wide pictures fit the pane there too (${JSON.stringify(fit)})`);
   } else check(false, 'the note opened on the right shows its views');
 
   // ---- A view in a flowchart box ----

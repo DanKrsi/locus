@@ -23,6 +23,7 @@ import { watchWorkspace, type Watcher } from './watch';
 import { checkForUpdates, installUpdate, startUpdates, updateStatus } from './update';
 import { onTerminalOutput, resizeTerminal, startTerminal, stopTerminal, terminalRunning, writeTerminal } from './terminal';
 import { setLivePage } from './live';
+import { chatAnswer, chatInterrupt, chatSend, chatState, chatStop, forgetClaudeTools, onChatEvent } from './chat';
 
 const RENDERER_DIR = join(__dirname, '..', 'renderer');
 const WORKSPACE_DIR = '.locus';
@@ -152,7 +153,10 @@ async function openWorkspaceAt(dir: string): Promise<WorkspaceInfo> {
   }
   await git.ensureIdentity(root);
   // The Claude panel's session runs in the workspace folder, so it ends with the workspace.
-  if (workspace?.root !== root) stopTerminal(true);
+  if (workspace?.root !== root) {
+    stopTerminal(true);
+    chatStop(true);
+  }
   workspace = { root, name: meta.name, managed: meta.managed };
   watchFiles(root);
   const settings = await loadSettings();
@@ -362,6 +366,7 @@ const api: Api = {
     return claudeStatus();
   },
   async connectClaude(target) {
+    forgetClaudeTools();
     return connectClaude(target);
   },
   async restartClaudeDesktop() {
@@ -375,6 +380,7 @@ const api: Api = {
   },
   async installUpdate() {
     stopTerminal();
+    chatStop();
     installUpdate();
   },
   async terminalStart(kind, cols, rows) {
@@ -389,6 +395,22 @@ const api: Api = {
   },
   async terminalStop() {
     stopTerminal();
+  },
+  async chatState() {
+    return chatState(workspace?.root ?? null);
+  },
+  async chatSend(text) {
+    if (!workspace) return { ok: false, reason: 'no-workspace' };
+    return chatSend(workspace.root, String(text ?? ''));
+  },
+  async chatAnswer(id, answer) {
+    chatAnswer(String(id), answer === 'always' ? 'always' : answer === 'allow' ? 'allow' : 'deny');
+  },
+  async chatInterrupt() {
+    chatInterrupt();
+  },
+  async chatNew() {
+    chatStop(true);
   },
   async terminalState() {
     const t = terminalRunning();
@@ -805,6 +827,7 @@ function createWindow() {
   win.loadURL('app://renderer/index.html');
   win.on('closed', () => {
     stopTerminal();
+    chatStop(true);
     setLivePage(null);
     win = null;
   });
@@ -822,10 +845,17 @@ async function askPage(script: string): Promise<unknown> {
   return win.webContents.executeJavaScript(script, true);
 }
 setLivePage({
+  call: (name, args) => askPage(`window.__locusLive ? window.__locusLive.call(${JSON.stringify(name)}, ${JSON.stringify(args ?? {})}) : { error: 'Locus is still starting.' }`),
+  capture: async (rect) => {
+    if (!win || win.isDestroyed()) return null;
+    const r = rect ? { x: Math.max(0, Math.round(rect.x)), y: Math.max(0, Math.round(rect.y)), width: Math.max(1, Math.round(rect.width)), height: Math.max(1, Math.round(rect.height)) } : undefined;
+    return win.webContents.capturePage(r);
+  },
   view: () => askPage('window.__locusLive ? window.__locusLive.view() : null'),
   show: async (dest) => String((await askPage(`window.__locusLive ? window.__locusLive.show(${JSON.stringify(String(dest))}) : 'Locus is still starting.'`)) ?? 'Nothing happened.'),
 });
 onTerminalOutput(tell);
+onChatEvent(tell);
 
 /** A .locus file, a folder, or a locus://open?repo=owner/name link passed on the command line. */
 function openRequestFrom(argv: string[]): string | null {
@@ -887,4 +917,7 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => app.quit());
-app.on('before-quit', () => stopTerminal());
+app.on('before-quit', () => {
+  stopTerminal();
+  chatStop();
+});

@@ -541,45 +541,112 @@ starts, and downloads it in the background without asking.
 
 ### 6.3 Claude panel
 
-**Claude** in the header opens a panel at the right of the window running the user's own Claude
-Code in a real terminal, in the workspace folder. It is the Claude Code they installed and signed in
-to themselves; Locus never handles a Claude login or key.
+**Claude** in the header opens a panel at the right of the window where the user works with their
+own Claude Code, in the workspace folder. It is the Claude Code they installed and signed in to
+themselves; Locus never handles a Claude login, key or subscription. The panel has two tabs,
+**Chat** (the default) and **Terminal**; the tab chosen is remembered.
 
-- **What runs.** Claude Code is started with `--mcp-config` (the live tools below) and
-  `--append-system-prompt` (it is in Locus; call current_view when the user says "this", "here" or
-  "the selection"; use show to open places; reference links come in angle brackets). Nothing is
-  pre-approved: Claude Code asks about trusting the folder and about each tool as it always does.
-  The header's terminal/Claude button swaps to a plain PowerShell in the same folder and back, and
-  ⟳ starts again. Main chooses the program; the page only asks for "claude" or "shell".
+#### Chat
+
+A conversation with Claude about what is open, like the Claude add-ins in other apps. Claude sees
+the note and the document beside it, opens places, and changes notes in the editor, asking first.
+
+- **What runs.** On the first message, main starts Claude Code in the background:
+  `claude -p --input-format stream-json --output-format stream-json --verbose
+  --include-partial-messages --permission-prompt-tool stdio --permission-mode default
+  --mcp-config <file> --allowedTools <the look tools> --append-system-prompt <how to work in
+  Locus>`. The user's own settings, plugins and sign-in apply; `--permission-mode default` means
+  Locus asks before changes even when the user runs Claude Code in another mode elsewhere. The
+  config gives the live tools, plus the Locus tools (the bundled server, §6.1) when Claude Code
+  doesn't have them yet. Main owns the conversation: hiding the panel, switching to the terminal
+  or reloading the window loses nothing. Starting takes a few seconds; the message shows at once,
+  with "Working…".
+- **The conversation.** The user's messages, Claude's replies streaming in (a little markdown:
+  paragraphs, lists, tables, code, bold; Locus links as buttons that open their place, web links
+  open in the browser), and one line for each thing Claude does, in plain words ("Looked at what
+  you have open", "Read notes/plan.md", "Changed notes/plan.md"); clicking a line shows what came
+  back. Claude's housekeeping (finding its tools) is not shown. Nothing Claude writes is drawn as
+  HTML: text from files in a shared workspace can't add elements to the page.
+- **Asking first.** Tools that only look or open a place run without asking: `current_view`,
+  `read_note`, `screenshot`, `show`. Everything else Claude Code would ask about (changing a note,
+  citing, saving a version, writing a file, running a command, the web) comes as a card, **Allow
+  Claude to change notes/plan.md?**, showing the change itself (old text struck through, new text
+  highlighted; the command; the file and its text), with **Allow**, **Allow for this chat** (that
+  kind of tool goes ahead without asking until a new chat) and **Deny** (Claude is told no). Stop,
+  a new chat or the session ending answers waiting cards with no.
+- **A note open in Locus is never written behind the editor.** A file write to it (Write, Edit, the
+  Locus write_note) is refused on the spot, telling Claude to use `edit_note`, so the change
+  happens in the editor where the user sees it. (Claude Code's own allow rules, if the user set
+  any, are theirs; a write they let through is still caught by the "Changed outside Locus" bar of
+  §4.)
+- **Changes in the editor.** `edit_note` and `insert_text` change the note on screen, never the
+  file behind it: the change is one undo step of its own (never merged with the user's typing),
+  the user's cursor stays where it was, unsaved typing is kept, and the changed text is
+  highlighted. Its line in the chat has **Show** (scroll to it and highlight it again) and
+  **Undo** (take back just that change, even after typing elsewhere in the note; if its text was
+  since edited or undone, it says so and leaves it, Ctrl+Z being the way). An edit whose text
+  isn't in the note exactly once changes nothing and says why, so Claude reads the note again.
+- **Stop** (or Esc in the message box) interrupts Claude; the conversation goes on. **+** in the
+  header starts a new chat (ending the session).
+- **Composer.** Enter sends, Shift+Enter is a new line. What is picked out in the pane last worked
+  in shows as a chip above it ("BDS-100 p5 · in view"); **Add** puts its reference link into the
+  message. An empty chat offers three starters (What am I looking at? / Cite my selection / Check
+  my note). The model Claude Code is using shows in small type.
+- **Problems.** Not signed in: a card says Claude Code needs signing in, that Locus never handles
+  the sign-in, to type `/login` in the terminal and send the message again, with **Open the
+  terminal**. Claude Code stopping (it crashed or couldn't start): what it printed, and **Open the
+  terminal**; the next message starts it again, resuming the same conversation (`--resume`). Not
+  installed: how to install it and sign in.
+
+#### Live tools
+
+`locus-live`, an MCP server inside Locus given only to the panel's Claude (chat and terminal):
+
+| Tool | Asks | What it does |
+| --- | --- | --- |
+| `current_view` | no | The workspace, the note being edited (path, cursor line, selection with its text and link), the document on the right (path, kind, version, what is selected or in view as a link with its quote, what it is compared with; `loading` while it opens), the open notes and documents. |
+| `read_note` | no | A note as it is on screen, unsaved typing included, lines numbered (`12| text`), up to 2000 lines at a time; notes not open are read from disk. |
+| `screenshot` | no | A picture of the window, or of the notes or document pane (JPEG, at most 1600 px wide). |
+| `show` | no | Opens a Locus link or destination as clicking it would (a note at lines opens with them flashed) and says what it opened, or that nothing is there. |
+| `edit_note` | yes | Exact replacements (each old text must appear once) in a note, in the editor. Opens the note. Not flowcharts or past versions. |
+| `insert_text` | yes | Adds markdown at the cursor, start, end, after a line, or at the end of a section; can create the note. |
+| `cite_selection` | yes | Cites what is selected or in view in the document viewer through Locus's own Cite (the version recorded as Cite records it; Locus's label unless one is given), as a link or, with `embed`, an embedded view (§4.9). |
+| `save_version` | yes | Saves the open notes and records a version, as Save version does (then the link check). |
+
+Their results end with "(Locus change cN)" for changes, which the chat turns into Show and Undo.
+The live server listens on 127.0.0.1 at a random port, and answers only requests that carry this
+run's random token, have no Origin header (no web page) and are addressed to `127.0.0.1:port` (no
+DNS rebinding). Its config files are written to Locus's own settings folder, never the workspace.
+
+#### Terminal
+
+Claude Code as it runs on its own, in a real terminal, started the first time the tab shows, with
+`--mcp-config` (the live tools) and `--append-system-prompt`. Nothing is pre-approved: Claude Code
+asks about trusting the folder and about each tool as it always does. The header's terminal/Claude
+button swaps to a plain PowerShell in the same folder and back, and ⟳ starts again. Main chooses
+the program; the page only asks for "claude" or "shell".
+
 - **Selection chips.** Above the terminal, what is picked out in the pane last worked in shows as a
   chip ("Selected in the note: design-basis.md line 3", "In view in the document: BDS-100 p5"):
   selected text in a note (as a link to its lines, quoting the text), or a document's selection,
   area, cells or page in view (as Cite would link it). **Add to prompt** pastes the reference link
   into what is being typed to Claude. Making the chip records nothing: no version is saved and no
   note id is added, so a link to the latest version stays a link to the file as it is.
-- **Live tools** (`locus-live`, given only to the panel's Claude): `current_view` returns the
-  workspace, the note being edited (path, cursor line, selection with its text and link), the
-  document on the right (path, kind, version, what is selected or in view, as a link with its
-  quote, and what it is compared with), and the open notes and documents; `show` opens a Locus link
-  or destination as clicking it would (a note at lines opens in the notes pane with them flashed)
-  and says what it opened, or that nothing is there.
-- **The live server** listens on 127.0.0.1 at a random port, and answers only requests that carry
-  this run's random token, have no Origin header (no web page) and are addressed to `127.0.0.1:port`
-  (no DNS rebinding). Its config file is written to Locus's own settings folder, never the
-  workspace.
-- **Lifecycle.** One session at a time. Hiding the panel keeps it running; it ends when another
-  workspace opens, the window closes, Locus quits or installs an update. When it ends a bar offers
-  Start again (and a plain terminal).
 - **Keys.** Keys typed in the panel are the terminal's: Locus shortcuts (Ctrl+O, Ctrl+N, tour keys)
   don't fire there. Ctrl+C copies when terminal text is selected and otherwise interrupts; Ctrl+V
   pastes.
-- **No Claude Code.** The panel says it isn't installed, how to install it and sign in, and offers
-  **Try again** and **Open a plain terminal**. If Claude Code is installed without the Locus tools,
-  a note says it can already see the screen and show places, that Set up adds the tools for
-  reference links and notes, and has **Set up** (the Claude dialog, §6.1).
-- **Edits.** Claude edits files directly. A note open without unsaved changes reloads as soon as it
-  is written, so the user sees the edit. A note with unsaved changes is never written over: the
-  bar described in §4 ("Changed outside Locus") asks what to keep.
+- **No Claude Code.** The terminal says it isn't installed, how to install it and sign in, and
+  offers **Try again** and **Open a plain terminal**. If Claude Code is installed without the
+  Locus tools, a note says what Set up adds and has **Set up** (the Claude dialog, §6.1).
+- **Edits.** In the terminal Claude may edit files directly. A note open without unsaved changes
+  reloads as soon as it is written, so the user sees the edit. A note with unsaved changes is never
+  written over: the bar described in §4 ("Changed outside Locus") asks what to keep.
+
+#### Both
+
+- **Lifecycle.** One chat session and one terminal session at a time. Hiding the panel keeps them
+  running; they end when another workspace opens, the window closes, Locus quits or installs an
+  update. Ending a session ends only the processes Locus started.
 - The panel's width is dragged at its left edge and remembered, as is whether it is open.
 
 ## 7. Export

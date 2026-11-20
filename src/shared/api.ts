@@ -146,6 +146,29 @@ export interface ClaudeStatus {
 export type TerminalKind = 'claude' | 'shell';
 export type TerminalStart = { ok: true; kind: TerminalKind } | { ok: false; reason: 'no-claude' | 'no-workspace' | 'failed'; message?: string };
 
+/** The Claude panel's chat (src/main/chat.ts): what shows in it, item by item. */
+export type ChatItem =
+  | { t: 'user'; id: string; text: string }
+  /** A finished piece of Claude's reply (markdown). */
+  | { t: 'text'; id: string; text: string }
+  /** Something Claude did with a tool, and how it went once it has. */
+  | { t: 'tool'; id: string; name: string; input: unknown; result?: { ok: boolean; text: string } }
+  /** Claude asking to do something that changes things; `answer` once the user has. */
+  | { t: 'ask'; id: string; tool: string; title: string; description?: string; input: Record<string, unknown>; answer?: ChatAnswer | 'cancelled' }
+  | { t: 'note'; id: string; kind: 'error' | 'signin' | 'stopped'; text: string };
+export type ChatAnswer = 'allow' | 'always' | 'deny';
+/** A change to the chat: `reset` replaces everything, `upsert` adds or updates one item by id. */
+export interface ChatEvent {
+  reset?: boolean;
+  items?: ChatItem[];
+  upsert?: ChatItem;
+  busy?: boolean;
+  /** Claude's reply as it streams in, before it lands as a text item. */
+  partial?: string;
+  model?: string;
+}
+export type ChatStart = { ok: true } | { ok: false; reason: 'no-claude' | 'no-workspace' | 'failed'; message?: string };
+
 export interface UpdateStatus {
   /**
    * off: not an installed copy (development and test runs don't update). checking, then current
@@ -187,6 +210,15 @@ export interface Api {
   terminalStop(): Promise<void>;
   /** What is running in the panel, if anything. */
   terminalState(): Promise<{ kind: TerminalKind } | null>;
+  /** The chat so far (for a page that has just loaded). */
+  chatState(): Promise<ChatEvent>;
+  /** Sends a message to Claude, starting Claude Code in the background first if need be. */
+  chatSend(text: string): Promise<ChatStart>;
+  chatAnswer(id: string, answer: ChatAnswer): Promise<void>;
+  /** Stops what Claude is doing (the chat goes on). */
+  chatInterrupt(): Promise<void>;
+  /** Ends the conversation and starts a fresh one. */
+  chatNew(): Promise<void>;
   head(): Promise<string | null>;
   versions(path?: string): Promise<Version[]>;
   changesSince(rev: string): Promise<FileChange[]>;
@@ -275,6 +307,7 @@ export interface Api {
 export const API_METHODS: (keyof Api)[] = [
   'openWorkspace', 'createWorkspace', 'listFiles', 'readFile', 'readText', 'writeText', 'writeNewFile', 'exists', 'fileChangedSince', 'claudeStatus', 'connectClaude', 'restartClaudeDesktop', 'appVersion', 'updateStatus', 'checkForUpdates', 'installUpdate',
   'terminalStart', 'terminalWrite', 'terminalResize', 'terminalStop', 'terminalState',
+  'chatState', 'chatSend', 'chatAnswer', 'chatInterrupt', 'chatNew',
   'head', 'versions', 'changesSince', 'uncommitted', 'saveVersion', 'ensureVersion', 'diffHunks',
   'getSettings', 'setSettings', 'pickExternalFiles', 'readExternal', 'openExternally', 'setTitleBarColors',
   'renameFile', 'restoreVersion', 'undoRestore', 'findMoved', 'citations', 'versionChanges', 'updateLinks', 'undoLinkUpdate', 'ensureNoteId', 'findNoteById',

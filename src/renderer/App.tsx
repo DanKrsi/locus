@@ -28,7 +28,7 @@ import { locateQuote } from './viewers/pdf';
 import { ConfirmDialog, type ConfirmRequest } from './menus';
 import { findSlide, readSlides } from '../core/slides';
 import { checkLink, checkLinks, forgetAnswers, pinFor, updateFor, type CheckedLink } from './linkcheck';
-import { linkNoteId, withLinkNoteId } from '../core/noteid';
+import { linkNoteId, splitNoteId, withLinkNoteId } from '../core/noteid';
 import { ReviewBar, UpkeepSummary, type ReviewChoice, type SummaryChoice } from './LinkUpkeep';
 import { CitationEditor, type CitationTarget } from './CitationEditor';
 import { SectionLink, Shortcuts } from './SectionLink';
@@ -36,7 +36,7 @@ import { ExportDialog } from './ExportDialog';
 import type { CiteTarget } from './viewers/types';
 import { Icon, Logo } from './icons';
 import { newId, revealOf, type DocTab } from './model';
-import { allLinks, insertEmbed, insertReference, replaceLink, setActiveLink, type LinkInfo, type RefStatus } from './notes/editor';
+import { allLinks, applyClaudeChange, insertEmbed, insertReference, replaceLink, setActiveLink, showClaudeChange, undoClaudeChange, type LinkInfo, type RefStatus } from './notes/editor';
 import { embedContent, embedReady, tableElement, type EmbedRequest } from './notes/embeds';
 import type { EditorView } from '@codemirror/view';
 import { renderHoverCard } from './notes/hoverCard';
@@ -1200,17 +1200,40 @@ export function App() {
    * an embedded view instead: a picture of the page, slide or box, or a table of the cells.
    */
   const cite = async (tab?: DocTab, embed = false) => {
-    tab ??= live.current.docTabs.find((t) => t.id === live.current.activeDoc);
-    if (!tab) return showToast('Open a document on the right first');
-    const target = handles.current.get(tab.id)?.citeTarget();
-    if (!target) return showToast('Nothing to cite yet');
-    if (embed && !embedKind(tab.path)) return showToast('Only PDFs, slide decks and spreadsheets can be shown in a note as a picture or table');
-    if (embed && embedKind(tab.path) === 'table' && !target.loc.sheet) return showToast('Select the cells to show first');
+    const parts = await citeParts(tab, embed);
+    if (typeof parts === 'string') return showToast(parts);
     // A flowchart takes the citation into a box; otherwise it goes into the active note.
     const flow = notes.current?.activeFlow() ?? null;
     let view = flow ? null : (notes.current?.activeView() ?? null);
     if (!flow && !view) view = (await notes.current?.newNote()) ?? null;
     if (!flow && !view) return;
+    const { build, label } = parts;
+    if (flow) {
+      flow.insertCitation((l) => build(l, false), label);
+      // A flowchart box holds words and links, not pictures: it gets the link.
+      if (embed) showToast('Flowchart boxes show links, not pictures or tables, so a link went in');
+    } else if (embed) insertEmbed(view!, (l) => build(l, true), label);
+    else insertReference(view!, (l) => build(l, false), label);
+    citedNow(parts.tab);
+  };
+
+  /** After a citation goes in: the versions list and what is cited where catch up. */
+  const citedNow = (tab: DocTab) => {
+    if (!tab.external && !tab.rev) void refreshVersions();
+    setTimeout(recomputeCited, 0);
+  };
+
+  /**
+   * The link Cite makes for what is picked out in a document (the version recorded as Cite records
+   * it), or why there is nothing to cite. Shared by the Cite button and Claude's cite_selection.
+   */
+  const citeParts = async (tab?: DocTab, embed = false): Promise<{ tab: DocTab; label: string; build(label: string, embed: boolean): string } | string> => {
+    tab ??= live.current.docTabs.find((t) => t.id === live.current.activeDoc);
+    if (!tab) return 'Open a document on the right first';
+    const target = handles.current.get(tab.id)?.citeTarget();
+    if (!target) return 'Nothing to cite yet';
+    if (embed && !embedKind(tab.path)) return 'Only PDFs, slide decks and spreadsheets can be shown in a note as a picture or table';
+    if (embed && embedKind(tab.path) === 'table' && !target.loc.sheet) return 'Select the cells to show first';
     let ref: Reference;
     if (tab.external) {
       ref = { path: tab.path, pathKind: 'external', loc: target.loc, extra: [] };
@@ -1229,14 +1252,7 @@ export function App() {
       ref = { path: tab.path, pathKind: 'root', loc: target.loc, rev, at, extra: noteId ? withLinkNoteId([], noteId) : [] };
     }
     const label = defaultLabel(tab.path, target.loc, target.pageLabel);
-    if (flow) {
-      flow.insertCitation((l) => formatReference(l, ref, target.quote), label);
-      // A flowchart box holds words and links, not pictures: it gets the link.
-      if (embed) showToast('Flowchart boxes show links, not pictures or tables, so a link went in');
-    } else if (embed) insertEmbed(view!, (l) => formatReference(l, ref, target.quote, true), label);
-    else insertReference(view!, (l) => formatReference(l, ref, target.quote), label);
-    if (!tab.external && !tab.rev) void refreshVersions();
-    setTimeout(recomputeCited, 0);
+    return { tab, label, build: (l, asEmbed) => formatReference(l, ref, target.quote, asEmbed) };
   };
 
   // ---------- Versions ----------
@@ -1620,16 +1636,20 @@ export function App() {
               selection: sel ? { lines: sel.lines, text: sel.text.slice(0, 4000), link: sel.link } : null,
             }
           : null,
-        document: d
-          ? {
+        document: !d
+          ? (() => {
+              // Open but not ready to name a place yet (still loading): say what it is.
+              const t = live.current.docTabs.find((x) => x.id === live.current.activeDoc);
+              return t ? { path: t.path, kind: kindOf(t), external: t.external || undefined, version: t.rev ? shortSha(t.rev) : 'latest', loading: true } : null;
+            })()
+          : {
               path: d.tab.path,
               kind: kindOf(d.tab),
               external: d.tab.external || undefined,
               version: d.tab.rev ? shortSha(d.tab.rev) : 'latest',
               comparingWith: d.tab.compare ? (d.tab.compare === 'LATEST' ? 'latest' : shortSha(d.tab.compare)) : undefined,
               [d.kind === 'selected' ? 'selected' : 'inView']: { link: d.link, quote: d.quote },
-            }
-          : null,
+            },
         openNotes: openNotes.current,
         openDocuments: live.current.docTabs.map((t) => ({ path: t.path, kind: kindOf(t), version: t.rev ? shortSha(t.rev) : 'latest' })),
         touring: live.current.tour ? true : undefined,
@@ -1657,8 +1677,245 @@ export function App() {
       const where = fileKind(path) === 'markdown' || isCanvas(path) ? 'the notes pane' : 'the viewer on the right';
       return `Showing ${dest} in ${where}.`;
     };
-    (window as unknown as { __locusLive?: unknown }).__locusLive = { view, show };
+    (window as unknown as { __locusLive?: unknown }).__locusLive = { view, show, call: (name: string, args: unknown) => claudeTool(name, (args ?? {}) as Record<string, unknown>) };
   });
+
+  // ---------- What Claude does in the app (UI spec §6.3; src/main/live.ts) ----------
+
+  /** Changes Claude made, by id, and the note each is in (for Show and Undo in the chat). */
+  const claudeChanges = useRef(new Map<string, string>());
+  const claudeSeq = useRef(0);
+
+  /** A note Claude names ("/notes/a.md", "notes/a.md"), or the one open. */
+  const noteFor = (given: unknown): string | null => {
+    if (typeof given === 'string' && given.trim()) {
+      const p = given.trim().replace(/\\/g, '/');
+      return p.startsWith('/') ? p : '/' + p;
+    }
+    return notes.current?.activePath() ?? null;
+  };
+
+  /** Why Claude can't change this note in the editor, or null when it can. */
+  const notEditable = (path: string | null): string | null => {
+    if (!path) return 'No note is open in Locus. Pass the path of the note.';
+    if (isCanvas(path)) return `${path} is a flowchart; edit_note and insert_text change notes only. Use the Locus write_flowchart tool for flowcharts.`;
+    if (fileKind(path) !== 'markdown') return `${path} is not a note (a .md file).`;
+    return null;
+  };
+
+  const claudeTool = async (name: string, args: Record<string, unknown>): Promise<unknown> => {
+    if (name === 'rect') {
+      const el = document.querySelector<HTMLElement>(args.part === 'notes' ? '[data-pane="notes"]' : args.part === 'document' ? '[data-pane="docs"]' : 'body');
+      if (!el || !el.offsetParent || args.part === 'window') return null;
+      const r = el.getBoundingClientRect();
+      return r.width > 0 && r.height > 0 ? { x: r.left, y: r.top, width: r.width, height: r.height } : null;
+    }
+    if (!live.current.ws) return { error: 'No workspace is open in Locus.' };
+    if (name === 'openNotes') return notes.current?.openPaths() ?? [];
+    if (name === 'readNote') return readNoteFor(args);
+    if (name === 'editNote') return editNoteFor(args);
+    if (name === 'insertText') return insertTextFor(args);
+    if (name === 'citeSelection') return citeSelectionFor(args);
+    if (name === 'saveVersion') {
+      if (typeof args.name !== 'string' || !args.name.trim()) return { error: 'Give the version a name.' };
+      await notes.current?.saveAll();
+      const changes = await api.uncommitted().catch(() => []);
+      if (!changes.length) return 'Nothing has changed since the last version, so there was nothing to save.';
+      await doSaveVersion(args.name.trim());
+      return `Saved a version named "${args.name.trim()}" (${changes.length} file${changes.length === 1 ? '' : 's'} changed).`;
+    }
+    return { error: `Locus has no tool called ${name}.` };
+  };
+
+  const readNoteFor = async (args: Record<string, unknown>) => {
+    const path = noteFor(args.path);
+    if (!path) return { error: 'No note is open in Locus. Pass the path of the note.' };
+    if (fileKind(path) !== 'markdown' && !isCanvas(path)) return { error: `${path} is not a note. Look at documents with screenshot, or read them with the Locus read_file tool.` };
+    const view = notes.current?.viewOf(path) ?? null;
+    let text: string;
+    if (view) text = view.state.doc.toString();
+    else {
+      if (!(await api.exists(path).catch(() => false))) return { error: `Nothing is at ${path} in this workspace.` };
+      text = splitNoteId((await api.readText(path)).replace(/\r\n/g, '\n')).body;
+    }
+    const lines = text.split('\n');
+    const from = Math.max(1, Number(args.from_line) || 1);
+    const to = Math.min(lines.length, Number(args.to_line) || lines.length, from + 1999);
+    const width = String(to).length;
+    const body = lines
+      .slice(from - 1, to)
+      .map((l, i) => `${String(from + i).padStart(width)}| ${l.length > 2000 ? l.slice(0, 2000) + '…' : l}`)
+      .join('\n');
+    const state = view ? 'open in the editor (as on screen, unsaved typing included)' : 'not open (read from disk)';
+    const more = to < lines.length ? `\n… ${lines.length - to} more lines (ask with from_line ${to + 1}).` : '';
+    return `${path}: ${state}, ${lines.length} lines.\n${body}${more}`;
+  };
+
+  /** Opens a note for Claude to change, as a tab the user is looking at. */
+  const openForClaude = async (path: string) => {
+    const view = await notes.current?.open(path);
+    return view ?? null;
+  };
+
+  const changed = (path: string, id: string, ranges: { from: number; to: number }[], view: EditorView, what: string) => {
+    claudeChanges.current.set(id, path);
+    const linesOf = [...new Set(ranges.map((r) => view.state.doc.lineAt(Math.min(r.from, view.state.doc.length)).number))];
+    const at = linesOf.length === 1 ? `line ${linesOf[0]}` : `lines ${linesOf.slice(0, 8).join(', ')}${linesOf.length > 8 ? '…' : ''}`;
+    return `${what} in ${path}, at ${at}. It is highlighted for the user, who can undo it with Ctrl+Z.\n(Locus change ${id})`;
+  };
+
+  const editNoteFor = async (args: Record<string, unknown>) => {
+    const path = noteFor(args.path);
+    const why = notEditable(path);
+    if (why) return { error: why };
+    let raw = args.edits;
+    if (typeof raw === 'string') {
+      try {
+        raw = JSON.parse(raw);
+      } catch {
+        return { error: 'edits should be a list of { old_text, new_text }.' };
+      }
+    }
+    const edits = Array.isArray(raw) ? (raw as { old_text?: unknown; new_text?: unknown }[]) : [];
+    if (!edits.length) return { error: 'No edits given.' };
+    if (!(await api.exists(path!).catch(() => false)) && !notes.current?.viewOf(path!)) return { error: `Nothing is at ${path} in this workspace. To start a note, use insert_text with create: true.` };
+    const view = await openForClaude(path!);
+    if (!view) return { error: `Couldn't open ${path}.` };
+    const doc = view.state.doc.toString();
+    const specs: { from: number; to: number; insert: string }[] = [];
+    for (const [i, e] of edits.entries()) {
+      const oldText = String(e.old_text ?? '').replace(/\r\n/g, '\n');
+      const newText = String(e.new_text ?? '').replace(/\r\n/g, '\n');
+      const n = i + 1;
+      if (!oldText) return { error: `Edit ${n} has no old_text. To add text, use insert_text.` };
+      const at = doc.indexOf(oldText);
+      if (at < 0) return { error: `Edit ${n}: its old_text isn't in ${path} as it is on screen (the user may have changed it). Read it again with read_note. Nothing was changed.` };
+      if (doc.indexOf(oldText, at + 1) >= 0) return { error: `Edit ${n}: its old_text appears more than once in ${path}. Include more of the text around it so it matches one place. Nothing was changed.` };
+      specs.push({ from: at, to: at + oldText.length, insert: newText });
+    }
+    specs.sort((a, b) => a.from - b.from);
+    for (let i = 1; i < specs.length; i++) if (specs[i].from < specs[i - 1].to) return { error: 'Two of the edits overlap. Make them one edit. Nothing was changed.' };
+    const id = `c${++claudeSeq.current}`;
+    const ranges = applyClaudeChange(view, specs, id);
+    return changed(path!, id, ranges, view, `Made ${specs.length} change${specs.length === 1 ? '' : 's'}`);
+  };
+
+  /** The text to put before a block that goes at `pos`, so it starts a paragraph of its own. */
+  const blockGap = (doc: string, pos: number) => (pos === 0 ? '' : doc.slice(0, pos).endsWith('\n\n') ? '' : doc.slice(0, pos).endsWith('\n') ? '\n' : '\n\n');
+
+  const insertTextFor = async (args: Record<string, unknown>) => {
+    const path = noteFor(args.path);
+    const why = notEditable(path);
+    if (why) return { error: why };
+    const text = String(args.text ?? '').replace(/\r\n/g, '\n');
+    if (!text) return { error: 'No text given.' };
+    if (!notes.current?.viewOf(path!) && !(await api.exists(path!).catch(() => false))) {
+      if (args.create !== true) return { error: `Nothing is at ${path} in this workspace. Pass create: true to start it.` };
+      await api.writeText(path!, '');
+    }
+    const view = await openForClaude(path!);
+    if (!view) return { error: `Couldn't open ${path}.` };
+    const doc = view.state.doc.toString();
+    let pos: number;
+    let insert: string;
+    if (typeof args.after_heading === 'string' && args.after_heading.trim()) {
+      const want = args.after_heading.trim().replace(/^#+\s*/, '').toLowerCase();
+      const all = view.state.doc;
+      let start = 0;
+      let level = 0;
+      for (let l = 1; l <= all.lines; l++) {
+        const m = all.line(l).text.match(/^(#{1,6})\s+(.*?)\s*#*\s*$/);
+        if (m && m[2].toLowerCase() === want) {
+          start = l;
+          level = m[1].length;
+          break;
+        }
+      }
+      if (!start) return { error: `${path} has no heading "${args.after_heading}". Read it with read_note to see its headings.` };
+      let end = all.lines;
+      for (let l = start + 1; l <= all.lines; l++) {
+        const m = all.line(l).text.match(/^(#{1,6})\s/);
+        if (m && m[1].length <= level) {
+          end = l - 1;
+          break;
+        }
+      }
+      while (end > start && !all.line(end).text.trim()) end--;
+      pos = all.line(end).to;
+      insert = '\n\n' + text.replace(/\n+$/, '');
+    } else if (args.after_line !== undefined && args.after_line !== null) {
+      const n = Math.max(0, Math.min(Number(args.after_line) || 0, view.state.doc.lines));
+      if (n === 0) {
+        pos = 0;
+        insert = text.endsWith('\n') ? text : text + '\n';
+      } else {
+        pos = view.state.doc.line(n).to;
+        insert = '\n' + text.replace(/\n+$/, '');
+      }
+    } else if (args.at === 'cursor') {
+      pos = view.state.selection.main.head;
+      insert = text;
+    } else if (args.at === 'start') {
+      pos = 0;
+      insert = text.replace(/\n+$/, '') + (doc ? '\n\n' : '\n');
+    } else {
+      pos = doc.length;
+      insert = blockGap(doc, pos) + text.replace(/\n+$/, '') + '\n';
+    }
+    const id = `c${++claudeSeq.current}`;
+    const ranges = applyClaudeChange(view, { from: pos, insert }, id);
+    return changed(path!, id, ranges, view, 'Added the text');
+  };
+
+  const citeSelectionFor = async (args: Record<string, unknown>) => {
+    const embed = args.embed === true;
+    const parts = await citeParts(undefined, embed);
+    if (typeof parts === 'string') return { error: parts === 'Nothing to cite yet' ? 'Nothing is selected or in view in the document viewer yet.' : parts.replace('on the right', 'in the viewer') + '.' };
+    const path = noteFor(args.path);
+    const why = notEditable(path);
+    if (why) return { error: why };
+    const view = await openForClaude(path!);
+    if (!view) return { error: `Couldn't open ${path}.` };
+    const label = typeof args.label === 'string' && args.label.trim() ? args.label.trim() : parts.label;
+    const link = parts.build(label, embed);
+    const doc = view.state.doc.toString();
+    let pos: number;
+    let insert: string;
+    if (args.after_line !== undefined && args.after_line !== null) {
+      const n = Math.max(0, Math.min(Number(args.after_line) || 0, view.state.doc.lines));
+      pos = n === 0 ? 0 : view.state.doc.line(n).to;
+      insert = n === 0 ? link + '\n\n' : (embed ? '\n\n' : '\n') + link;
+    } else if (args.at === 'end' || embed) {
+      // An embedded view is a paragraph of its own: after the cursor's line, or at the end.
+      const line = args.at === 'end' ? null : view.state.doc.lineAt(view.state.selection.main.head);
+      pos = line ? line.to : doc.length;
+      insert = (line ? (line.text.trim() ? '\n\n' : '') : blockGap(doc, pos)) + link + (line ? '' : '\n');
+    } else {
+      pos = view.state.selection.main.head;
+      const before = doc.slice(Math.max(0, pos - 1), pos);
+      insert = (before && !/\s/.test(before) ? ' ' : '') + link;
+    }
+    const id = `c${++claudeSeq.current}`;
+    const ranges = applyClaudeChange(view, { from: pos, insert }, id);
+    citedNow(parts.tab);
+    return changed(path!, id, ranges, view, `Cited ${parts.tab.path}${embed ? ' as an embedded view' : ''}: ${link}`) ;
+  };
+
+  /** Show and Undo for a change Claude made, from the chat. */
+  const claudeChange = async (id: string, action: 'show' | 'undo'): Promise<string | null> => {
+    const path = claudeChanges.current.get(id);
+    if (!path) return 'That change is no longer known to Locus.';
+    const open = notes.current?.viewOf(path);
+    if (!open) return action === 'undo' ? `${basename(path)} was closed since, so this change can't be taken back from here. Open the note and use Ctrl+Z.` : 'The note was closed since.';
+    const view = await notes.current!.open(path);
+    if (!view) return null;
+    if (action === 'show') return showClaudeChange(view, id) ? null : 'That change is no longer in the note.';
+    const r = undoClaudeChange(view, id);
+    if (r === 'changed') return 'That text was edited or undone since, so it was left as it is. Use Ctrl+Z in the note to step back.';
+    if (r === 'gone') return 'That change is no longer in the note.';
+    claudeChanges.current.delete(id);
+    return null;
+  };
 
   // ---------- Keyboard ----------
 
@@ -2076,6 +2333,8 @@ export function App() {
                 pick={panelChip}
                 onClose={() => showClaude(false)}
                 onSetup={() => setClaudeDialog('settings')}
+                onLink={(link) => void (window as unknown as { __locusLive?: { show(l: string): Promise<string> } }).__locusLive?.show(link).then((r) => (/^Showing /.test(r) ? undefined : showToast(r)))}
+                onChange={claudeChange}
               />
             </div>
           )}

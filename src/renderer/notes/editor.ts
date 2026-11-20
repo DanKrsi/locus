@@ -26,7 +26,7 @@ import {
   type DecorationSet,
   type ViewUpdate,
 } from '@codemirror/view';
-import { defaultKeymap, history, historyKeymap, indentWithTab, insertNewlineAndIndent, redo, undo } from '@codemirror/commands';
+import { defaultKeymap, history, historyKeymap, indentWithTab, insertNewlineAndIndent, isolateHistory, redo, undo } from '@codemirror/commands';
 import { insertNewlineContinueMarkup, markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
 import { HighlightStyle, syntaxHighlighting, syntaxTree } from '@codemirror/language';
@@ -427,6 +427,85 @@ const flashField = StateField.define<DecorationSet>({
   },
   provide: (f) => EditorView.decorations.from(f),
 });
+
+// ---------- Changes Claude makes (UI spec §6.3) ----------
+
+/**
+ * A change Claude made in the editor: where its new text is now, that text, and the text it
+ * replaced. The places are kept in step with everything typed since, so Undo in the chat takes
+ * back just Claude's change even after the user has typed elsewhere (or undone and redone it).
+ */
+interface ClaudeChange {
+  ranges: { from: number; to: number }[];
+  texts: string[];
+  olds: string[];
+}
+const claudeChangeEffect = StateEffect.define<{ id: string; change: ClaudeChange | null }>();
+const claudeChangesField = StateField.define<Map<string, ClaudeChange>>({
+  create: () => new Map(),
+  update(value, tr) {
+    let next = value;
+    if (!tr.changes.empty && value.size) {
+      next = new Map();
+      for (const [id, c] of value)
+        next.set(id, { ...c, ranges: c.ranges.map((r) => ({ from: tr.changes.mapPos(r.from, -1), to: tr.changes.mapPos(r.to, 1) })) });
+    }
+    for (const e of tr.effects) {
+      if (!e.is(claudeChangeEffect)) continue;
+      if (next === value) next = new Map(value);
+      if (e.value.change) next.set(e.value.id, e.value.change);
+      else next.delete(e.value.id);
+    }
+    return next;
+  },
+});
+
+/**
+ * Makes Claude's change in the editor as one undo step of its own (never merged with the user's
+ * typing), leaves the user's cursor where it was, and highlights what changed.
+ */
+export function applyClaudeChange(view: EditorView, specs: ChangeSpec, id: string): { from: number; to: number }[] {
+  const changes = view.state.changes(specs);
+  if (changes.empty) return [];
+  const after = changes.apply(view.state.doc);
+  const ranges: { from: number; to: number }[] = [];
+  const olds: string[] = [];
+  changes.iterChanges((fromA, toA, fromB, toB) => {
+    ranges.push({ from: fromB, to: toB });
+    olds.push(view.state.sliceDoc(fromA, toA));
+  });
+  const change: ClaudeChange = { ranges, olds, texts: ranges.map((r) => after.sliceString(r.from, r.to)) };
+  view.dispatch({ changes, annotations: isolateHistory.of('full'), effects: claudeChangeEffect.of({ id, change }) });
+  showClaudeChange(view, id);
+  return ranges;
+}
+
+/** Scrolls to a change Claude made and highlights it; false when it's no longer there. */
+export function showClaudeChange(view: EditorView, id: string): boolean {
+  const c = view.state.field(claudeChangesField, false)?.get(id);
+  if (!c) return false;
+  const doc = view.state.doc;
+  // A deletion has no new text to light up: light up its line instead.
+  const lit = c.ranges.map((r) => (r.to > r.from ? r : { from: doc.lineAt(r.from).from, to: doc.lineAt(r.from).to }));
+  flashRanges(view, lit);
+  return true;
+}
+
+/**
+ * Takes back one change Claude made. "changed" when its text has since been edited or undone
+ * (then Ctrl+Z is the way), "gone" when this editor doesn't know the change.
+ */
+export function undoClaudeChange(view: EditorView, id: string): 'ok' | 'changed' | 'gone' {
+  const c = view.state.field(claudeChangesField, false)?.get(id);
+  if (!c) return 'gone';
+  if (c.ranges.some((r, i) => view.state.sliceDoc(r.from, r.to) !== c.texts[i])) return 'changed';
+  view.dispatch({
+    changes: c.ranges.map((r, i) => ({ from: r.from, to: r.to, insert: c.olds[i] })),
+    annotations: isolateHistory.of('full'),
+    effects: claudeChangeEffect.of({ id, change: null }),
+  });
+  return 'ok';
+}
 
 // ---------- Widgets ----------
 
@@ -1842,6 +1921,7 @@ export function createNoteEditor(parent: HTMLElement, opts: NoteEditorOptions): 
       renameFilter,
       renameKeymap,
       flashField,
+      claudeChangesField,
       activeLinkField,
       attentionField,
       revealField,

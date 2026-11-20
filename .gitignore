@@ -12,5 +12,6 @@ test-output-update/
 test-output-tour/
 test-output-table/
 test-output-claude-panel/
+test-output-chat/
 test-output-outside-edits/
 test-output-embeds/

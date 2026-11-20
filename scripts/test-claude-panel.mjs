@@ -94,6 +94,8 @@ try {
   // Open the panel.
   await win.locator('.claude-toggle').click();
   await win.locator('.claude-panel').waitFor({ state: 'visible', timeout: 5000 });
+  // The panel opens on the chat (scripts/test-chat.mjs); the terminal is a tab away, and stays chosen.
+  await win.locator('.claude-modes').getByRole('tab', { name: 'Terminal' }).click();
   const ready = await waitScreen(/STUB READY/);
   check(!!ready, `the panel starts the session (Claude stand-in${process.env.LOCUS_STUB_DIRECT ? '' : ', through a .cmd in a folder with spaces'}) in a terminal`);
   check(!!ready && /current_view/.test(ready) && /show/.test(ready), `it gets the live tools current_view and show (${ready?.match(/tools=\S+/)?.[0]})`);
@@ -104,7 +106,7 @@ try {
   check(/^You are running in the Claude panel inside Locus/.test(prompt) && /keep edits focused\.$/.test(prompt), 'the prompt arrives whole, as one argument');
 
   // The chip and Add.
-  const chip = win.locator('.claude-chip');
+  const chip = win.locator('.claude-chip-row .claude-chip');
   await chip.waitFor({ timeout: 3000 });
   const chipText = await win.locator('.claude-chip-row').textContent();
   check(/Selected in the note/.test(chipText) && /design-basis/.test(chipText), `the note selection shows as a chip ("${chipText.trim()}")`);

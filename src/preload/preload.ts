@@ -28,6 +28,12 @@ contextBridge.exposeInMainWorld('locusEvents', {
     ipcRenderer.on('terminal-data', fn);
     return () => ipcRenderer.removeListener('terminal-data', fn);
   },
+  /** Changes to the Claude panel's chat. */
+  onChatEvent(cb: (ev: unknown) => void) {
+    const fn = (_e: unknown, ev: unknown) => cb(ev);
+    ipcRenderer.on('chat-event', fn);
+    return () => ipcRenderer.removeListener('chat-event', fn);
+  },
   onTerminalExit(cb: (info: { code: number }) => void) {
     const fn = (_e: unknown, info: { code: number }) => cb(info);
     ipcRenderer.on('terminal-exit', fn);

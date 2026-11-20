@@ -1,7 +1,8 @@
-// The Claude panel (UI spec §6.3): the user's own Claude Code, or a plain terminal, running in the
-// workspace folder at the right of the window. What is selected in a note or a document shows as a
-// chip above the terminal, and Add puts it into the prompt as a Locus reference link. Claude reads
-// what is on screen, and opens places, through the locus-live tools (src/main/live.ts).
+// The Claude panel (UI spec §6.3): the user's own Claude Code at the right of the window, as a chat
+// (ChatView, Claude Code run in the background) or in a real terminal (Claude Code's own screen, or
+// a plain shell), both in the workspace folder. What is selected in a note or a document shows as a
+// chip, and Add puts it into the message as a Locus reference link. Claude sees and works the app
+// through the locus-live tools (src/main/live.ts).
 import { useEffect, useRef, useState } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
@@ -9,6 +10,7 @@ import '@xterm/xterm/css/xterm.css';
 import type { ClaudeStatus, TerminalKind, TerminalStart } from '../shared/api';
 import { api } from './api';
 import { Icon } from './icons';
+import { ChatView } from './ChatView';
 
 /** What the user has selected (or has in view) that can go into the prompt. */
 export interface PanelChip {
@@ -51,6 +53,8 @@ export function ClaudePanel({
   pick,
   onClose,
   onSetup,
+  onLink,
+  onChange,
 }: {
   visible: boolean;
   dark: boolean;
@@ -60,7 +64,27 @@ export function ClaudePanel({
   pick(): PanelChip | null;
   onClose(): void;
   onSetup(): void;
+  /** Opens a Locus link Claude wrote in the chat. */
+  onLink(link: string): void;
+  /** Show or Undo a change Claude made in a note; a message when it can't. */
+  onChange(id: string, action: 'show' | 'undo'): Promise<string | null>;
 }) {
+  /** Chat, or Claude Code's own screen in a terminal; remembered. */
+  const [mode, setModeState] = useState<'chat' | 'terminal'>(() => {
+    try {
+      return localStorage.getItem('claudePanelMode') === 'terminal' ? 'terminal' : 'chat';
+    } catch {
+      return 'chat';
+    }
+  });
+  const setMode = (m: 'chat' | 'terminal') => {
+    setModeState(m);
+    try {
+      localStorage.setItem('claudePanelMode', m);
+    } catch {
+      /* not kept */
+    }
+  };
   const host = useRef<HTMLDivElement>(null);
   const term = useRef<Terminal | null>(null);
   const fit = useRef<FitAddon | null>(null);
@@ -142,11 +166,13 @@ export function ClaudePanel({
     };
   }, []);
 
-  // Start Claude when the panel first shows for a workspace, or pick the session back up after the
-  // window reloads.
+  // Start Claude in the terminal when the terminal first shows for a workspace, or pick the session
+  // back up after the window reloads.
   const startedFor = useRef<string | null>(null);
   useEffect(() => {
-    if (!visible || startedFor.current === workspace) return;
+    if (!visible) return;
+    if (!claude) void api.claudeStatus().then(setClaude).catch(() => undefined);
+    if (mode !== 'terminal' || startedFor.current === workspace) return;
     startedFor.current = workspace;
     void (async () => {
       const running = await api.terminalState().catch(() => null);
@@ -155,17 +181,16 @@ export function ClaudePanel({
         refit();
       } else await start('claude');
     })();
-    void api.claudeStatus().then(setClaude).catch(() => undefined);
-  }, [visible, workspace]);
+  }, [visible, workspace, mode]);
 
   useEffect(() => {
-    if (!visible) return;
+    if (!visible || mode !== 'terminal') return;
     const id = requestAnimationFrame(() => {
       refit();
       term.current?.focus();
     });
     return () => cancelAnimationFrame(id);
-  }, [visible]);
+  }, [visible, mode]);
 
   useEffect(() => {
     if (term.current) term.current.options.theme = themeFor(dark);
@@ -192,29 +217,63 @@ export function ClaudePanel({
 
   const kind = status.s === 'running' || status.s === 'ended' ? status.kind : 'claude';
   const needsSetup = !hideSetup && claude?.code.found && !claude.code.installed && kind === 'claude' && status.s === 'running';
+  const chatNeedsSetup = !hideSetup && !!claude?.code.found && !claude.code.installed;
+  const openTerminal = () => {
+    setMode('terminal');
+    if (status.s !== 'running') startedFor.current = null;
+  };
 
   return (
     <div className="claude-panel" style={{ display: visible ? 'flex' : 'none' }}>
       <div className="claude-head">
-        <span className="claude-title">
-          <Icon name="terminal" /> {kind === 'shell' ? 'Terminal' : 'Claude Code'}
-        </span>
+        <div className="claude-modes" role="tablist" aria-label="Claude panel">
+          <button role="tab" aria-selected={mode === 'chat'} className={mode === 'chat' ? 'on' : ''} title="Chat with Claude about what you have open" onClick={() => setMode('chat')}>
+            Chat
+          </button>
+          <button role="tab" aria-selected={mode === 'terminal'} className={mode === 'terminal' ? 'on' : ''} title="Claude Code in a terminal, as it runs on its own (also a plain terminal)" onClick={() => setMode('terminal')}>
+            Terminal
+          </button>
+        </div>
         <div className="spacer" />
-        <button
-          className="icon"
-          title={kind === 'shell' ? 'Run Claude Code here instead' : 'Run a plain terminal here instead'}
-          onClick={() => void start(kind === 'shell' ? 'claude' : 'shell')}
-        >
-          <Icon name={kind === 'shell' ? 'flow' : 'code'} />
-        </button>
-        <button className="icon" title="Start again (ends what is running)" onClick={() => void start(kind)}>
-          <Icon name="sync" />
-        </button>
+        {mode === 'chat' ? (
+          <button className="icon" title="New chat (ends this conversation)" onClick={() => void api.chatNew()}>
+            <Icon name="plus" />
+          </button>
+        ) : (
+          <>
+            <button
+              className="icon"
+              title={kind === 'shell' ? 'Run Claude Code here instead' : 'Run a plain terminal here instead'}
+              onClick={() => void start(kind === 'shell' ? 'claude' : 'shell')}
+            >
+              <Icon name={kind === 'shell' ? 'flow' : 'code'} />
+            </button>
+            <button className="icon" title="Start again (ends what is running)" onClick={() => void start(kind)}>
+              <Icon name="sync" />
+            </button>
+          </>
+        )}
         <button className="icon" title="Hide the panel (what runs in it keeps going)" onClick={onClose}>
           <Icon name="x" />
         </button>
       </div>
 
+      {/* Kept while the terminal shows, so a draft and the scroll position stay. */}
+      <div className="claude-chat-wrap" style={{ display: mode === 'chat' ? 'flex' : 'none' }}>
+        <ChatView
+          visible={visible && mode === 'chat'}
+          workspace={workspace}
+          chip={chip}
+          onLink={onLink}
+          onChange={onChange}
+          onOpenTerminal={openTerminal}
+          onSetup={onSetup}
+          onHideSetup={() => setHideSetup(true)}
+          needsSetup={chatNeedsSetup}
+        />
+      </div>
+
+      <div className="claude-terminal" style={{ display: mode === 'terminal' ? 'flex' : 'none' }}>
       {needsSetup && (
         <div className="claude-note">
           <div className="notice-body">
@@ -278,6 +337,7 @@ export function ClaudePanel({
             {status.kind === 'claude' && <button className="outline small" onClick={() => void start('shell')}>Plain terminal</button>}
           </div>
         )}
+      </div>
       </div>
     </div>
   );

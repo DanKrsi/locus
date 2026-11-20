@@ -27,7 +27,7 @@ const PROMPT = [
 ].join(' ');
 
 /** Environment for the session: the user's own, without what only matters to Locus itself or to a Claude Code that started Locus. */
-function environment(): Record<string, string> {
+export function environment(): Record<string, string> {
   const env: Record<string, string> = {};
   for (const [k, v] of Object.entries(process.env)) if (v !== undefined) env[k] = v;
   for (const k of ['ELECTRON_RUN_AS_NODE', 'CLAUDECODE', 'CLAUDE_CODE_ENTRYPOINT', 'CLAUDE_CODE_SSE_PORT', 'CLAUDE_AGENT_SDK_VERSION', 'LOCUS_TERMINAL_CMD']) delete env[k];
@@ -57,7 +57,7 @@ const quoteArg = (a: string) => (a && !/[\s"]/.test(a) ? a : `"${a.replace(/(\\*
  * the whole line as one quoted string with /s, which keeps quoted paths with spaces intact (with
  * plain /c it strips the first and last quote of the line, so "C:\Users\A B\claude.cmd" breaks).
  */
-async function program(file: string, args: string[]): Promise<{ file: string; args: string[] | string }> {
+export async function program(file: string, args: string[]): Promise<{ file: string; args: string[] | string }> {
   const full = await onPath(file);
   if (/\.(cmd|bat)$/i.test(full)) return { file: await onPath('cmd.exe'), args: `/d /s /c "${[full, ...args].map(quoteArg).join(' ')}"` };
   return { file: full, args };

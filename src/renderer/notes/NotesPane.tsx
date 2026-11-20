@@ -42,6 +42,10 @@ export interface NotesHandle {
   /** Zooms the active flowchart's view; false when the active tab isn't a flowchart. */
   zoomFlow(dir: 1 | -1 | 0): boolean;
   activePath(): string | null;
+  /** The editor of a note that is open (in any tab), without switching to it. */
+  viewOf(path: string): EditorView | null;
+  /** The notes and flowcharts open in tabs. */
+  openPaths(): string[];
   /** The active note as it is on screen, unsaved changes included. */
   activeText(): string;
   open(path: string): Promise<EditorView | null>;
@@ -671,6 +675,8 @@ export const NotesPane = forwardRef<NotesHandle, Props>(function NotesPane(p, re
       return !!h;
     },
     activePath: () => active,
+    viewOf: (path) => docs.current.get(path)?.view ?? null,
+    openPaths: () => [...docs.current.keys(), ...flows.current.keys()],
     activeText: () => (active && !isCanvas(active) ? textOnScreen(active) : ''),
     open,
     newNote,

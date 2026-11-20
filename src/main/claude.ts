@@ -24,7 +24,7 @@ const desktopConfig = () => join(desktopHome(), 'claude_desktop_config.json');
 const skillsDir = () => join(claudeHome(), 'skills', NAME);
 
 /** How Claude starts the server: Locus.exe as Node, running the server inside this install. */
-function serverEntry() {
+export function serverEntry() {
   return { command: process.execPath, args: [join(pluginSource(), 'server', 'server.mjs')], env: { ELECTRON_RUN_AS_NODE: '1' } };
 }
 const sameEntry = (e: unknown) => {

@@ -1,7 +1,8 @@
-// Builds the Locus demo workspace: the fewest files that show every feature. One note (also the
-// tour) and one flowchart, over a PDF standard in two editions, a small code file in three
-// versions, a workbook, a slide deck, an image and a short recording. Links are made by Locus's own
-// MCP tools, so each is verified and records the version it was made from.
+// Builds the Locus demo workspace: the fewest files that show every feature. A note (also the
+// tour) with live views of the places it cites, a second note it links into, and a flowchart, over
+// a PDF standard in two editions, a small code file in three versions, a workbook, a slide deck,
+// an image and a short recording. Links are made by Locus's own MCP tools, so each is verified and
+// records the version it was made from.
 // Usage: npm run build && npm run build:mcp && node scripts/make-sample.mjs [dest]   (default C:\dev\locus-sample)
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
@@ -87,6 +88,7 @@ const DECK = 'docs/review.pptx';
 const IMG = 'images/bracket.png';
 const WAV = 'media/review.wav';
 const NOTE = 'notes/Start here.md';
+const REVIEW = 'notes/Design review.md';
 const FLOW = 'notes/flow.canvas';
 
 console.log('Writing history…');
@@ -135,6 +137,12 @@ const R = {
   audioDecision: await ref({ path: WAV, label: 'the decision', time: at(audioStarts[1]) }),
   audioAction: await ref({ path: WAV, label: 'the action', time: at(audioStarts[2]) }),
   image: await ref({ path: IMG, label: 'the drawing' }),
+  // Live views: the place itself, shown in the note.
+  viewTable1: await ref({ path: PDF, label: 'Table 1', quote: TABLE1, highlight: true, embed: true }),
+  viewTable1Old: await ref({ path: PDF, label: 'Table 1 in the 2014 edition', quote: TABLE1, highlight: true, version: v1, embed: true }),
+  viewSlide: await ref({ path: DECK, label: 'the margins slide', slide: 5, embed: true }),
+  viewMass: await ref({ path: XLSX, label: 'the mass table', range: 'MassTable', embed: true }),
+  viewOpen: await ref({ path: DECK, label: 'open items', slide: 6, embed: true }),
 };
 // A link to a heading of this same note: a plain #slug, which can never break (link-format §2.5).
 const heading = (slug) => `#${slug}`;
@@ -168,13 +176,39 @@ await call('write_flowchart', {
 
 R.flow = await ref({ path: FLOW, label: 'The margin check' });
 
+// ---------- A second note, which the first links into ----------
+
+const review = (back) => `# Design review
+
+What the bracket design review decided, linked to where it was said and shown.
+
+## Decisions
+
+- Bolts take a fitting factor on top of the ultimate factor: ${R.audioDecision}. ${R.check} applies it.
+- Margins are reported as on ${R.slideMargins}.
+
+## Open items
+
+- [ ] Re-run the margins with the factors in ${R.table1}.
+- [ ] Confirm ${R.bracket}: it grew since ${R.bracketOld}.
+- [ ] Follow up on ${R.audioAction}.
+
+${R.viewOpen}
+
+${back}
+`;
+// The headings exist before the first note links to them; the link back is added once it exists.
+await put(REVIEW, review(''));
+R.review = await ref({ path: REVIEW, label: 'Design review' });
+R.reviewOpen = await ref({ path: REVIEW, label: 'its open items', heading: 'Open items' });
+
 // ---------- The note (also the tour) ----------
 
 await put(
   NOTE,
   `# Locus demo
 
-One note, one flowchart and a few files, to show what Locus does. Click any green link to jump to the exact place it cites; hover one for a preview. Press **Tour** to step through every link in order.
+Two notes, a flowchart and a few files, to show what Locus does. Click any green link to jump to the exact place it cites; hover one for a preview. Press **Tour** to step through every link in order.
 
 ## PDF
 
@@ -204,6 +238,24 @@ That's ${R.image} shown inside the note.
 | Bolts take a fitting factor | ${R.audioAction} |
 | The bracket got heavier | ${R.bracketOld} → ${R.bracket} |
 
+## Live views
+
+A link can also show the place itself, right in the note. These are live: when the file changes, they show the new version.
+
+${R.viewTable1}
+
+${R.viewSlide}
+
+${R.viewMass}
+
+This one is pinned to the 2014 edition, so it keeps showing the table as it was then:
+
+${R.viewTable1Old}
+
+## Other notes
+
+Notes link to each other: ${R.review} is a second note, and ${R.reviewOpen} goes straight to one of its sections. On the tour they open on the right, and the tour goes on.
+
 ## Flowchart
 
 ${R.flow} is a flowchart of \`check()\`: a loop inside a loop, a decision, and code citations in its boxes.
@@ -213,13 +265,19 @@ ${R.flow} is a flowchart of \`check()\`: a loop inside a loop, a decision, and c
 - [ ] Open a document on the right, select something, and press **Cite** to link it here.
 - [ ] Hover a link, then **Pin** or **Make live**.
 - [ ] Rename \`src/margins.py\` from Open (Ctrl+P): the live links here follow it.
-- [ ] Open **Version history** from Open, and look at what each version changed.
+- [ ] Open **Version history** from Open, and look at what each version changed. Open an older \`src/margins.py\` there and press **Restore this version** to put it back as it was.
+- [ ] Hover a link and press **Edit** to point it at another page, cell or version, without touching any markdown.
+- [ ] Right-click this note's tab and choose **Export as a web page…** or **Export as PDF…** to send it to someone.
+- [ ] Press **Claude** at the top and ask about this note, for example "what did the review decide?". Claude sees what's open and asks before changing anything. (It uses your own Claude Code.)
 - [ ] This link is deliberately broken: [old analysis](/docs/old-analysis.pdf#page=2). Back to the [top](${heading('locus-demo')}).
 `,
 );
 
 // The repository's front page on GitHub: how to open the demo.
-await put('README.md', "# Locus demo\n\nA small workspace for trying [Locus](https://github.com/DanKrsi/locus): one note and one\nflowchart that link into a PDF, some code, a spreadsheet, slides, an image and a recording,\nacross three versions.\n\n## Open it\n\nDownload `Locus-demo.locus` from the\n[Locus release](https://github.com/DanKrsi/locus/releases/latest) and double-click it.\n\nThen open **notes/Start here.md**, click any green link, or press **Tour**.\n");
+await put('README.md', "# Locus demo\n\nA small workspace for trying [Locus](https://github.com/DanKrsi/locus): two notes and a\nflowchart that link into a PDF, some code, a spreadsheet, slides, an image and a recording,\nacross three versions.\n\n## Open it\n\nDownload `Locus-demo.locus` from the\n[Locus release](https://github.com/DanKrsi/locus/releases/latest) and double-click it.\n\nThen open **notes/Start here.md**, click any green link, or press **Tour**.\n");
+
+// The second note links back to the first.
+await put(REVIEW, review(`Back to ${await ref({ path: NOTE, label: 'the demo' })}.`));
 
 // After the notes: the code changes, so live links follow moved lines and one shows "changed".
 await put(CODE, C.codeV3);
@@ -229,7 +287,7 @@ const v3 = await commit('Notes added', '2026-03-10T14:40:00');
 
 console.log('Checking links…');
 let problems = 0;
-for (const path of [NOTE, FLOW]) {
+for (const path of [NOTE, REVIEW, FLOW]) {
   const text = await call('validate_note', { path });
   const lines = text.split('\n').filter((l) => /^(BROKEN|WARNING)/.test(l));
   // The one deliberate broken link is expected.

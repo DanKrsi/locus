@@ -71,8 +71,8 @@ the real file: the right lines, the right page, the right version. [More about C
    > Windows may say "Windows protected your PC" because the installer isn't signed yet. Click
    > **More info**, then **Run anyway**.
 2. **Try the demo.** Click **Try the demo** on the welcome screen. It opens a small workspace with
-   one note and one flowchart linking into a PDF, code, a spreadsheet, slides, an image and a
-   recording. Open **Start here** and click any green link, or press **Tour** to walk through
+   two notes and a flowchart linking into a PDF, code, a spreadsheet, slides, an image and a
+   recording, with live views of the places they cite. Open **Start here** and click any green link, or press **Tour** to walk through
    them all.
    > Want it somewhere of your own? **Put a copy in a folder of my own…** under the button asks
    > where to put it. Already past the welcome screen? **Settings → Demo workspace → Create a

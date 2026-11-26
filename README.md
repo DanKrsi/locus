@@ -77,8 +77,7 @@ the real file: the right lines, the right page, the right version. [More about C
    > Want it somewhere of your own? **Put a copy in a folder of my own…** under the button asks
    > where to put it. Already past the welcome screen? **Settings → Demo workspace → Create a
    > demo workspace…** does the same. (Or download `Locus-demo.locus` from the same release and
-   > double-click it, or `git clone https://github.com/DanKrsi/locus-sample.git` and open that
-   > folder. A zip download from GitHub won't work, because the demo needs its version history.)
+   > double-click it.)
 3. **Use your own folder.** Click the workspace name at the top left (or **Open a folder** on the
    welcome screen) and pick any folder of documents. **Open** at the top opens files: notes and
    flowcharts on the left, everything else on the right.

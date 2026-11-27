@@ -22,6 +22,8 @@ export interface Location {
   /** PDF points from the page's top-left. */
   viewrect?: Rect;
   slide?: number;
+  /** Word: paragraphs, 1-based, counted in the file's order (core/word). */
+  para?: { start: number; end: number };
   sheet?: SheetRef;
   heading?: string;
   /** Seconds. */
@@ -53,6 +55,16 @@ const EXT_KIND: Record<string, FileKind> = {
   pptx: 'slides', ppt: 'slides',
   docx: 'doc', doc: 'doc',
 };
+
+/**
+ * A Word or PowerPoint file in the format before 2007 (.doc, .ppt). Locus can link to it as a
+ * whole file but can't draw it or read it: those files are a binary format, not the zipped XML of
+ * .docx and .pptx.
+ */
+export function isLegacyOffice(path: string): boolean {
+  const ext = extname(path);
+  return ext === 'doc' || ext === 'ppt';
+}
 
 export function fileKind(path: string): FileKind {
   const ext = extname(path);
@@ -280,6 +292,7 @@ export function parseDestination(dest: string): Reference | undefined {
     } else if (key === 'page' && /^\d+$/.test(value)) loc.page = +value;
     else if (key === 'viewrect') loc.viewrect = parseRect(value);
     else if (key === 'slide' && /^\d+$/.test(value)) loc.slide = +value;
+    else if (key === 'para' && (m = value.match(/^(\d+)(?:-(\d+))?$/))) loc.para = { start: +m[1], end: m[2] ? Math.max(+m[1], +m[2]) : +m[1] };
     else if (key === 't') loc.time = parseTime(value);
     else if (key === 'rect') loc.rect = parseRect(value);
     else if (key === 'rev' && /^[0-9a-f]{7,40}$/i.test(value)) ref.rev = value.toLowerCase();
@@ -299,6 +312,7 @@ export function formatLocation(loc: Location): string[] {
   if (loc.page !== undefined) parts.push(`page=${loc.page}`);
   if (loc.viewrect) parts.push(`viewrect=${rectText(loc.viewrect)}`);
   if (loc.slide !== undefined) parts.push(`slide=${loc.slide}`);
+  if (loc.para) parts.push(loc.para.end !== loc.para.start ? `para=${loc.para.start}-${loc.para.end}` : `para=${loc.para.start}`);
   if (loc.sheet) parts.push(formatSheetRef(loc.sheet));
   if (loc.heading) parts.push(loc.heading);
   if (loc.time !== undefined) parts.push(`t=${formatTime(loc.time)}`);
@@ -344,7 +358,8 @@ export function formatReference(label: string, ref: Reference, quote?: string, e
  */
 export function embedKind(path: string): 'picture' | 'table' | null {
   const kind = fileKind(path);
-  if (kind === 'pdf' || kind === 'slides') return 'picture';
+  if (isLegacyOffice(path)) return null;
+  if (kind === 'pdf' || kind === 'slides' || kind === 'doc') return 'picture';
   if (kind === 'sheet') return 'table';
   return null;
 }
@@ -360,6 +375,7 @@ export function defaultLabel(path: string, loc: Location, pageLabel?: string): s
   const s = stem(path);
   if (loc.page !== undefined) return `${s} p${pageLabel ?? loc.page}`;
   if (loc.slide !== undefined) return `${s} slide ${loc.slide}`;
+  if (loc.para) return `${s} para ${loc.para.start}`;
   // No line numbers for code: lines move, and the link follows them.
   if (loc.lines) return name;
   if (loc.sheet) return `${s} ${formatSheetRef(loc.sheet)}`;

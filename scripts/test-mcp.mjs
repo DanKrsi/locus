@@ -165,6 +165,83 @@ await call(
 await call('make_reference', { ...W, path: 'sources/report.pdf', page: 2, quote: 'Average asking rents rose 3.2 percent over the year.' }, /page=2/);
 await call('search_workspace', { ...W, query: 'three year low' }, /deck\.pptx\s+slide 1/);
 
+// Word: read paragraph by paragraph, cited by quote or paragraph numbers, checked; an old .doc is
+// linked as a whole file and Claude is told why.
+const { memo, MEMO } = await import('./word-fixtures.mjs');
+await writeFile(join(src, 'sources', 'memo.docx'), await memo(1));
+await writeFile(join(src, 'sources', 'old.doc'), Buffer.from('D0CF11E0A1B11AE1', 'hex'));
+await call('init_workspace', { workspace: src }, /ready|already/);
+await call(
+  'read_file',
+  { ...W, path: 'sources/memo.docx' },
+  /Word document "memo\.docx", 33 paragraphs[\s\S]*\[1\] # Bracket design memo[\s\S]*\[3\] The bracket carries a design load of 12 kN[\s\S]*\[5\] • Bolts[\s\S]*\[7\] \(table\) Case[\s\S]*\[32\] Fatigue[\s\S]*Footnotes[\s\S]*Taken from the load table/,
+);
+const part = await call('read_file', { ...W, path: 'sources/memo.docx', paragraphs: [31, 33] }, /\[32\] Fatigue/);
+console.log(`${!/\[3\] /.test(part) ? 'ok  ' : 'FAIL'} read_file with paragraphs reads only those`);
+if (/\[3\] /.test(part)) failures++;
+await call('search_workspace', { ...W, query: 'two million' }, /memo\.docx\s+paragraph 32/);
+await call('make_reference', { ...W, path: 'sources/memo.docx', quote: MEMO.load }, /\[memo para 3\]\(\/sources\/memo\.docx#para=3&at=[0-9a-f]{10} "design load of 12 kN"\)/);
+await call('make_reference', { ...W, path: 'sources/memo.docx', paragraphs: [5, 6], label: 'checks' }, /\[checks\]\(\/sources\/memo\.docx#para=5-6&at=/);
+await call('make_reference', { ...W, path: 'sources/memo.docx', quote: 'shear and bearing. The flange is' }, /#para=5-6&at=/);
+await call('make_reference', { ...W, path: 'sources/memo.docx', quote: MEMO.fatigue, embed: true }, /^!\[memo para 32\]\(\/sources\/memo\.docx#para=32&at=/);
+await call('make_reference', { ...W, path: 'sources/memo.docx', paragraphs: [3, 3], quote: 'The end.' }, /note: The quote is in paragraph 33/);
+await call('make_reference', { ...W, path: 'sources/old.doc', label: 'old memo' }, /\[old memo\]\(\/sources\/old\.doc&at=|\[old memo\]\(\/sources\/old\.doc#at=/);
+await call('read_file', { ...W, path: 'sources/old.doc' }, /old binary Office format[\s\S]*Save As/);
+for (const [args, what, why] of [
+  [{ ...W, path: 'sources/memo.docx', quote: 'nobody wrote this' }, 'a Word quote that is not there', /Couldn't find the quote/],
+  [{ ...W, path: 'sources/memo.docx', paragraphs: [30, 99] }, 'paragraphs past the end', /33 paragraphs/],
+  [{ ...W, path: 'sources/old.doc', quote: 'anything' }, 'a place inside an old .doc', /old binary Office format/],
+  [{ ...W, path: 'sources/memo.docx', embed: true }, 'a Word picture without paragraphs', /give paragraphs or a quote/],
+]) {
+  const r = await client.callTool({ name: 'make_reference', arguments: args });
+  const ok = r.isError && why.test(r.content[0].text);
+  console.log(`${ok ? 'ok  ' : 'FAIL'} make_reference rejects ${what}: ${r.content[0].text.slice(0, 90)}`);
+  if (!ok) failures++;
+}
+await call(
+  'validate_note',
+  { ...W, path: 'notes/word-check.md', markdown: '# x\n\n[right](/sources/memo.docx#para=3 "design load of 12 kN")\n\n[wrong](/sources/memo.docx#para=4 "design load of 12 kN")\n\n[gone](/sources/memo.docx#para=99)\n' },
+  /\[right\]  — No version recorded[\s\S]*\[wrong\]  — Quote is in paragraph 3, not paragraph 4[\s\S]*BROKEN[\s\S]*paragraph 99 doesn't exist/,
+);
+
+// PowerPoint: speaker notes read and searched, a quote found and boxed where its text box sits,
+// a quote from the notes explained, a quote on another slide noted.
+const { default: PptxGen } = await import('pptxgenjs');
+const pres = new PptxGen();
+pres.layout = 'LAYOUT_16x9'; // 10 x 5.625 in: 96 link points to the inch
+let sl = pres.addSlide();
+sl.addText('Rental market review', { x: 0.5, y: 0.5, w: 9, h: 1 });
+sl = pres.addSlide();
+sl.addText('Vacancy fell to a three year low', { x: 1, y: 2, w: 5, h: 1 });
+sl.addNotes('Mention that the survey covered 1,200 units.');
+sl = pres.addSlide();
+sl.addText('Recap: vacancy fell to a three year low', { x: 0.5, y: 4, w: 8, h: 1 });
+await writeFile(join(src, 'sources', 'review.pptx'), Buffer.from(await pres.write({ outputType: 'nodebuffer' })));
+await call('init_workspace', { workspace: src }, /ready|already/);
+await call('read_file', { ...W, path: 'sources/review.pptx' }, /3 slides[\s\S]*=== slide 2 ===\nVacancy fell to a three year low\n--- speaker notes ---\nMention that the survey covered 1,200 units\./);
+const two = await call('read_file', { ...W, path: 'sources/review.pptx', slides: [2, 2] }, /=== slide 2 ===/);
+console.log(`${/=== slide [13] ===/.test(two) ? 'FAIL' : 'ok  '} read_file with slides=[2, 2] reads only slide 2`);
+if (/=== slide [13] ===/.test(two)) failures++;
+await call('search_workspace', { ...W, query: 'survey covered' }, /review\.pptx\s+slide 2 \(speaker notes\)/);
+await call(
+  'make_reference',
+  { ...W, path: 'sources/review.pptx', quote: 'three year low', highlight: true },
+  /review\.pptx#viewrect=96,192,480,96&slide=2&at=[\s\S]*note: This quote also appears on slide 3/,
+);
+await call('make_reference', { ...W, path: 'sources/review.pptx', slide: 1, quote: 'Vacancy fell' }, /#slide=2&at=[\s\S]*note: The quote is on slide 2, not slide 1/);
+await call('make_reference', { ...W, path: 'sources/review.pptx', slide: 3, highlight: true }, /#slide=3&at=[\s\S]*highlight needs a quote/);
+{
+  const r = await client.callTool({ name: 'make_reference', arguments: { ...W, path: 'sources/review.pptx', quote: 'the survey covered 1,200 units' } });
+  const ok = r.isError && /speaker notes of slide 2/.test(r.content[0].text);
+  console.log(`${ok ? 'ok  ' : 'FAIL'} make_reference explains a quote taken from speaker notes: ${r.content[0].text.slice(0, 90)}`);
+  if (!ok) failures++;
+}
+await call(
+  'validate_note',
+  { ...W, path: 'notes/deck-check.md', markdown: '# x\n\n[wrong](/sources/review.pptx#slide=1 "Vacancy fell")\n\n[box](/sources/review.pptx#viewrect=10,10,400,100&slide=2 "low Vacancy three year")\n\n[gone](/sources/review.pptx#slide=9)\n' },
+  /\[wrong\]  — Quote is on slide 2, not slide 1[\s\S]*\[box\]  — No version recorded[\s\S]*BROKEN[\s\S]*Slide 9 doesn't exist/,
+);
+
 await client.close();
 console.log(failures ? `\n${failures} failure(s)` : '\nall passed');
 process.exit(failures ? 1 : 0);

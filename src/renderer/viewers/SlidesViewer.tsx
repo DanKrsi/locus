@@ -34,7 +34,7 @@ export async function sanitize(data: Uint8Array): Promise<ArrayBuffer> {
   return changed ? zip.generateAsync({ type: 'arraybuffer' }) : (data.slice().buffer as ArrayBuffer);
 }
 import type { Rect } from '../../core/link';
-import { showFallbacks } from '../../core/slides';
+import { readDeck, showFallbacks } from '../../core/slides';
 import { Icon } from '../icons';
 import { CiteButton } from './CiteButton';
 import type { ViewerProps } from './types';
@@ -117,12 +117,30 @@ export function SlidesViewer({ data, reveal, onCite, handle, marks, onMark, onPl
     setError(null);
     const w = Math.round(width * zoom);
     const previewer = init(host, { width: w, height: Math.round((w * 9) / 16), mode: 'list' });
+    // The speaker notes are read alongside (the drawing leaves them out) and shown under each slide.
+    const notes = readDeck(data)
+      .then((d) => d.map((s) => s.notes))
+      .catch(() => [] as string[]);
     sanitize(data)
       .then((buf) => previewer.preview(buf))
-      .then(() => {
+      .then(() => notes)
+      .then((said) => {
         if (cancelled) return;
         const slides = slideElements(host);
-        slides.forEach((s, i) => (s.dataset.slide = String(i + 1)));
+        slides.forEach((s, i) => {
+          s.dataset.slide = String(i + 1);
+          if (!said[i]) return;
+          const box = document.createElement('div');
+          box.className = 'slide-notes';
+          box.style.width = `${s.offsetWidth}px`;
+          const head = document.createElement('div');
+          head.className = 'slide-notes-head';
+          head.textContent = `Speaker notes · slide ${i + 1}`;
+          const body = document.createElement('div');
+          body.textContent = said[i];
+          box.append(head, body);
+          s.after(box);
+        });
         setCount(slides.length);
         requestAnimationFrame(() => {
           goTo(pending.current ?? keep, false);
@@ -244,16 +262,52 @@ export function SlidesViewer({ data, reveal, onCite, handle, marks, onMark, onPl
     if (n !== slide) setSlide(n);
   };
 
+  /**
+   * Text selected on a slide: the slide, a box around the selection, and the words as the quote
+   * (so the link finds them again when slides are added or moved). Null when nothing is selected there.
+   */
+  const selected = (): { slide: number; rect: Rect; quote: string } | null => {
+    const host = hostRef.current;
+    const sel = window.getSelection();
+    if (!host || !sel || sel.isCollapsed || !sel.rangeCount) return null;
+    const range = sel.getRangeAt(0);
+    if (!host.contains(range.commonAncestorContainer)) return null;
+    const quote = sel.toString().replace(/\s+/g, ' ').trim().slice(0, 400);
+    const el = slideElements(host).find((s) => s.contains(range.startContainer));
+    if (!quote || !el) return null;
+    const b = el.getBoundingClientRect();
+    const r = range.getBoundingClientRect();
+    if (!b.width || !b.height || !r.width) return null;
+    // A little room around the words; kept inside the slide.
+    const pad = 4;
+    const x0 = Math.max(0, r.left - b.left - pad);
+    const y0 = Math.max(0, r.top - b.top - pad);
+    const x1 = Math.min(b.width, r.right - b.left + pad);
+    const y1 = Math.min(b.height, r.bottom - b.top + pad);
+    return {
+      slide: Number(el.dataset.slide) || 1,
+      rect: {
+        x: Math.round((x0 / b.width) * SLIDE_W),
+        y: Math.round((y0 / b.height) * SLIDE_H),
+        w: Math.round(((x1 - x0) / b.width) * SLIDE_W),
+        h: Math.round(((y1 - y0) / b.height) * SLIDE_H),
+      },
+      quote,
+    };
+  };
+
   useEffect(() => {
     handle({
-      citeTarget: () =>
-        count
-          ? {
-              loc: area ? { slide: area.slide, viewrect: area.rect } : { slide: slideRef.current },
-              // A box quotes what it was drawn around, so it can be found again when the deck changes.
-              quote: area ? areaText ?? undefined : undefined,
-            }
-          : null,
+      citeTarget: () => {
+        if (!count) return null;
+        // A drawn box wins; then selected words; then the slide in view.
+        if (area)
+          // A box quotes what it was drawn around, so it can be found again when the deck changes.
+          return { loc: { slide: area.slide, viewrect: area.rect }, quote: areaText ?? undefined };
+        const s = selected();
+        if (s) return { loc: { slide: s.slide, viewrect: s.rect }, quote: s.quote };
+        return { loc: { slide: slideRef.current } };
+      },
     });
     return () => handle(null);
   }, [count, area, areaText]);
@@ -302,7 +356,7 @@ export function SlidesViewer({ data, reveal, onCite, handle, marks, onMark, onPl
         <CiteButton
           icon="slides"
           label={area ? 'Cite area' : 'Cite slide'}
-          title="Insert a link to this slide into the note (Ctrl+Shift+L)"
+          title="Insert a link to this slide into the note (Ctrl+Shift+L). Select words on a slide first to cite and box just them."
           onCite={onCite}
           embed={{ label: 'Insert picture', icon: 'image', title: area ? 'Show a picture of this box in the note' : 'Show a picture of this slide in the note (draw a box with Area for part of it)' }}
         />

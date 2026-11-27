@@ -66,13 +66,35 @@ export function MediaViewer({ data, path, reveal, onCite, handle, children }: Vi
   );
 }
 
-export function UnsupportedViewer({ path, onOpenExternally, children }: { path: string; onOpenExternally(): void; children?: React.ReactNode }) {
+export function UnsupportedViewer({ path, onOpenExternally, onCite, handle, children }: { path: string; onOpenExternally(): void; onCite?(): void; handle?: ViewerProps['handle']; children?: React.ReactNode }) {
+  const ext = extname(path);
+  useEffect(() => {
+    handle?.({ citeTarget: () => ({ loc: {} }) });
+    return () => handle?.(null);
+  }, []);
+  // An old Office file: say what it is and how to make it one Locus can show, not just "no preview".
+  const old = ext === 'doc' ? { app: 'Word', kind: 'Word document', save: 'Word Document (*.docx)' } : ext === 'ppt' ? { app: 'PowerPoint', kind: 'presentation', save: 'PowerPoint Presentation (*.pptx)' } : null;
   return (
     <>
-      <div className="toolbar">{children}</div>
+      <div className="toolbar">
+        {children}
+        <div className="spacer" />
+        {onCite && <CiteButton icon="file" label="Cite file" title="Insert a link to this whole file into the note (Ctrl+Shift+L)" onCite={onCite} />}
+      </div>
       <div className="empty">
-        <h3>No preview for .{extname(path)} files yet</h3>
-        <div>Word and PowerPoint support is planned. You can still open it in its usual app.</div>
+        {old ? (
+          <>
+            <h3>This {old.kind} is in the old .{ext} format</h3>
+            <div>
+              Locus shows and cites inside .{ext}x files. Open this one in {old.app}, choose <b>File → Save As</b>, and save it as <b>{old.save}</b>. You can still link to this file as a whole.
+            </div>
+          </>
+        ) : (
+          <>
+            <h3>No preview for .{ext} files</h3>
+            <div>Locus can't show this kind of file. You can still link to it as a whole, and open it in its usual app.</div>
+          </>
+        )}
         <button className="outline" onClick={onOpenExternally}><Icon name="external" /> Open in default app</button>
       </div>
     </>

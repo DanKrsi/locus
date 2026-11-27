@@ -4,6 +4,7 @@
 import { basename, fileKind, formatDestination, formatReference, parseDestination, type Location, type Reference } from '../core/link';
 import { isCanvas } from '../core/canvas';
 import { findSlide, readSlides } from '../core/slides';
+import { bare as letters, findParagraphs, quoteIn, readWord } from '../core/word';
 import { mapLines } from '../core/remap';
 import { renumberLabel } from '../core/upkeep';
 import type { Citation, NoteLinkUpdate } from '../shared/api';
@@ -75,6 +76,11 @@ const slidesIn = (path: string) =>
     const data = await bytes(path);
     return data ? readSlides(data).catch(() => null) : null;
   });
+const wordIn = (path: string) =>
+  ask(`w|${path}`, async () => {
+    const data = await bytes(path);
+    return data ? readWord(data).catch(() => null) : null;
+  });
 
 /** The text of the cited cells, row by row, or null when the range can't be found. */
 async function cellText(data: Uint8Array, path: string, loc: Location): Promise<string | null> {
@@ -122,7 +128,7 @@ export async function checkLink(cite: Citation, head: string): Promise<CheckedLi
   if (!(await changed(path, at))) return null;
 
   const { loc } = ref;
-  const whole = !loc.lines && loc.page === undefined && loc.slide === undefined && !loc.sheet && loc.time === undefined && !loc.rect;
+  const whole = !loc.lines && loc.page === undefined && loc.slide === undefined && !loc.sheet && loc.time === undefined && !loc.rect && !loc.para;
   if (whole) return { ...base, verdict: 'follow', next: latest(loc), reason: 'the whole file is cited' };
 
   if (loc.lines) {
@@ -184,6 +190,36 @@ export async function checkLink(cite: Citation, head: string): Promise<CheckedLi
       return { ...base, verdict: 'review', next: latest(loc), reason: 'the quoted text is no longer in the deck' };
     }
     return { ...base, verdict: 'review', next: latest(loc), reason: loc.viewrect ? 'the deck changed and the box has no quote to check' : `${basename(path)} changed` };
+  }
+
+  if (kind === 'doc' && loc.para) {
+    // Paragraph numbers move whenever a paragraph is added above; the words cited do not.
+    const para = loc.para;
+    const span = para.end - para.start;
+    const now_ = await wordIn(now);
+    if (!now_) return { ...base, verdict: 'review', next: latest(loc), reason: `${basename(path)} couldn't be read` };
+    const moveTo = (start: number, end = start + span) => latest({ ...loc, para: { start, end } });
+    if (cite.quote) {
+      const hit = findParagraphs(now_.paragraphs, cite.quote, para.start);
+      if (hit) {
+        const same = hit.start === para.start && hit.end === para.end;
+        const inside = quoteIn(now_.paragraphs, para, cite.quote);
+        if (same || inside) return { ...base, verdict: 'follow', next: latest(loc), reason: 'the quoted text is still in these paragraphs' };
+        return { ...base, verdict: 'follow', next: moveTo(hit.start, hit.end), reason: hit.start === hit.end ? `the quoted text is now in paragraph ${hit.start}` : `the quoted text is now in paragraphs ${hit.start}–${hit.end}` };
+      }
+      return { ...base, verdict: 'review', next: latest(loc), reason: 'the quoted text was reworded or removed' };
+    }
+    // No quote: look for the cited paragraphs' own words in the new version.
+    const was = await bytes(path, at)
+      .then((d) => (d ? readWord(d) : null))
+      .catch(() => null);
+    const words = was?.paragraphs.slice(para.start - 1, para.end).map((p) => p.text).join('\n') ?? '';
+    if (letters(words)) {
+      const hit = findParagraphs(now_.paragraphs, words, para.start);
+      if (hit && hit.end - hit.start === span)
+        return { ...base, verdict: 'follow', next: moveTo(hit.start), reason: hit.start === para.start ? 'the cited paragraphs are unchanged' : `the cited paragraphs are now ${span ? `${hit.start}–${hit.end}` : hit.start}` };
+    }
+    return { ...base, verdict: 'review', next: latest(loc), reason: 'the cited paragraphs were edited' };
   }
 
   return { ...base, verdict: 'review', next: latest(loc), reason: `${basename(path)} changed` };

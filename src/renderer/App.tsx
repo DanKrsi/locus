@@ -27,6 +27,7 @@ import { invalidateLatest, loadBytes, mimeFor } from './files';
 import { locateQuote } from './viewers/pdf';
 import { ConfirmDialog, type ConfirmRequest } from './menus';
 import { findSlide, readSlides } from '../core/slides';
+import { findParagraphs, quoteIn, readWord } from '../core/word';
 import { checkLink, checkLinks, forgetAnswers, pinFor, updateFor, type CheckedLink } from './linkcheck';
 import { linkNoteId, splitNoteId, withLinkNoteId } from '../core/noteid';
 import { ReviewBar, UpkeepSummary, type ReviewChoice, type SummaryChoice } from './LinkUpkeep';
@@ -618,6 +619,16 @@ export function App() {
       if (on === ref.loc.slide) return { state: 'ok' };
       return { state: 'ok', changed: true, reason: on ? `The quoted text moved to slide ${on}` : 'The quoted text is no longer in the deck' };
     }
+    if (kind === 'doc' && quote && ref.loc.para) {
+      const para = ref.loc.para;
+      const paras = await loadBytes({ path, external: false })
+        .then((data) => readWord(data))
+        .then((d) => d.paragraphs)
+        .catch(() => null);
+      if (paras && quoteIn(paras, para, quote)) return { state: 'ok' };
+      const now = paras ? findParagraphs(paras, quote, para.start) : null;
+      return { state: 'ok', changed: true, reason: now ? `The quoted text moved to paragraph ${now.start}` : 'The quoted text is no longer in the document' };
+    }
     return { state: 'ok', changed: true, reason: `${basename(path)} changed since it was cited` };
   };
 
@@ -753,6 +764,29 @@ export function App() {
                 actions,
               });
             }
+          } else if (kind === 'doc' && info.title && loc.para) {
+            // The quoted words say which paragraphs these are now, whatever their numbers.
+            const para = loc.para;
+            const paras = await loadBytes({ path, external: false })
+              .then((data) => readWord(data))
+              .then((d) => d.paragraphs)
+              .catch(() => null);
+            const now = paras && !quoteIn(paras, para, info.title) ? findParagraphs(paras, info.title, para.start) : null;
+            if (paras && !quoteIn(paras, para, info.title) && !now)
+              say({
+                text: `The quoted text is no longer in ${name}. It changed since you cited it${since}.`,
+                danger: true,
+                help: 'The words were edited or deleted, so this shows the paragraph number cited. The version it was cited from is still there to open.',
+                actions,
+              });
+            else if (now) {
+              loc = { ...loc, para: now };
+              say({
+                text: `${name} changed since you cited it${since}. The quoted text is now in paragraph ${now.start}.`,
+                help: 'Paragraphs were added or removed above it; Locus followed the quoted words to where they are now.',
+                actions,
+              });
+            }
           } else if (kind === 'pdf' && info.title && loc.page) {
             // The quote says what was cited: find it in the latest file, even on another page.
             const found = await loadBytes({ path, external: false })
@@ -857,6 +891,8 @@ export function App() {
     if (!ref.rev && !(await api.exists(path).catch(() => false)) && !(external && (await api.readExternal(path).then(() => true).catch(() => false))))
       return showToast(`${name} isn't there any more, so there is nothing to pick from. Edit in the … menu can point the view at another file.`);
     const table = embedKind(path) === 'table';
+    // A picture of Word paragraphs is changed by selecting other text, not by drawing a box.
+    const words = fileKind(path) === 'doc';
     openDoc(path, external, ref.rev, ref.loc, true);
     const dest = info.dest;
     const use = async () => {
@@ -864,6 +900,7 @@ export function App() {
       const target = tab ? handles.current.get(tab.id)?.citeTarget() : null;
       if (!target) return showToast(table ? 'Select the cells on the right first' : 'Open the file on the right first');
       if (table && !target.loc.sheet) return showToast('Select the cells on the right first');
+      if (words && !target.loc.para) return showToast('Select the text on the right first');
       if (!view.dom.isConnected) {
         setNotice(null);
         return showToast('The note was closed, so the view was left as it was');
@@ -890,19 +927,23 @@ export function App() {
       forgetStatuses();
       notes.current?.refresh();
       if (!external && !ref.rev) void refreshVersions();
-      showToast(table ? 'The table shows the new cells' : 'The picture shows the new area');
+      showToast(table ? 'The table shows the new cells' : words ? 'The picture shows the new paragraphs' : 'The picture shows the new area');
     };
     setNotice({
       text: table
         ? `Select the cells this table should show in ${name}, then press Use these cells.`
-        : `Draw a box over what this picture should show in ${name}, then press Use this box.`,
+        : words
+          ? `Select the text this picture should show in ${name}, then press Use these paragraphs.`
+          : `Draw a box over what this picture should show in ${name}, then press Use this box.`,
       help: table
         ? 'Drag across the cells on the right; the table in the note will show their values. It stays live or pinned as it is, and keeps a name you gave it.'
-        : `The box it shows now is drawn on the right: drag a new one over it. Clear the box (×) to show the whole ${fileKind(path) === 'slides' ? 'slide' : 'page'}. The picture stays live or pinned as it is, and keeps a name you gave it.`,
+        : words
+          ? 'The paragraphs it shows now are selected on the right: select other text, or scroll to a paragraph and select nothing to show that one. The picture stays live or pinned as it is, and keeps a name you gave it.'
+          : `The box it shows now is drawn on the right: drag a new one over it. Clear the box (×) to show the whole ${fileKind(path) === 'slides' ? 'slide' : 'page'}. The picture stays live or pinned as it is, and keeps a name you gave it.`,
       notePath,
       links: [{ dest, label: info.label.trim() || name }],
       actions: [
-        { label: table ? 'Use these cells' : 'Use this box', run: () => void use() },
+        { label: table ? 'Use these cells' : words ? 'Use these paragraphs' : 'Use this box', run: () => void use() },
         { label: 'Cancel', run: () => setNotice(null) },
       ],
     });
@@ -1232,7 +1273,7 @@ export function App() {
     if (!tab) return 'Open a document on the right first';
     const target = handles.current.get(tab.id)?.citeTarget();
     if (!target) return 'Nothing to cite yet';
-    if (embed && !embedKind(tab.path)) return 'Only PDFs, slide decks and spreadsheets can be shown in a note as a picture or table';
+    if (embed && !embedKind(tab.path)) return 'Only PDFs, Word documents, slide decks and spreadsheets can be shown in a note as a picture or table';
     if (embed && embedKind(tab.path) === 'table' && !target.loc.sheet) return 'Select the cells to show first';
     let ref: Reference;
     if (tab.external) {

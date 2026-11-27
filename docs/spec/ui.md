@@ -209,6 +209,10 @@ files is refused rather than written into.
   Cite button becomes **Cite area**. A box quotes the words inside it (the selected text wins if
   there is a selection), so the link can find that place again after the file changes — see §4.6.
   A box over something with no words in it has nothing to quote, and is asked about instead.
+- Words selected on a slide cite that slide with a box around them, quoting them. In a Word
+  document, a selection cites the paragraphs it runs through and quotes the selected words;
+  with nothing selected, **Cite** takes the paragraph being read (the one a third of the way
+  down the view) and quotes its first words.
 - Inserts the reference at the cursor (see link-format §3 for the label rules) and opens an
   inline rename box over the label: label pre-selected, 2px accent border, hint
   "Enter to name · Esc keeps '<default>'". Typing replaces, Enter confirms.
@@ -265,6 +269,8 @@ file was edited answers in about a second:
 | Spreadsheet | a named range still resolves; the cited cells hold the same values | a value in the cited cells changed |
 | Slide with a quote | the words are found again, on this slide or another | the words were reworded or removed |
 | Slide or slide box, no quote | never (nothing to check) | any change to the deck |
+| Word paragraphs with a quote | the quote is found again, in these paragraphs or others (paragraphs added above only renumber them) | the quote was reworded or removed |
+| Word paragraphs, no quote | the paragraphs' words are found again, as many paragraphs long | the paragraphs were edited |
 | Pictures, recordings | never | any change to the file |
 | Any file, whole-file link | always | never |
 | Any file | it was only moved or renamed | it was moved and edited |
@@ -378,10 +384,10 @@ per line, so diffs stay readable.
 ### 4.9 Embedded views
 
 Instead of a link, a note can show what it cites: a picture of a PDF page, a slide, or a box drawn
-on either, or a table of spreadsheet cells. The syntax is a `!` reference (link format §2.7).
+on either, a picture of paragraphs of a Word document, or a table of spreadsheet cells. The syntax is a `!` reference (link format §2.7).
 
 - **Inserting.** Next to **Cite** on the right: **Insert picture** for a PDF or slide deck (the
-  box drawn with Area, else the page or slide), **Insert table** for a spreadsheet (the selected
+  box drawn with Area, else the page or slide) or a Word document (the selected or current paragraphs), **Insert table** for a spreadsheet (the selected
   cells). Shortcut **Ctrl+Shift+E**. The view goes in its own paragraph below the cursor, with the
   usual rename box. Files that can't be shown (code, notes, media, flowcharts) get a link and a
   toast saying why. A link already in the note can become a view from its hover card (**Show as
@@ -435,7 +441,8 @@ on either, or a table of spreadsheet cells. The syntax is a `!` reference (link 
 | PDF | Grey background, white pages, page box (printed labels supported), zoom, search, **Area** tool (crosshair, drag a translucent gold box; Esc cancels), text selection becomes the quote |
 | Code / text | Read-only, syntax highlighted, line numbers; cited lines get a pale gold band |
 | Spreadsheet | Excel-like grid: column letters / row numbers, column widths, merged cells, fills, bold, number formats, sheet tabs at the bottom; name box + formula bar; virtualised rendering. Pictures anchored in a sheet are drawn over the cells they are pinned to, scrolling and scaling with them, and never take a click meant for a cell |
-| Slides | Every slide in a scrolling list, slide box, **Area** tool (a box on a slide, cited as a place within it). Equations and other parts PowerPoint wrote twice are drawn from the picture it keeps for readers that cannot show the modern form; where there is no picture, the equation's characters are shown as text |
+| Word (.docx) | Pages as Word lays them out (its own page breaks), with headers, footers, footnotes, tables and pictures from inside the file; nothing is fetched from the web and embedded web content is not drawn. Page box, zoom (fits the page to the pane). Cited paragraphs get a pale gold band and a "Cited in" flag beside them. Links in the document open in the browser (web) or scroll (inside the document). Old .doc files say how to save them as .docx and can be cited as a whole file |
+| Slides | Every slide in a scrolling list, slide box, **Area** tool (a box on a slide, cited as a place within it), words selected on a slide cited with a box around them, speaker notes shown under their slide. Old .ppt files say how to save them as .pptx and can be cited as a whole file. Equations and other parts PowerPoint wrote twice are drawn from the picture it keeps for readers that cannot show the modern form; where there is no picture, the equation's characters are shown as text |
 | Markdown | Rendered; headings can be cited |
 | Image | Fit / zoom; Area tool |
 | Audio / video | Player; Cite time |

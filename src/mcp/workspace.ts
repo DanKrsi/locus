@@ -8,6 +8,7 @@ import {
   fileKind,
   formatReference,
   isEmbed,
+  isLegacyOffice,
   normalizePath,
   parseA1Range,
   parseDestination,
@@ -24,7 +25,8 @@ import { findQuote } from '../core/quote';
 import { mapLines } from '../core/remap';
 import * as git from '../main/git';
 import { NO_TEXT_LAYER, readPdf, readWorkbook, type PdfPage } from './reader';
-import { readSlides } from '../core/slides';
+import { findShape, findSlide, readDeck, readSlides } from '../core/slides';
+import { findParagraphs, quoteIn, readWord } from '../core/word';
 import { addNoteId, joinNoteId, newNoteId, readNoteId, splitNoteId, withLinkNoteId } from '../core/noteid';
 
 export interface Workspace {
@@ -155,6 +157,8 @@ export interface ReferenceRequest {
   highlight?: boolean;
   range?: string;
   slide?: number;
+  /** Word: first and last paragraph (core/word numbering). */
+  paragraphs?: [number, number];
   heading?: string;
   time?: string;
   version?: string;
@@ -176,7 +180,9 @@ export async function makeReference(ws: Workspace, req: ReferenceRequest): Promi
   const pinned = req.version && req.version !== 'live' ? await git.resolveRev(ws.root, req.version) : undefined;
   if (!(await fileExists(ws, path, pinned))) throw new Error(`${path} doesn't exist${pinned ? ' in that version' : ''}`);
   const notes: string[] = [];
-  if (req.embed && !embedKind(path)) throw new Error(`${path} can't be shown in a note: only PDFs, slide decks and spreadsheets can (leave out embed to link to it)`);
+  if (req.embed && !embedKind(path)) throw new Error(`${path} can't be shown in a note: only PDFs, Word documents, slide decks and spreadsheets can (leave out embed to link to it)`);
+  if (isLegacyOffice(path) && (req.slide || req.paragraphs || req.quote))
+    throw new Error(`${path} is in the old binary Office format: it can only be linked as a whole file (leave out slide, paragraphs and quote). Saved as .docx or .pptx it can be read and cited inside.`);
   const loc: Location = {};
   let quote = req.quote?.trim() || undefined;
   let pageLabel: string | undefined;
@@ -245,18 +251,48 @@ export async function makeReference(ws: Workspace, req: ReferenceRequest): Promi
     // Name the sheet only when there is a choice; single-sheet files (like CSV) stay unqualified.
     if (!ref.sheet && parseA1Range(ref.range) && wb.sheets.length > 1) ref.sheet = wb.sheets[0]?.name;
     loc.sheet = ref;
+  } else if (kind === 'doc' && !isLegacyOffice(path)) {
+    const { paragraphs } = await readWord(await readBytes(ws, path, pinned));
+    if (req.paragraphs) {
+      const [a, b] = req.paragraphs;
+      if (a < 1 || b < a || b > paragraphs.length) throw new Error(`${path} has ${paragraphs.length} paragraphs; paragraphs ${a}-${b} are out of range`);
+      loc.para = { start: a, end: b };
+      if (quote && !quoteIn(paragraphs, loc.para, quote)) {
+        const at = findParagraphs(paragraphs, quote, a);
+        notes.push(at ? `The quote is in paragraph ${at.start}${at.end !== at.start ? `-${at.end}` : ''}, not in the paragraphs given; leave out paragraphs to cite where it is.` : 'The quote is not in the document; check it against read_file.');
+      }
+    } else if (quote) {
+      const found = findParagraphs(paragraphs, quote);
+      if (!found) throw new Error(`Couldn't find the quote in ${path}. Quote the text exactly as read_file shows it.`);
+      loc.para = found;
+      const again = findParagraphs(paragraphs.slice(found.end), quote);
+      if (again) notes.push(`This quote also appears in paragraph ${again.start + found.end}; paragraph ${found.start} was cited. Pass paragraphs to cite another one.`);
+    }
+    if (req.embed && !loc.para) throw new Error('A picture of a Word document shows paragraphs: give paragraphs or a quote');
   } else if (kind === 'slides') {
-    const slides = await readSlides(await readBytes(ws, path, pinned));
+    const deck = await readDeck(await readBytes(ws, path, pinned));
+    const slides = deck.map((s) => s.text);
     let n = req.slide;
-    if (!n && quote) {
-      const q = quote.replace(/\s+/g, ' ').toLowerCase();
-      const i = slides.findIndex((t) => t.replace(/\s+/g, ' ').toLowerCase().includes(q));
-      if (i < 0) throw new Error(`Couldn't find the quote on any slide of ${path}`);
-      n = i + 1;
+    if (n !== undefined && (n < 1 || n > slides.length)) throw new Error(`${path} has ${slides.length} slides; slide ${n} doesn't exist`);
+    if (quote) {
+      const on = findSlide(slides, quote, n ?? 1);
+      if (!on) {
+        const inNotes = deck.findIndex((s) => s.notes.replace(/\s+/g, ' ').toLowerCase().includes(quote.replace(/\s+/g, ' ').toLowerCase()));
+        if (inNotes >= 0) throw new Error(`That quote is in the speaker notes of slide ${inNotes + 1}, not on the slide. Notes can't be quoted in a link; cite slide=${inNotes + 1} without a quote.`);
+        throw new Error(n ? `Couldn't find the quote on slide ${n} or any other slide of ${path}` : `Couldn't find the quote on any slide of ${path}`);
+      }
+      if (n && on !== n) notes.push(`The quote is on slide ${on}, not slide ${n}; slide ${on} was cited.`);
+      n = on;
+      const again = findSlide(slides.slice(on), quote);
+      if (again) notes.push(`This quote also appears on slide ${again + on}; slide ${on} was cited. Pass slide to cite another one.`);
     }
     if (!n) throw new Error('Slide references need slide (a number) or a quote from the slide');
-    if (n < 1 || n > slides.length) throw new Error(`${path} has ${slides.length} slides; slide ${n} doesn't exist`);
     loc.slide = n;
+    if (req.highlight) {
+      const shape = quote ? findShape(deck[n - 1], quote) : null;
+      if (shape) loc.viewrect = roundRect(shape.box);
+      else notes.push(quote ? "highlight: the text box holding the quote couldn't be placed (it may sit in a group or a table); cited the whole slide instead." : 'highlight needs a quote to know what to box; cited the whole slide instead.');
+    }
   } else if (kind === 'media' && req.time) {
     const ref = parseDestination(`/x.mp4#t=${req.time}`);
     loc.time = ref?.loc.time;
@@ -314,7 +350,8 @@ function findInLines(lines: string[], quote: string): { start: number; end: numb
 }
 
 export function describe(loc: Location): string {
-  if (loc.slide) return `slide ${loc.slide}`;
+  if (loc.slide) return loc.viewrect ? `area on slide ${loc.slide}` : `slide ${loc.slide}`;
+  if (loc.para) return loc.para.end !== loc.para.start ? `paragraphs ${loc.para.start}-${loc.para.end}` : `paragraph ${loc.para.start}`;
   if (loc.viewrect) return `area on page ${loc.page}`;
   if (loc.page) return `page ${loc.page}`;
   if (loc.lines) return `lines ${loc.lines.start}-${loc.lines.end}`;
@@ -438,9 +475,50 @@ async function checkReference(
         }
       }
     }
+  } else if (kind === 'doc' && !isLegacyOffice(path) && loc.para) {
+    const { paragraphs } = await readWord(await readBytes(ws, path, rev));
+    const where = (r: { start: number; end: number }) => (r.end !== r.start ? `paragraphs ${r.start}-${r.end}` : `paragraph ${r.start}`);
+    if (loc.para.start < 1 || loc.para.end > paragraphs.length) return { status: 'broken', detail: `${where(loc.para)} doesn't exist (${paragraphs.length} paragraphs)` };
+    if (title && !quoteIn(paragraphs, loc.para, title)) {
+      const now = findParagraphs(paragraphs, title, loc.para.start);
+      const live = !rev && !!ref.at;
+      if (now && live) {
+        status = 'moved';
+        detail = `The quoted text is now in ${where(now)}; the app follows it`;
+      } else if (now) {
+        status = 'warning';
+        detail = `Quote is in ${where(now)}, not ${where(loc.para)}`;
+      } else {
+        status = live ? 'changed' : 'warning';
+        detail = live ? `The quoted text is no longer in ${path}` : `Quote not found in ${where(loc.para)}`;
+      }
+    }
+  } else if (isLegacyOffice(path) && (loc.slide || loc.para)) {
+    status = 'warning';
+    detail = `${path} is in the old binary Office format: Locus opens it as a whole file, not at a slide or paragraph`;
   } else if (kind === 'slides' && loc.slide) {
     const slides = await readSlides(await readBytes(ws, path, rev));
     if (loc.slide > slides.length) return { status: 'broken', detail: `Slide ${loc.slide} doesn't exist (${slides.length} slides)` };
+    // A drawn box quotes the words inside it in screen order, which need not be the file's order:
+    // for a box, every word being on the slide is enough.
+    const letters = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
+    const onSlide = (text: string) =>
+      findSlide([text], title!) !== null || (!!loc.viewrect && title!.split(/\s+/).every((w) => !letters(w) || letters(text).includes(letters(w))));
+    if (title && !onSlide(slides[loc.slide - 1])) {
+      const near = slides.map((_, i) => i + 1).filter((n) => onSlide(slides[n - 1])).sort((a, b) => Math.abs(a - loc.slide!) - Math.abs(b - loc.slide!));
+      const now = near[0] ?? null;
+      const live = !rev && !!ref.at;
+      if (now && live) {
+        status = 'moved';
+        detail = `The quoted text is now on slide ${now}; the app follows it`;
+      } else if (now) {
+        status = 'warning';
+        detail = `Quote is on slide ${now}, not slide ${loc.slide}`;
+      } else {
+        status = live ? 'changed' : 'warning';
+        detail = live ? `The quoted text is no longer in ${path}` : `Quote not found on slide ${loc.slide}`;
+      }
+    }
   } else if (kind === 'sheet' && loc.sheet) {
     const wb = await readWorkbook(await readBytes(ws, path, rev), path);
     const { sheet, range } = loc.sheet;

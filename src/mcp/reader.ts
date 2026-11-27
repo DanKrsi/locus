@@ -3,8 +3,9 @@
 import './domPolyfill';
 import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
-import { basename, colLetters, fileKind } from '../core/link';
-import { readSlides } from '../core/slides';
+import { basename, colLetters, fileKind, isLegacyOffice } from '../core/link';
+import { readDeck } from '../core/slides';
+import { readWord } from '../core/word';
 import { parseCsv } from '../core/csv';
 import type { TextRun } from '../core/quote';
 
@@ -117,6 +118,10 @@ export interface ReadOptions {
   endLine?: number;
   pages?: [number, number];
   sheet?: string;
+  /** Word: first and last paragraph to read. */
+  paragraphs?: [number, number];
+  /** PowerPoint: first and last slide to read. */
+  slides?: [number, number];
 }
 
 const MAX_CHARS = 60000;
@@ -178,10 +183,37 @@ export async function renderForClaude(path: string, data: Uint8Array, opts: Read
     }
     return out;
   }
+  if (isLegacyOffice(path))
+    return `${basename(path)} is in the old binary Office format (.${path.split('.').pop()}). Its contents can't be read; it can be cited only as a whole file. Saved as .docx or .pptx (File > Save As in Word or PowerPoint) it can be read and cited inside.`;
+  if (kind === 'doc') {
+    const { paragraphs, notes } = await readWord(data);
+    const [a, b] = opts.paragraphs ?? [1, paragraphs.length];
+    out += `Word document "${basename(path)}", ${paragraphs.length} paragraphs. Cite with paragraphs=[first, last] (the numbers in brackets), or give a quote and the paragraphs are found for you. Empty paragraphs are not shown but keep their numbers.\n\n`;
+    for (const p of paragraphs.slice(Math.max(0, a - 1), b)) {
+      if (!p.text.trim()) continue;
+      const mark = p.heading ? `${'#'.repeat(p.heading)} ` : p.list ? '• ' : '';
+      out += `[${p.n}] ${p.table ? '(table) ' : ''}${mark}${p.text.replace(/\n/g, ' / ')}\n`;
+      if (out.length > MAX_CHARS) {
+        out += `\n[truncated: read more with paragraphs=[${p.n + 1}, ${Math.min(paragraphs.length, p.n + 400)}]]\n`;
+        return out;
+      }
+    }
+    if (notes.length && b >= paragraphs.length) out += `\nFootnotes and endnotes (not citable on their own; cite the paragraph that refers to them):\n${notes.map((n, i) => `  ${i + 1}. ${n}`).join('\n')}\n`;
+    return out;
+  }
   if (kind === 'slides') {
-    const slides = await readSlides(data);
-    out += `Presentation "${basename(path)}", ${slides.length} slides. Cite with slide=<n>.\n`;
-    slides.forEach((t, i) => (out += `\n=== slide ${i + 1} ===\n${t}\n`));
+    const slides = await readDeck(data);
+    const [a, b] = opts.slides ?? [1, slides.length];
+    out += `Presentation "${basename(path)}", ${slides.length} slides. Cite with slide=<n>, or a quote from the slide (with highlight=true to box the text it is in). Speaker notes are shown for reading; cite the slide they belong to.\n`;
+    for (let n = Math.max(1, a); n <= Math.min(b, slides.length); n++) {
+      const s = slides[n - 1];
+      out += `\n=== slide ${n} ===\n${s.text || '(no text)'}\n`;
+      if (s.notes) out += `--- speaker notes ---\n${s.notes}\n`;
+      if (out.length > MAX_CHARS && n < Math.min(b, slides.length)) {
+        out += `\n[truncated: read more with slides=[${n + 1}, ${Math.min(slides.length, n + 50)}]]\n`;
+        break;
+      }
+    }
     return out;
   }
   return `${basename(path)} is a ${kind} file. It can be cited as a whole file${kind === 'media' ? ' or at a time (t=m:ss)' : ''}, but its contents can't be read as text.`;

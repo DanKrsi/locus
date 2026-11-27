@@ -33,6 +33,9 @@ export function renumberLabel(label: string, from: Location, to: Location): stri
   if (from.slide !== undefined && to.slide !== undefined && from.slide !== to.slide) {
     return label.replace(new RegExp(`\\b(slide\\s)${from.slide}\\b`, 'i'), (_m, lead: string) => lead + to.slide);
   }
+  if (from.para && to.para && from.para.start !== to.para.start) {
+    return label.replace(new RegExp(`\\b(para\\.?\\s?|paragraph\\s|¶\\s?)${from.para.start}\\b`, 'i'), (_m, lead: string) => lead + to.para!.start);
+  }
   if (from.sheet && to.sheet) {
     const old = formatSheetRef(from.sheet);
     const next = formatSheetRef(to.sheet);

@@ -94,7 +94,7 @@ export function ReviewBar({ link, index, count, canSelect, onChoose }: { link: C
           Update the link
         </button>
         {canSelect && (
-          <button className="outline" title="Select the new place in the document on the right (draw an area, pick cells, go to the page or slide), then press this" onClick={() => onChoose({ kind: 'selection' })}>
+          <button className="outline" title="Select the new place in the document on the right (draw an area, select text, pick cells, go to the page or slide), then press this" onClick={() => onChoose({ kind: 'selection' })}>
             Use what's selected on the right
           </button>
         )}

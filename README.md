@@ -26,8 +26,9 @@ time and you're back there, highlighted and centred:
 |---|---|
 | **PDFs** | the page, or the exact passage, boxed |
 | **Code** | the lines, even after code above them moved |
+| **Word documents** | the paragraph, highlighted, even after paragraphs above it were added |
 | **Spreadsheets** | a cell range or a named range |
-| **Slides, images, recordings** | the slide, the area, the second |
+| **Slides, images, recordings** | the slide, the words or area on it, the second |
 | **The past** | any earlier version of a file |
 
 ## Flowcharts that cite the code

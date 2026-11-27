@@ -18,6 +18,8 @@ test('pages, slides and ranges are renumbered only when the label names the old 
   assert.equal(renumberLabel('BDS page 12, margins', { page: 12 }, { page: 14 }), 'BDS page 14, margins');
   assert.equal(renumberLabel('BDS p120', { page: 12 }, { page: 14 }), 'BDS p120');
   assert.equal(renumberLabel('Deck slide 4', { slide: 4 }, { slide: 6 }), 'Deck slide 6');
+  assert.equal(renumberLabel('Memo para 12', { para: { start: 12, end: 12 } }, { para: { start: 15, end: 15 } }), 'Memo para 15');
+  assert.equal(renumberLabel('Memo para 120', { para: { start: 12, end: 12 } }, { para: { start: 15, end: 15 } }), 'Memo para 120');
   assert.equal(renumberLabel('Loads B4:D12', { sheet: { sheet: 'Loads', range: 'B4:D12' } }, { sheet: { sheet: 'Loads', range: 'B6:D14' } }), 'Loads B6:D14');
 });
 

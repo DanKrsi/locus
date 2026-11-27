@@ -5,11 +5,12 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
-import { fileKind } from '../core/link';
+import { fileKind, isLegacyOffice } from '../core/link';
 import { isCanvas } from '../core/canvas';
 import skillDoc from '../../plugin/skills/locus/SKILL.md';
 import { renderForClaude, readWorkbook } from './reader';
-import { readSlides } from '../core/slides';
+import { readDeck } from '../core/slides';
+import { readWord } from '../core/word';
 import {
   git,
   initWorkspace,
@@ -84,7 +85,7 @@ server.registerTool(
   {
     title: 'Read a file',
     description:
-      'Reads any workspace file as citable text: code/markdown with line numbers, PDFs page by page (file page numbers), spreadsheets as cells with addresses and named ranges. Pass version to read a past version.',
+      'Reads any workspace file as citable text: code/markdown with line numbers, PDFs page by page (file page numbers), Word documents paragraph by paragraph (numbered), slides with their speaker notes, spreadsheets as cells with addresses and named ranges. Pass version to read a past version.',
     inputSchema: {
       workspace: workspaceArg,
       path: z.string().describe('File path relative to the workspace root, e.g. "src/app.py" or "/docs/spec.pdf"'),
@@ -92,6 +93,8 @@ server.registerTool(
       start_line: z.number().int().optional(),
       end_line: z.number().int().optional(),
       pages: z.tuple([z.number().int(), z.number().int()]).optional().describe('PDF page range [first, last]'),
+      paragraphs: z.tuple([z.number().int(), z.number().int()]).optional().describe('Word paragraph range [first, last]'),
+      slides: z.tuple([z.number().int(), z.number().int()]).optional().describe('PowerPoint slide range [first, last]'),
       sheet: z.string().optional().describe('Only this sheet of a workbook'),
     },
   },
@@ -100,7 +103,7 @@ server.registerTool(
     const path = wsPath(ws, a.path);
     const data = await readBytes(ws, path, a.version);
     if (isCanvas(path)) return describeCanvas(path, new TextDecoder().decode(data));
-    return renderForClaude(path, data, { startLine: a.start_line, endLine: a.end_line, pages: a.pages, sheet: a.sheet });
+    return renderForClaude(path, data, { startLine: a.start_line, endLine: a.end_line, pages: a.pages, paragraphs: a.paragraphs, slides: a.slides, sheet: a.sheet });
   }),
 );
 
@@ -108,7 +111,7 @@ server.registerTool(
   'search_workspace',
   {
     title: 'Search the workspace',
-    description: 'Finds text across code, notes, PDFs (by page), slides (by slide) and spreadsheets (by cell). Returns where each hit is, ready to pass to make_reference.',
+    description: 'Finds text across code, notes, PDFs (by page), Word documents (by paragraph), slides (by slide) and spreadsheets (by cell). Returns where each hit is, ready to pass to make_reference.',
     inputSchema: {
       workspace: workspaceArg,
       query: z.string().describe('Text to find (case-insensitive)'),
@@ -137,11 +140,19 @@ server.registerTool(
             const i = t.toLowerCase().indexOf(q);
             if (i >= 0 && hits.length < limit) hits.push(`${path}  page ${p.page}: …${t.slice(Math.max(0, i - 60), i + q.length + 60)}…`);
           }
-        } else if (kind === 'slides') {
-          (await readSlides(await readBytes(ws, path))).forEach((t, i) => {
-            const flat = t.replace(/\s+/g, ' ');
+        } else if (kind === 'doc' && !isLegacyOffice(path)) {
+          for (const p of (await readWord(await readBytes(ws, path))).paragraphs) {
+            const flat = p.text.replace(/\s+/g, ' ');
             const at = flat.toLowerCase().indexOf(q);
-            if (at >= 0 && hits.length < limit) hits.push(`${path}  slide ${i + 1}: …${flat.slice(Math.max(0, at - 60), at + q.length + 60)}…`);
+            if (at >= 0 && hits.length < limit) hits.push(`${path}  paragraph ${p.n}: …${flat.slice(Math.max(0, at - 60), at + q.length + 60)}…`);
+          }
+        } else if (kind === 'slides' && !isLegacyOffice(path)) {
+          (await readDeck(await readBytes(ws, path))).forEach((s, i) => {
+            for (const [t, where] of [[s.text, ''], [s.notes, ' (speaker notes)']]) {
+              const flat = t.replace(/\s+/g, ' ');
+              const at = flat.toLowerCase().indexOf(q);
+              if (at >= 0 && hits.length < limit) hits.push(`${path}  slide ${i + 1}${where}: …${flat.slice(Math.max(0, at - 60), at + q.length + 60)}…`);
+            }
           });
         } else if (kind === 'sheet') {
           const wb = await readWorkbook(await readBytes(ws, path), path);
@@ -168,12 +179,14 @@ server.registerTool(
     description: `Builds a verified markdown reference to an exact place in a file. Paste the returned markdown into the note unchanged.
 - Code: give lines [start, end], or a quote of the code and the lines are found for you.
 - PDF: give a quote (exact text from the page) and optionally page; set highlight=true to draw a box around the quoted passage. Without a quote, give page.
-- PowerPoint: give slide (number), or a quote from the slide.
+- Word (.docx): give a quote and the paragraphs holding it are found for you, or paragraphs [first, last] as read_file numbers them.
+- PowerPoint: give slide (number), or a quote from the slide; with a quote, highlight=true boxes the text it is in.
 - Spreadsheet: give range, e.g. "'Load cases'!B4:D12", "Margins!B2:C6" or a named range.
 - Markdown note: give heading.
 - Audio/video: give time "m:ss".
 version: omit for a live link to the latest file; pass a commit SHA to pin the link to that past version (use file_history to find SHAs).
-embed=true shows the place in the note instead of linking to it: a picture of the PDF page (or the highlighted box) or slide, or a table of the spreadsheet range (read-only). Live views follow the file; pinned ones keep that version. Put it on a line of its own.`,
+Old .doc and .ppt files can only be linked as a whole file.
+embed=true shows the place in the note instead of linking to it: a picture of the PDF page (or the highlighted box), the Word paragraphs or the slide, or a table of the spreadsheet range (read-only). Live views follow the file; pinned ones keep that version. Put it on a line of its own.`,
     inputSchema: {
       workspace: workspaceArg,
       path: z.string(),
@@ -181,13 +194,14 @@ embed=true shows the place in the note instead of linking to it: a picture of th
       lines: z.tuple([z.number().int(), z.number().int()]).optional(),
       page: z.number().int().optional(),
       quote: z.string().optional().describe('Exact text from the cited spot; shown on hover and used to find the spot again'),
-      highlight: z.boolean().optional().describe('PDF only: box the quoted passage'),
+      highlight: z.boolean().optional().describe('PDF or PowerPoint: box the quoted passage'),
       range: z.string().optional(),
       slide: z.number().int().optional().describe('PowerPoint: slide number (or give a quote from the slide)'),
+      paragraphs: z.tuple([z.number().int(), z.number().int()]).optional().describe('Word: first and last paragraph (or give a quote)'),
       heading: z.string().optional(),
       time: z.string().optional(),
       version: z.string().optional(),
-      embed: z.boolean().optional().describe('PDF, PowerPoint or spreadsheet: show a picture of the page, box or slide, or a table of the range, in the note'),
+      embed: z.boolean().optional().describe('PDF, Word, PowerPoint or spreadsheet: show a picture of the page, box, paragraphs or slide, or a table of the range, in the note'),
     },
   },
   wrap(async (a) => {
@@ -261,6 +275,7 @@ const citeSchema = z.object({
   highlight: z.boolean().optional(),
   range: z.string().optional(),
   slide: z.number().int().optional(),
+  paragraphs: z.tuple([z.number().int(), z.number().int()]).optional(),
   heading: z.string().optional(),
   time: z.string().optional(),
   version: z.string().optional(),

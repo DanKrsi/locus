@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { basename, parseDestination, type FileKind, type Location } from '../../core/link';
+import { basename, isLegacyOffice, parseDestination, type FileKind, type Location } from '../../core/link';
 import type { Citation, Terminology, Version } from '../../shared/api';
 import { api } from '../api';
 import { loadBytes } from '../files';
@@ -12,6 +12,7 @@ import { ImageViewer, MediaViewer, UnsupportedViewer } from '../viewers/OtherVie
 import { PdfViewer } from '../viewers/PdfViewer';
 import { SheetViewer } from '../viewers/SheetViewer';
 import { SlidesViewer } from '../viewers/SlidesViewer';
+import { WordViewer } from '../viewers/WordViewer';
 import { CiteModeContext, type CiteMode } from '../viewers/CiteButton';
 import { ZoomControl } from '../zoom';
 import { FlowViewer, NoteViewer, type NoteCallbacks } from '../viewers/NoteViewer';
@@ -150,7 +151,7 @@ export function DocsPane(p: Props) {
       {p.tabs.length === 0 && (
         <div className="empty">
           <h3>No document open</h3>
-          <div>Open PDFs, code, spreadsheets, slides, images or recordings to cite them in your notes.</div>
+          <div>Open PDFs, Word documents, code, spreadsheets, slides, images or recordings to cite them in your notes.</div>
           <button className="primary" onClick={p.onOpen}><Icon name="folderOpen" /> Open</button>
           <div className="muted" style={{ fontSize: 12 }}>Ctrl+P to find a file by name</div>
         </div>
@@ -235,14 +236,17 @@ function ViewerBody({ kind, onZoom, noteCallbacks, onEdit, ...props }: BodyProps
     case 'media':
       return <MediaViewer {...props} />;
     case 'slides':
+      if (isLegacyOffice(props.path)) break;
       return <SlidesViewer {...props} />;
+    case 'doc':
+      if (isLegacyOffice(props.path)) break;
+      return <WordViewer {...props} />;
     case 'markdown':
       return <NoteViewer {...props} callbacks={noteCallbacks} onEdit={onEdit} />;
     case 'code':
       return <CodeViewer {...props} />;
-    default:
-      return <UnsupportedViewer path={props.path} onOpenExternally={() => api.openExternally(props.path)} />;
   }
+  return <UnsupportedViewer path={props.path} onOpenExternally={() => api.openExternally(props.path)} onCite={props.onCite} handle={props.handle} />;
 }
 
 function DocView({ tab, visible, hop, ...p }: Props & { tab: DocTab; visible: boolean; hop?: VersionHop }) {

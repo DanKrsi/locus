@@ -112,7 +112,7 @@ const KEYS: [string, string][] = [
   ['Open any file in the viewer (right)', 'Ctrl+P'],
   ['Save version', 'Ctrl+Shift+S'],
   ['Cite what is shown on the right', 'Ctrl+Shift+L'],
-  ['Show it in the note as a picture or table (PDF, slides, spreadsheet)', 'Ctrl+Shift+E'],
+  ['Show it in the note as a picture or table (PDF, Word, slides, spreadsheet)', 'Ctrl+Shift+E'],
   ['Link to a section', 'Ctrl+Alt+L'],
   ['Tour mode', 'Ctrl+Shift+T'],
   ['Find in the note or document', 'Ctrl+F'],

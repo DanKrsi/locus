@@ -44,7 +44,10 @@ Decisions so far live in [decisions.md](decisions.md); the specs are in [spec/](
 
 - [x] PowerPoint viewer (pptx-preview) with slide citations; images and tables rendered in notes
 - [x] Aurora-3 sample project (`npm run sample`) demonstrating every feature
-- [ ] Word documents, web pages; higher-fidelity PowerPoint via installed Office
+- [x] Word documents (docx-preview): paragraph citations from a selection or the paragraph being read, highlighted landings, links that follow inserted paragraphs, pictures in notes, Claude reads and cites them
+- [x] PowerPoint: cite selected words on a slide (boxed), speaker notes shown and read by Claude, quotes boxed by Claude
+- [x] Old .doc and .ppt files: linked as whole files, with how to save them as .docx/.pptx
+- [ ] Web pages; higher-fidelity Word and PowerPoint via installed Office
 - [x] Windows installer (per-user NSIS, no admin): shortcuts, .locus file association, locus:// links, bundled git
 - [ ] Code signing (SignPath free OSS program), auto-update, Explorer "Open in Locus" menu, a real app icon
 - Mac build; VS Code extension built on `src/core`

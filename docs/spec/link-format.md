@@ -49,6 +49,7 @@ others are `key=value` pairs in any order.
 | PDF page | `page=<n>` (1-based page in the file) | `#page=18` |
 | PDF area | `page=<n>&viewrect=<left>,<top>,<width>,<height>` in PDF points from the page's top-left | `#page=12&viewrect=72,140,300,95` |
 | Slide deck | `slide=<n>`, with an optional `&viewrect=<left>,<top>,<width>,<height>` in points of a 960 x 540 slide from its top-left | `#slide=4&viewrect=80,60,420,180` |
+| Word document (.docx) | `para=<n>` or `para=<a>-<b>`: paragraphs of the body, 1-based, in the file's order (each table cell's paragraphs row by row; a text box's paragraphs right after the paragraph holding it). Headers, footers and notes are not counted | `#para=12` |
 | Spreadsheet | Excel reference: `Sheet!A1:B2`, `'Sheet name'!A1`, `Sheet!4:12`, `Sheet!F:H`, or a named range | `#'Load cases'!B4:D12` |
 | Markdown note | GitHub heading slug | `#design-basis` |
 | Audio / video | `t=<seconds>` or `t=<m:ss>` / `t=<h:mm:ss>` | `#t=14:32` |
@@ -92,6 +93,7 @@ When citing:
 |---|---|
 | PDF page / area | `<file stem> p<n>` (printed page label when the PDF has one) |
 | Slide | `<file stem> slide <n>` |
+| Word paragraph | `<file stem> para <n>` (the first, for a range) |
 | Code | `<file name>` (no line numbers: lines move and the link follows them) |
 | Spreadsheet | `<file stem> <reference>` |
 | Note heading | `<heading text>` |
@@ -135,8 +137,8 @@ ignore it and show the picture at its own size.
 
 ### 2.7 Embedded views
 
-A reference written as a markdown picture, with `!` in front, to a PDF, a slide deck or a
-spreadsheet shows what it cites in the note instead of linking to it (UI spec §4.9):
+A reference written as a markdown picture, with `!` in front, to a PDF, a slide deck, a Word
+document or a spreadsheet shows what it cites in the note instead of linking to it (UI spec §4.9):
 
 ```markdown
 ![Figure 3](</docs/BDS-100.pdf#page=5&viewrect=72,140,300,220&at=817340b0b8>)
@@ -146,6 +148,8 @@ spreadsheet shows what it cites in the note instead of linking to it (UI spec §
 
 - PDF: a picture of the page, or of the `viewrect` box on it.
 - Slides: a picture of the slide, or of the `viewrect` box on it (in slide pixels, 960 wide).
+- Word: a picture of the `para` paragraphs as the page draws them (a passage that runs onto the
+  next page is shown in one piece). A Word view needs `para`.
 - Spreadsheet: a read-only table of the range's values (formulas shown as their results, merged
   cells merged). A spreadsheet view needs a range. Long ranges are cut to the first 200 rows and
   30 columns, and say so.

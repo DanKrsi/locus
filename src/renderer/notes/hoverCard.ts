@@ -10,11 +10,14 @@ import {
   formatSheetRef,
   formatTime,
   isEmbed,
+  isLegacyOffice,
   parseA1Range,
   resolvePath,
   type Location,
   type Reference,
 } from '../../core/link';
+import { readSlides } from '../../core/slides';
+import { readWord } from '../../core/word';
 import type { Terminology } from '../../shared/api';
 import { decodeText, loadBytes, type FileSource } from '../files';
 import { iconSvg, kindIcon } from '../icons';
@@ -51,7 +54,8 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: 
 export function describeLocation(info: LinkInfo): string {
   const { loc } = info.ref;
   if (loc.page !== undefined) return loc.viewrect ? `Area on page ${loc.page}` : `Page ${loc.page}`;
-  if (loc.slide !== undefined) return `Slide ${loc.slide}`;
+  if (loc.slide !== undefined) return loc.viewrect ? `Area on slide ${loc.slide}` : `Slide ${loc.slide}`;
+  if (loc.para) return loc.para.end !== loc.para.start ? `Paragraphs ${loc.para.start}–${loc.para.end}` : `Paragraph ${loc.para.start}`;
   if (loc.lines) return loc.lines.end !== loc.lines.start ? `Lines ${loc.lines.start}–${loc.lines.end}` : `Line ${loc.lines.start}`;
   if (loc.sheet) return loc.sheet.sheet ? `Cells ${loc.sheet.range} on ${loc.sheet.sheet}` : `Range ${formatSheetRef(loc.sheet)}`;
   if (loc.heading) return `Section: ${loc.heading}`;
@@ -102,6 +106,28 @@ export async function buildPreview(loc: Location, src: FileSource): Promise<HTML
       table.append(tr);
     }
     return table;
+  }
+  if (kind === 'doc' && loc.para && !isLegacyOffice(src.path)) {
+    // The cited paragraphs' words: enough to tell it is the right place.
+    const { paragraphs } = await readWord(data);
+    const box = el('div', 'word-preview');
+    const end = Math.min(loc.para.end, loc.para.start + 5, paragraphs.length);
+    for (let n = loc.para.start; n <= end; n++) {
+      const p = paragraphs[n - 1];
+      if (!p.text.trim()) continue;
+      const line = el('p', p.heading ? 'heading' : undefined, p.text.length > 280 ? p.text.slice(0, 280).replace(/\s+\S*$/, '') + '…' : p.text);
+      box.append(line);
+    }
+    if (!box.childElementCount) return null;
+    if (end < loc.para.end) box.append(el('p', 'more', `and ${loc.para.end - end} more paragraph${loc.para.end - end === 1 ? '' : 's'}`));
+    return box;
+  }
+  if (kind === 'slides' && loc.slide && !isLegacyOffice(src.path)) {
+    const text = (await readSlides(data))[loc.slide - 1];
+    if (!text?.trim()) return null;
+    const box = el('div', 'word-preview');
+    for (const line of text.split('\n').slice(0, 6)) box.append(el('p', undefined, line));
+    return box;
   }
   if (kind === 'image') {
     const img = el('img');

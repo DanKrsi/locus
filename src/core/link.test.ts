@@ -2,6 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   defaultLabel,
+  embedKind,
+  isLegacyOffice,
   headings,
   formatReference,
   parseA1Range,
@@ -76,4 +78,26 @@ test('headings are read in order, with their slugs, skipping fenced code', () =>
       ['Deep', 'deep', 3, 8],
     ],
   );
+});
+
+test('Word paragraphs: one or a run, written back the same, with a default name', () => {
+  const one = parseDestination('/docs/Memo.docx#para=12&at=1234567890')!;
+  assert.deepEqual(one.loc.para, { start: 12, end: 12 });
+  assert.equal(formatReference('m', one), '[m](/docs/Memo.docx#para=12&at=1234567890)');
+  const run = parseDestination('/docs/Bracket memo.docx#para=3-5&rev=abcdef1234')!;
+  assert.deepEqual(run.loc.para, { start: 3, end: 5 });
+  assert.equal(formatReference('m', run, 'design load'), '[m](</docs/Bracket memo.docx#para=3-5&rev=abcdef1234> "design load")');
+  assert.equal(defaultLabel('/docs/Memo.docx', { para: { start: 3, end: 5 } }), 'Memo para 3');
+  // Garbage is kept, not lost.
+  assert.deepEqual(parseDestination('/docs/Memo.docx#para=x')!.extra, ['para=x']);
+});
+
+test('old Word and PowerPoint files can be linked but not shown in a note', () => {
+  assert.equal(isLegacyOffice('/a/Old.doc'), true);
+  assert.equal(isLegacyOffice('/a/Old.PPT'), true);
+  assert.equal(isLegacyOffice('/a/New.docx'), false);
+  assert.equal(embedKind('/a/New.docx'), 'picture');
+  assert.equal(embedKind('/a/Deck.pptx'), 'picture');
+  assert.equal(embedKind('/a/Old.doc'), null);
+  assert.equal(embedKind('/a/Old.ppt'), null);
 });

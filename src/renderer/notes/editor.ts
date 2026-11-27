@@ -78,7 +78,7 @@ export interface NoteEditorOptions {
   /** Saves a pasted or dropped picture into the workspace and returns its path. */
   saveImage?(file: File): Promise<string | null>;
   /**
-   * What an embedded view (a "!" link to a PDF, slide deck or workbook) shows now. `redraw` is
+   * What an embedded view (a "!" link to a PDF, Word document, slide deck or workbook) shows now. `redraw` is
    * called when that changes (the drawing landed, or the file changed), to show it.
    */
   embedContent?(info: LinkInfo, redraw: () => void): EmbedContent;

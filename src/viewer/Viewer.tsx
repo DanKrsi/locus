@@ -2,12 +2,13 @@
 // on the right at the exact place, using the same viewers as the app. Everything it shows is
 // embedded in the folder beside it, so it runs from a disk or an email attachment with no server.
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { basename, fileKind, type FileKind, type Location } from '../core/link';
+import { basename, fileKind, isLegacyOffice, type FileKind, type Location } from '../core/link';
 import { CodeViewer } from '../renderer/viewers/CodeViewer';
 import { ImageViewer, MediaViewer } from '../renderer/viewers/OtherViewers';
 import { PdfViewer } from '../renderer/viewers/PdfViewer';
 import { SheetViewer } from '../renderer/viewers/SheetViewer';
 import { SlidesViewer } from '../renderer/viewers/SlidesViewer';
+import { WordViewer } from '../renderer/viewers/WordViewer';
 import { Icon, kindIcon, Logo } from '../renderer/icons';
 import { ZoomControl } from '../renderer/zoom';
 import type { RevealRequest, ViewerHandle } from '../renderer/viewers/types';
@@ -282,7 +283,10 @@ function Doc({
         body = <MediaViewer {...props} />;
         break;
       case 'slides':
-        body = <SlidesViewer {...props} />;
+        body = isLegacyOffice(tab.path) ? <SaveACopy path={tab.path} bytes={data} /> : <SlidesViewer {...props} />;
+        break;
+      case 'doc':
+        body = isLegacyOffice(tab.path) ? <SaveACopy path={tab.path} bytes={data} /> : <WordViewer {...props} />;
         break;
       case 'code':
       case 'markdown':
@@ -295,7 +299,7 @@ function Doc({
   return <div className={'viewer' + (visible ? '' : ' hidden')}>{body}</div>;
 }
 
-/** Files the viewer can't draw (flowcharts, Word documents) can still be taken out of the folder. */
+/** Files the viewer can't draw (flowcharts, old .doc and .ppt files) can still be taken out of the folder. */
 function SaveACopy({ path, bytes }: { path: string; bytes: Uint8Array }) {
   const url = useMemo(() => URL.createObjectURL(new Blob([bytes as BlobPart])), [bytes]);
   return (

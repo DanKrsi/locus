@@ -18,7 +18,10 @@ so explain in your own words and let the links show the source.
 2. **Quote, don't guess.** Read the file first (`read_file`), then pass an exact `quote`:
    - code: the quote finds the lines for you (or pass `lines` you read with line numbers);
    - PDF: the quote finds the page, and `highlight: true` boxes the passage;
-   - slides: pass `slide` (a number) or a quote from the slide;
+   - Word (.docx): the quote finds the paragraph (or pass `paragraphs` [first, last] as `read_file`
+     numbers them);
+   - slides: pass `slide` (a number) or a quote from the slide, and `highlight: true` boxes the
+     text it is in. Speaker notes are for reading; cite the slide they belong to;
    - spreadsheets: pass `range` ("'Load cases'!B4:D12", "Margins!B2:C6") or a named range.
 3. **Check before you finish.** Run `validate_note` (or read the result of `write_note`) and
    fix every link that is not OK. `MOVED` is fine; `CHANGED`, `WARNING` and `BROKEN` need a look.
@@ -28,8 +31,8 @@ so explain in your own words and let the links show the source.
    "load cases B4:D12". Never use "here" or "this link". Don't put line numbers in a label for
    code ("client.py L12-18"): lines move, and the link follows them.
 6. **Show, when seeing it matters.** `make_reference` with `embed: true` puts the place in the
-   note instead of a link: a picture of a PDF page (or the highlighted passage) or a slide, or a
-   read-only table of a spreadsheet range. Live views follow the file; pass `version` to pin one.
+   note instead of a link: a picture of a PDF page (or the highlighted passage), of Word
+   paragraphs or of a slide, or a read-only table of a spreadsheet range. Live views follow the file; pass `version` to pin one.
    Put each on a line of its own, and use them sparingly: for the table of numbers the note is
    about, the figure page, the key slide. Code can't be shown this way; link to it.
 
@@ -163,7 +166,8 @@ five attempts comes from [BDS-100 §4.2](</docs/BDS-100.pdf#page=5&viewrect=69,1
 | Code / text | `L12-L18` |
 | PDF page / area | `page=5`, `page=5&viewrect=x,y,w,h` (points from the page's top-left) |
 | Spreadsheet | `'Sheet name'!B4:D12`, `Sheet!4:12`, or a named range |
-| Slides (.pptx) | `slide=6` |
+| Word (.docx) | `para=12`, `para=12-14` |
+| Slides (.pptx) | `slide=6`, `slide=6&viewrect=x,y,w,h` (points of a 960 x 540 slide) |
 | Note section | `#heading-slug` |
 | Media | `t=14:32` |
 | Version | `at=<sha>` live link recorded at that version; `rev=<sha>` pinned to that version |

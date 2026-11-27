@@ -8,6 +8,7 @@ import {
   formatSheetRef,
   formatTime,
   headings,
+  isLegacyOffice,
   parseSheetRef,
   parseTime,
   stem,
@@ -23,7 +24,7 @@ import { buildPreview } from './notes/hoverCard';
 import { longDate, term, versionBadge } from './terms';
 import type { CiteTarget } from './viewers/types';
 
-export type PlaceKind = 'file' | 'page' | 'area' | 'lines' | 'slide' | 'cells' | 'section' | 'time';
+export type PlaceKind = 'file' | 'page' | 'area' | 'lines' | 'slide' | 'paragraphs' | 'cells' | 'section' | 'time';
 
 export interface CitationTarget {
   path: string;
@@ -39,6 +40,7 @@ const KIND_NAMES: Record<PlaceKind, string> = {
   area: 'An area on a page',
   lines: 'Lines',
   slide: 'A slide',
+  paragraphs: 'Paragraphs',
   cells: 'Cells',
   section: 'A section',
   time: 'A time',
@@ -57,7 +59,9 @@ export function kindsFor(kind: FileKind, path: string): PlaceKind[] {
     case 'sheet':
       return ['cells', 'file'];
     case 'slides':
-      return ['slide', 'file'];
+      return isLegacyOffice(path) ? ['file'] : ['slide', 'file'];
+    case 'doc':
+      return isLegacyOffice(path) ? ['file'] : ['paragraphs', 'file'];
     case 'media':
       return ['time', 'file'];
     default:
@@ -81,7 +85,9 @@ export function acceptsPlace(place: PlaceKind): (path: string) => boolean {
       case 'cells':
         return k === 'sheet';
       case 'slide':
-        return k === 'slides';
+        return k === 'slides' && !isLegacyOffice(path);
+      case 'paragraphs':
+        return k === 'doc' && !isLegacyOffice(path);
       case 'time':
         return k === 'media';
       default:
@@ -91,6 +97,9 @@ export function acceptsPlace(place: PlaceKind): (path: string) => boolean {
 }
 
 function kindOf(loc: Location): PlaceKind {
+  // A box on a slide stays a slide link (the box is kept unless the slide number is changed).
+  if (loc.slide !== undefined) return 'slide';
+  if (loc.para) return 'paragraphs';
   if (loc.viewrect) return 'area';
   if (loc.page !== undefined) return 'page';
   if (loc.lines) return 'lines';
@@ -167,6 +176,8 @@ export function CitationEditor(p: Props) {
         return loc.lines && loc.lines.start >= 1 && loc.lines.end >= loc.lines.start ? null : 'Give a first and last line';
       case 'slide':
         return n(loc.slide) ? null : 'Give a slide number';
+      case 'paragraphs':
+        return loc.para && n(loc.para.start) && loc.para.end >= loc.para.start ? null : 'Give a first and last paragraph';
       case 'cells':
         return loc.sheet?.range ? null : 'Give a range like B4:D12, or a named range';
       case 'section':
@@ -191,7 +202,9 @@ export function CitationEditor(p: Props) {
         case 'lines':
           return { lines: old.lines ?? { start: 1, end: 1 } };
         case 'slide':
-          return { slide: old.slide ?? 1 };
+          return { slide: old.slide ?? 1, viewrect: old.slide !== undefined ? old.viewrect : undefined };
+        case 'paragraphs':
+          return { para: old.para ?? { start: 1, end: 1 } };
         case 'cells':
           return { sheet: old.sheet ?? { range: '' } };
         case 'section':
@@ -231,6 +244,7 @@ export function CitationEditor(p: Props) {
   const folder = dirname(path);
   const label = useMemo(() => (kind === 'section' && loc.heading ? noteHeadings.find((h) => h.slug === loc.heading)?.text : undefined), [kind, loc.heading, noteHeadings]);
   const lines = loc.lines ?? { start: 1, end: 1 };
+  const paras = loc.para ?? { start: 1, end: 1 };
 
   return (
     <div className="backdrop" style={p.hidden ? { display: 'none' } : undefined} onMouseDown={(e) => e.target === e.currentTarget && p.onClose()}>
@@ -290,6 +304,17 @@ export function CitationEditor(p: Props) {
                   <label>
                     Slide <input type="number" min={1} aria-label="Slide" value={loc.slide ?? ''} onChange={(e) => place({ slide: Math.round(Number(e.target.value)) || undefined })} />
                   </label>
+                )}
+                {kind === 'slide' && loc.viewrect && <span className="muted">Area drawn</span>}
+                {kind === 'paragraphs' && (
+                  <>
+                    <label>
+                      Paragraphs <input type="number" min={1} aria-label="First paragraph" value={paras.start} onChange={(e) => { const s = Math.round(Number(e.target.value)); place({ para: { start: s, end: Math.max(paras.end, s) } }); }} />
+                    </label>
+                    <label>
+                      – <input type="number" min={1} aria-label="Last paragraph" value={paras.end} onChange={(e) => place({ para: { start: paras.start, end: Math.round(Number(e.target.value)) } })} />
+                    </label>
+                  </>
                 )}
                 {kind === 'cells' && (
                   <label style={{ flex: 1 }}>

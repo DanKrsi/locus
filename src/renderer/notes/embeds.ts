@@ -10,6 +10,7 @@ import { loadBytes, onInvalidate, sourceKey } from '../files';
 import { openPdf } from '../viewers/pdf';
 import { cellKey, loadWorkbook, resolveSheetRef } from '../viewers/sheetModel';
 import { sanitize, slideElements } from '../viewers/SlidesViewer';
+import { drawWord, type DrawnWord } from '../viewers/word';
 
 export interface EmbedCell {
   text: string;
@@ -199,7 +200,19 @@ const toDataUrl = (blob: Blob) =>
 async function shootSlide(slide: HTMLElement): Promise<HTMLCanvasElement> {
   await settle(slide, 150, 1500);
   const clone = slide.cloneNode(true) as HTMLElement;
-  const from = slide.querySelectorAll('canvas');
+  await selfContained(slide, clone);
+  clone.style.margin = '0';
+  const w = slide.offsetWidth || SLIDE_W;
+  const h = slide.offsetHeight || SLIDE_H;
+  const cs = getComputedStyle(slide);
+  const font = `font-family:${cs.fontFamily.replace(/"/g, "'")};color:${cs.color};font-size:${cs.fontSize};line-height:${cs.lineHeight}`;
+  const xml = new XMLSerializer().serializeToString(clone);
+  return paint(`<div xmlns="http://www.w3.org/1999/xhtml" style="${font}">${xml}</div>`, w, h, 'The slide could not be drawn');
+}
+
+/** Writes into `clone` (a copy of `source`) what it shows from outside itself: canvases and blob pictures, as data. */
+async function selfContained(source: HTMLElement, clone: HTMLElement) {
+  const from = source.querySelectorAll('canvas');
   clone.querySelectorAll('canvas').forEach((c, i) => {
     const img = document.createElement('img');
     try {
@@ -228,19 +241,15 @@ async function shootSlide(slide: HTMLElement): Promise<HTMLCanvasElement> {
     for (const m of css.matchAll(/url\(["']?(blob:[^"')]+)["']?\)/g)) css = css.replace(m[1], await inline(m[1]));
     el.setAttribute('style', css);
   }
-  clone.style.margin = '0';
-  const w = slide.offsetWidth || SLIDE_W;
-  const h = slide.offsetHeight || SLIDE_H;
-  const cs = getComputedStyle(slide);
-  const font = `font-family:${cs.fontFamily.replace(/"/g, "'")};color:${cs.color};font-size:${cs.fontSize};line-height:${cs.lineHeight}`;
-  const xml = new XMLSerializer().serializeToString(clone);
-  const svg =
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">` +
-    `<foreignObject width="100%" height="100%"><div xmlns="http://www.w3.org/1999/xhtml" style="${font}">${xml}</div></foreignObject></svg>`;
+}
+
+/** Paints self-contained XHTML, `w` x `h` pixels, onto a white canvas at twice the size. */
+async function paint(xhtml: string, w: number, h: number, failure: string): Promise<HTMLCanvasElement> {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><foreignObject width="100%" height="100%">${xhtml}</foreignObject></svg>`;
   const img = new Image();
   await new Promise<void>((resolve, reject) => {
     img.onload = () => resolve();
-    img.onerror = () => reject(new Error('The slide could not be drawn'));
+    img.onerror = () => reject(new Error(failure));
     img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
   });
   const k = 2;
@@ -282,6 +291,153 @@ async function slidePicture(data: Uint8Array, loc: Location, name: string): Prom
   canvas.height = Math.max(1, Math.round(r.h * sy));
   canvas.getContext('2d')!.drawImage(full, r.x * sx, r.y * sy, r.w * sx, r.h * sy, 0, 0, canvas.width, canvas.height);
   return { kind: 'picture', ...(await canvasPicture(canvas)), width: r.w, height: r.h };
+}
+
+// ---------- Pictures of Word paragraphs ----------
+
+interface WordDrawing {
+  word: DrawnWord;
+  /** The document's own styles, carried into every picture of a page. */
+  css: string;
+  /** Each page drawn once as a picture, at twice its size; paragraphs are cut from it. */
+  shots: Map<HTMLElement, Promise<HTMLCanvasElement>>;
+  destroy(): void;
+}
+
+/** The app's line height (body in styles.css), given outright to the drawing and its pictures. */
+const WORD_LINE = '1.45';
+
+/** Documents drawn off screen, newest last; only a few are kept. */
+const documents = new Map<Uint8Array, Promise<WordDrawing>>();
+
+function drawDocument(data: Uint8Array): Promise<WordDrawing> {
+  const had = documents.get(data);
+  if (had) {
+    documents.delete(data);
+    documents.set(data, had);
+    return had;
+  }
+  const p = (async () => {
+    const host = document.createElement('div');
+    const styleHost = document.createElement('div');
+    // Laid out (so the pages have sizes) but never seen or reached.
+    // Line height is set outright, the same as in the picture (shootPage), so lines fall in the same places.
+    Object.assign(host.style, { position: 'fixed', left: '-30000px', top: '0', visibility: 'hidden', pointerEvents: 'none', lineHeight: WORD_LINE });
+    host.setAttribute('aria-hidden', 'true');
+    styleHost.style.display = 'none';
+    document.body.append(styleHost, host);
+    const destroy = () => {
+      host.remove();
+      styleHost.remove();
+    };
+    try {
+      const word = await drawWord(data, host, styleHost, { inlinePictures: true });
+      await settle(host, 150, 1500);
+      const css = [...styleHost.querySelectorAll('style'), ...host.querySelectorAll('style')].map((s) => s.textContent ?? '').join('\n');
+      return { word, css, shots: new Map(), destroy };
+    } catch (e) {
+      destroy();
+      throw e;
+    }
+  })();
+  documents.set(data, p);
+  p.catch(() => documents.delete(data));
+  while (documents.size > 3) {
+    const [oldest, doc] = documents.entries().next().value!;
+    documents.delete(oldest);
+    void doc.then((d) => d.destroy()).catch(() => undefined);
+  }
+  return p;
+}
+
+/** A picture of one page as drawn, with the document's styles carried inside the copy. */
+async function shootPage(page: HTMLElement, css: string): Promise<HTMLCanvasElement> {
+  const clone = page.cloneNode(true) as HTMLElement;
+  await selfContained(page, clone);
+  Object.assign(clone.style, { margin: '0', boxShadow: 'none' });
+  // The drawing's rules hang off the wrapper around its pages, so the copy gets one too.
+  // What the page inherits on screen (the app's font, where the document names none) goes with it:
+  // in a picture the default is a serif font, the lines would wrap elsewhere and the cut would miss.
+  const cs = getComputedStyle(page);
+  // Not line-height: copied as pixels, it would be right for one size of text only (WORD_LINE in both).
+  const inherited = ['font-family', 'font-size', 'color', 'letter-spacing', 'font-weight'].map((p) => `${p}:${cs.getPropertyValue(p).replace(/"/g, "'")}`).join(';');
+  const wrapper = document.createElement('div');
+  wrapper.className = 'docx-wrapper';
+  wrapper.setAttribute('style', `padding:0;margin:0;background:#fff;display:block;line-height:${WORD_LINE};${inherited}`);
+  const style = document.createElement('style');
+  // The app sizes every box border-box (styles.css), and the drawing was laid out that way.
+  style.textContent = `.docx-wrapper, .docx-wrapper * { box-sizing: border-box; }
+${css}`;
+  wrapper.append(style, clone);
+  return paint(new XMLSerializer().serializeToString(wrapper), page.offsetWidth, page.offsetHeight, 'The page could not be drawn');
+}
+
+async function wordPicture(data: Uint8Array, loc: Location, name: string): Promise<EmbedContent> {
+  const doc = await drawDocument(data);
+  const { word } = doc;
+  const count = word.paragraphs.length;
+  const start = loc.para?.start ?? 1;
+  const end = Math.min(loc.para?.end ?? start, count);
+  if (!loc.para || start < 1 || start > count)
+    return {
+      kind: 'error',
+      message: loc.para ? `${name} has ${count} paragraph${count === 1 ? '' : 's'}, so paragraph ${start} can't be shown.` : `This view of ${name} doesn't say which paragraphs to show.`,
+      help: 'Paragraphs were taken out of the document since this view was made. Change area opens the document so you can select the text again.',
+    };
+  // The paragraphs' parts, page by page (a passage may run onto the next page).
+  const byPage = new Map<HTMLElement, HTMLElement[]>();
+  for (let n = start; n <= end; n++)
+    for (const el of word.elements[n - 1] ?? []) {
+      const page = el.closest<HTMLElement>('section.docx');
+      if (!page || (!el.offsetWidth && !el.offsetHeight)) continue;
+      byPage.set(page, [...(byPage.get(page) ?? []), el]);
+    }
+  if (!byPage.size)
+    return {
+      kind: 'error',
+      message: end > start ? `Paragraphs ${start}–${end} of ${name} are empty or not drawn.` : `Paragraph ${start} of ${name} is empty or not drawn.`,
+      help: 'Nothing on the page shows it, so there is nothing to picture. Change area opens the document so you can select other text.',
+    };
+  // A little room at the sides; hardly any above and below, where the next line starts at once.
+  const pad = 6;
+  const padY = 1;
+  const pieces: { shot: HTMLCanvasElement; x: number; y: number; w: number; h: number }[] = [];
+  for (const [page, els] of byPage) {
+    const p = page.getBoundingClientRect();
+    const body = page.querySelector('article')?.getBoundingClientRect() ?? p;
+    let l = body.left;
+    let r = body.right;
+    let t = Infinity;
+    let b = -Infinity;
+    for (const el of els) {
+      const e = el.getBoundingClientRect();
+      l = Math.min(l, e.left);
+      r = Math.max(r, e.right);
+      t = Math.min(t, e.top);
+      b = Math.max(b, e.bottom);
+    }
+    let shot = doc.shots.get(page);
+    if (!shot) doc.shots.set(page, (shot = shootPage(page, doc.css)));
+    shot.catch(() => doc.shots.delete(page));
+    const x = Math.max(0, l - p.left - pad);
+    const y = Math.max(0, t - p.top - padY);
+    pieces.push({ shot: await shot, x, y, w: Math.min(p.width - x, r - l + 2 * pad), h: Math.min(p.height - y, b - t + 2 * padY) });
+  }
+  const k = 2;
+  const width = Math.max(...pieces.map((s) => s.w));
+  const height = pieces.reduce((sum, s) => sum + s.h, 0);
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(width * k));
+  canvas.height = Math.max(1, Math.round(height * k));
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  let y = 0;
+  for (const s of pieces) {
+    ctx.drawImage(s.shot, s.x * k, s.y * k, s.w * k, s.h * k, 0, y * k, s.w * k, s.h * k);
+    y += s.h;
+  }
+  return { kind: 'picture', ...(await canvasPicture(canvas)), width, height };
 }
 
 // ---------- Tables of cells ----------
@@ -429,7 +585,7 @@ interface Entry {
 const entries = new Map<string, Entry>();
 const MAX_ENTRIES = 300;
 
-const locKey = (loc: Location) => JSON.stringify([loc.page, loc.viewrect, loc.slide, loc.sheet]);
+const locKey = (loc: Location) => JSON.stringify([loc.page, loc.viewrect, loc.slide, loc.sheet, loc.para]);
 export const embedKey = (req: EmbedRequest) => `${sourceKey(req)}|${req.fallbackRev ?? ''}|${locKey(req.loc)}`;
 
 const sameBytes = (a: Uint8Array, b: Uint8Array) => {
@@ -450,7 +606,8 @@ async function draw(data: Uint8Array, req: EmbedRequest): Promise<EmbedContent> 
   if (kind === 'pdf') return pdfPicture(data, req.loc, name);
   if (kind === 'slides') return slidePicture(data, req.loc, name);
   if (kind === 'sheet') return sheetTable(data, req.loc, name);
-  return { kind: 'error', message: `${name} can't be shown in a note.`, help: 'Only PDFs, slide decks and spreadsheets can be shown this way.' };
+  if (kind === 'doc') return wordPicture(data, req.loc, name);
+  return { kind: 'error', message: `${name} can't be shown in a note.`, help: 'Only PDFs, slide decks, Word documents and spreadsheets can be shown this way.' };
 }
 
 /** Why a file couldn't be read, in words, once the reading failed. */
@@ -558,6 +715,8 @@ function loadingFor(req: EmbedRequest): EmbedContent {
   const kind = fileKind(req.path);
   if (kind === 'pdf') return r ? { kind: 'loading', ratio: r.h / r.w, width: r.w * PT } : { kind: 'loading', ratio: 11 / 8.5, width: 612 * PT };
   if (kind === 'slides') return r ? { kind: 'loading', ratio: r.h / r.w, width: r.w } : { kind: 'loading', ratio: SLIDE_H / SLIDE_W, width: SLIDE_W };
+  // A Word passage: the width of a page's text, a few lines tall.
+  if (kind === 'doc') return { kind: 'loading', ratio: 0.18, width: 640 };
   return { kind: 'loading' };
 }
 

@@ -471,6 +471,10 @@ svg.ico { width: 16px; height: 16px; flex: none; }
 .hover-card .preview table { border-collapse: collapse; font-size: 10.5px; }
 .hover-card .preview td, .hover-card .preview th { border: 1px solid var(--border); padding: 1px 4px; white-space: nowrap; }
 .hover-card .preview th { background: var(--page); color: var(--muted); font-weight: 500; }
+.word-preview { padding: 6px 8px; font-size: 10.5px; line-height: 1.4; background: var(--page); height: 100%; }
+.word-preview p { margin: 0 0 4px; }
+.word-preview p.heading { font-weight: 600; }
+.word-preview p.more { color: var(--faint); font-style: italic; }
 .hover-card .info { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
 .hover-card .fname { font-weight: 600; display: flex; align-items: center; gap: 6px; }
 .hover-card .folder { color: var(--faint); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -676,6 +680,22 @@ svg.ico { width: 16px; height: 16px; flex: none; }
 .slides-scroll { flex: 1; min-height: 0; overflow: auto; background: var(--viewer-bg); }
 .slides-host { padding: 16px 24px; display: flex; flex-direction: column; align-items: safe center; }
 .slides-host .pptx-preview-wrapper { background: transparent !important; height: auto !important; overflow: visible !important; }
+.slide-notes { box-sizing: border-box; max-width: 100%; margin: 8px 0 20px; padding: 8px 12px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px; font-size: 13px; line-height: 1.5; color: var(--text); white-space: pre-wrap; user-select: text; }
+.slide-notes-head { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 2px; }
+
+/* Word documents: real-size pages on the viewer background; the document keeps its own colours */
+.word-scroll { flex: 1; min-height: 0; overflow: auto; background: var(--viewer-bg); }
+.word-stage { position: relative; min-width: min-content; }
+.word-styles { display: none; }
+.word-host { padding: 16px 20px; }
+.word-host .docx-wrapper { background: transparent !important; padding: 0 !important; display: flex; flex-direction: column; align-items: safe center; gap: 16px; }
+.word-host .docx-wrapper > section.docx { margin: 0 !important; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18); color: #1f2328; }
+.word-host p.word-cited { background: color-mix(in srgb, var(--mark) 22%, transparent); box-shadow: -6px 0 0 color-mix(in srgb, var(--mark) 22%, transparent), 6px 0 0 color-mix(in srgb, var(--mark) 22%, transparent); }
+.word-host p.word-cited.first { box-shadow: -6px 0 0 color-mix(in srgb, var(--mark) 22%, transparent), 6px 0 0 color-mix(in srgb, var(--mark) 22%, transparent), inset 0 1px 0 var(--mark); }
+.word-host p.word-cited.last { border-bottom: 1px solid var(--mark); }
+.word-host a { cursor: pointer; }
+.word-flag { right: auto; }
+.cite-pulse .word-host p.word-cited { animation: cite-pulse 0.8s ease-out; }
 .cm-md-table th, .cm-md-table td { overflow-wrap: normal; word-break: normal; min-width: 3em; }
 .cm-md-table th { white-space: nowrap; }
 .cm-md-table td, .cm-md-table th { cursor: text; }
